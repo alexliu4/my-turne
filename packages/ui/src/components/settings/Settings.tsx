@@ -143,7 +143,7 @@ const settingsStructure: Record<string, SettingsSection> = {
         title: "Open Phone App",
         type: "toggle",
         description:
-          "Open Nocturne in the foreground when your phone connects. May prevent some features from working.",
+          "Open Nocturne in the foreground when your phone connects. Disabling may prevent some features from working.",
         storageKey: "foregroundAppLaunchEnabled",
         defaultValue: true,
       },

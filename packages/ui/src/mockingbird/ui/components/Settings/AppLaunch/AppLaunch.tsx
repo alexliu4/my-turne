@@ -10,12 +10,12 @@ const AppLaunch = () => {
 
   return (
     <>
-      <SubmenuHeader icon={null} name="Auto launch app" />
+      <SubmenuHeader icon={null} name="Auto Launch App" />
       <div className={styles.scrollContainer}>
         {item ? <SubmenuItem item={item} active /> : null}
         <div className={styles.text}>
-          Open Nocturne in the foreground when your phone connects. May prevent
-          some features from working.
+          Open Nocturne in the foreground when your phone connects. Disabling 
+          may prevent some features from working.
           {settingsStore.isAppLaunchSettingSaving ? (
             <p role="status">Saving...</p>
           ) : settingsStore.appLaunchSettingError ? (
