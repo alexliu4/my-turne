@@ -1,5 +1,5 @@
 import type { SpotifyDevice } from "../../types";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogBackdrop,
@@ -16,6 +16,8 @@ import {
   CarIcon,
 } from "../common/icons";
 import { useSpotifyWebSocket } from "../../hooks/useSpotifyWebSocket";
+
+const WAKE_REFETCH_DELAY_MS = 2_500;
 
 interface DeviceSwitcherModalProps {
   isOpen: boolean;
@@ -34,6 +36,18 @@ const DeviceSwitcherModal = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
+  const requestIdRef = useRef(0);
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPendingFetches = () => {
+    requestIdRef.current += 1;
+    if (refetchTimerRef.current) {
+      clearTimeout(refetchTimerRef.current);
+      refetchTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => cancelPendingFetches, []);
 
   useEffect(() => {
     if (!isOpen || !isSpotifyReady) return;
@@ -47,6 +61,7 @@ const DeviceSwitcherModal = ({
   useEffect(() => {
     if (!isOpen) {
       setHasFetched(false);
+      cancelPendingFetches();
     }
   }, [isOpen]);
 
@@ -59,19 +74,30 @@ const DeviceSwitcherModal = ({
     };
   }, [isOpen]);
 
-  const fetchDevices = async () => {
-    if (!isSpotifyReady) return;
+  const loadDevices = async (quiet: boolean) => {
+    const requestId = ++requestIdRef.current;
+    if (!quiet) setIsLoading(true);
 
     try {
-      setIsLoading(true);
       const data = await getDevices();
-      setDevices(data.devices || []);
+      if (requestId === requestIdRef.current) setDevices(data.devices || []);
     } catch (error) {
       console.error("Error fetching devices:", error);
-      setDevices([]);
+      if (!quiet && requestId === requestIdRef.current) setDevices([]);
     } finally {
-      setIsLoading(false);
+      if (!quiet) setIsLoading(false);
     }
+  };
+
+  const fetchDevices = () => {
+    if (!isSpotifyReady) return;
+
+    cancelPendingFetches();
+    void loadDevices(false);
+    refetchTimerRef.current = setTimeout(() => {
+      refetchTimerRef.current = null;
+      void loadDevices(true);
+    }, WAKE_REFETCH_DELAY_MS);
   };
 
   const handleDeviceSelect = async (deviceId: string) => {
