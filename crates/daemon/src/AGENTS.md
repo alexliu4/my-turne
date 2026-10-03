@@ -46,7 +46,7 @@ src/
 
 ## DATA FLOW
 
-The persisted companion launch preference in `system/app_launch.rs` defaults to foreground. WebSocket `device.appLaunch.get/set` reads or updates it and emits `device.appLaunch.state`; MessagePack exposes read-only `device.appLaunch.get` for Android's activity decision. Every iOS foreground CSM passes through the preference guard, including cold-start recovery and `device.launchApp`. Background mode retains normal accessory wake and all transport recovery.
+The persisted companion launch preference in `system/app_launch.rs` defaults to foreground. WebSocket `device.appLaunch.get/set` reads or updates it and emits `device.appLaunch.state`; MessagePack exposes read-only `device.appLaunch.get` for Android's activity decision. Every iOS foreground CSM passes through the preference guard, including cold-start recovery and `device.launchApp`. Background mode retains normal accessory wake and all transport recovery. The `spotify` flag drives the once-per-link iOS Launch Spotify handoff in `iap2/mod.rs` (`start_spotify_handoff` / `advance_spotify_handoff`), which sends no launch request and only presses HID Play. It is gated on `app.ready.spotify_installed`, and the resume HID press is gated on Now Playing reporting `com.spotify.client` as not playing.
 
 ```
 main.rs

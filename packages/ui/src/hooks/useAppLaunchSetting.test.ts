@@ -26,9 +26,9 @@ describe("daemon-backed app launch preference", () => {
     );
     await controller.refresh();
     expect(states.at(-1)).toMatchObject({ foreground: false, ready: true });
-    const pending = controller.save(true);
+    const pending = controller.save({ foreground: true });
     expect(states.at(-1)).toMatchObject({ foreground: false, saving: true });
-    await controller.save(true);
+    await controller.save({ foreground: true });
     expect(requests).toEqual(["device.appLaunch.get", "device.appLaunch.set"]);
     saved.resolve({ foreground: true });
     await pending;
@@ -63,7 +63,7 @@ describe("daemon-backed app launch preference", () => {
       (state) => states.push(state),
     );
     await controller.refresh();
-    await controller.save(false);
+    await controller.save({ foreground: false });
     expect(states.at(-1)).toMatchObject({ foreground: true, saving: false });
     expect(states.at(-1)?.error).toContain("Couldn't save");
   });
@@ -80,13 +80,39 @@ describe("daemon-backed app launch preference", () => {
       (state) => states.push(state),
     );
     await controller.refresh();
-    const pending = controller.save(false);
+    const pending = controller.save({ foreground: false });
     controller.disconnect();
     save.resolve({ foreground: false });
     await pending;
-    await controller.save(false);
+    await controller.save({ foreground: false });
     expect(calls).toBe(2);
     expect(states.at(-1)).toMatchObject({ foreground: true, ready: false });
+  });
+
+  test("saves Spotify launch as a partial update and keeps foreground", async () => {
+    const states: { foreground: boolean; spotify: boolean }[] = [];
+    const controller = createAppLaunchSettingController(
+      async (method, params) => {
+        if (method.endsWith(".get")) return { foreground: false };
+        expect(params).toEqual({ spotify: true });
+        return { foreground: false, spotify: true };
+      },
+      (state) => states.push(state),
+    );
+    await controller.refresh();
+    expect(states.at(-1)).toMatchObject({ foreground: false, spotify: false });
+    await controller.save({ spotify: true });
+    expect(states.at(-1)).toMatchObject({ foreground: false, spotify: true });
+  });
+
+  test("malformed Spotify launch value is rejected", async () => {
+    const states: { ready: boolean }[] = [];
+    const controller = createAppLaunchSettingController(
+      async () => ({ foreground: true, spotify: "true" }),
+      (state) => states.push(state),
+    );
+    await controller.refresh();
+    expect(states.at(-1)?.ready).toBe(false);
   });
 
   test("unknown daemon response never enables writing a presumed default", async () => {
@@ -100,7 +126,7 @@ describe("daemon-backed app launch preference", () => {
       (state) => states.push(state),
     );
     await controller.refresh();
-    await controller.save(false);
+    await controller.save({ foreground: false });
     expect(calls).toBe(1);
     expect(states.at(-1)?.ready).toBe(false);
   });

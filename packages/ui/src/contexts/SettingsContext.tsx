@@ -170,7 +170,12 @@ export function SettingsProvider({ children }: ChildrenProps) {
 
   const updateSetting: SettingsContextValue["updateSetting"] = (key, value) => {
     if (key === "foregroundAppLaunchEnabled") {
-      if (typeof value === "boolean") void appLaunch.save(value);
+      if (typeof value === "boolean")
+        void appLaunch.save({ foreground: value });
+      return;
+    }
+    if (key === "spotifyAppLaunchEnabled") {
+      if (typeof value === "boolean") void appLaunch.save({ spotify: value });
       return;
     }
     const newSettings: SettingsState = { ...settings };
@@ -238,6 +243,7 @@ export function SettingsProvider({ children }: ChildrenProps) {
         settings: {
           ...settings,
           foregroundAppLaunchEnabled: appLaunch.foreground,
+          spotifyAppLaunchEnabled: appLaunch.spotify,
         },
         isAppLaunchSettingReady: appLaunch.ready,
         isAppLaunchSettingSaving: appLaunch.saving,

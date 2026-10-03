@@ -100,6 +100,15 @@ impl AppCommunicationManager {
             })
     }
 
+    pub fn spotify_installed_flag(&self) -> Option<Arc<AtomicBool>> {
+        self.handlers
+            .get("com.usenocturne.daemon")
+            .and_then(|h| match h {
+                AppProtocolHandlerEnum::MsgPack(handler) => Some(handler.spotify_installed_flag()),
+                _ => None,
+            })
+    }
+
     pub fn create_session(&mut self, session_id: u8, protocol: String) -> Result<()> {
         let (tx, mut rx) = mpsc::unbounded_channel();
 

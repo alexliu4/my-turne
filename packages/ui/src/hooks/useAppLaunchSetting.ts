@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { addGlobalWsListener, sendNocturneWsRequest } from "./useNocturned";
 
-interface AppLaunchSettingState {
+export interface AppLaunchPreference {
   foreground: boolean;
+  spotify: boolean;
+}
+
+interface AppLaunchSettingState extends AppLaunchPreference {
   ready: boolean;
   saving: boolean;
   error: string | null;
@@ -10,7 +14,7 @@ interface AppLaunchSettingState {
 
 type Request = (method: string, params?: object) => Promise<unknown>;
 
-function readForeground(value: unknown): boolean {
+function readPreference(value: unknown): AppLaunchPreference {
   if (
     !value ||
     typeof value !== "object" ||
@@ -19,7 +23,11 @@ function readForeground(value: unknown): boolean {
   ) {
     throw new Error("Invalid app launch preference response");
   }
-  return value.foreground;
+  const spotify = "spotify" in value ? value.spotify : false;
+  if (typeof spotify !== "boolean") {
+    throw new Error("Invalid app launch preference response");
+  }
+  return { foreground: value.foreground, spotify };
 }
 
 export function createAppLaunchSettingController(
@@ -28,6 +36,7 @@ export function createAppLaunchSettingController(
 ) {
   let state: AppLaunchSettingState = {
     foreground: true,
+    spotify: false,
     ready: false,
     saving: false,
     error: null,
@@ -46,11 +55,11 @@ export function createAppLaunchSettingController(
     async refresh() {
       const current = ++generation;
       try {
-        const foreground = readForeground(
+        const preference = readPreference(
           await request("device.appLaunch.get"),
         );
         if (!active || current !== generation) return;
-        update({ foreground, ready: true, error: null });
+        update({ ...preference, ready: true, error: null });
       } catch (error) {
         if (!active || current !== generation) return;
         console.warn("Failed to read app launch preference:", error);
@@ -60,17 +69,17 @@ export function createAppLaunchSettingController(
         });
       }
     },
-    async save(foreground: boolean) {
+    async save(change: Partial<AppLaunchPreference>) {
       if (!active || !state.ready || state.saving) return;
       const current = ++generation;
       const sequence = ++saveSequence;
       update({ saving: true, error: null });
       try {
-        const saved = readForeground(
-          await request("device.appLaunch.set", { foreground }),
+        const saved = readPreference(
+          await request("device.appLaunch.set", change),
         );
         if (!active || current !== generation) return;
-        update({ foreground: saved, error: null });
+        update({ ...saved, error: null });
       } catch (error) {
         if (!active || current !== generation) return;
         console.warn("Failed to save app launch preference:", error);
@@ -81,9 +90,9 @@ export function createAppLaunchSettingController(
     },
     receive(value: unknown) {
       try {
-        const foreground = readForeground(value);
+        const preference = readPreference(value);
         ++generation;
-        update({ foreground, ready: true, error: null });
+        update({ ...preference, ready: true, error: null });
       } catch (error) {
         console.warn("Invalid app launch preference event:", error);
       }
@@ -103,6 +112,7 @@ export function createAppLaunchSettingController(
 export function useAppLaunchSetting() {
   const [state, setState] = useState<AppLaunchSettingState>({
     foreground: true,
+    spotify: false,
     ready: false,
     saving: false,
     error: null,

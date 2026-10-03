@@ -22,6 +22,7 @@ import Licenses from "./Licenses/Licenses";
 import TipsOnDemand from "./TipsOnDemand/TipsOnDemand";
 import DisplayAndBrightness from "./DisplayAndBrightness/DisplayAndBrightness";
 import AppLaunch from "./AppLaunch/AppLaunch";
+import SpotifyLaunch from "./SpotifyLaunch/SpotifyLaunch";
 import PhoneCalls from "./PhoneCalls/PhoneCalls";
 import Notifications from "./Notifications/Notifications";
 import AirVentInterference from "./AirVentInterference/AirVentInterference";
@@ -43,6 +44,7 @@ const viewToComp: Record<string, (() => ReactNode) | undefined> = {
   [RestartMenuItemId.POWER_OFF_TUTORIAL]: () => <PowerTutorial />,
   [MainMenuItemId.PHONE_CONNECTION]: () => <PhoneConnection />,
   [OptionsMenuItemId.APP_LAUNCH]: () => <AppLaunch />,
+  [OptionsMenuItemId.SPOTIFY_LAUNCH]: () => <SpotifyLaunch />,
   [OptionsMenuItemId.PHONE_CALLS]: () => <PhoneCalls />,
   [OptionsMenuItemId.NOTIFICATIONS]: () => <Notifications />,
   [AboutMenuItemId.LICENSE]: () => <Licenses />,

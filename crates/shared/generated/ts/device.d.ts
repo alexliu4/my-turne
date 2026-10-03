@@ -76,6 +76,10 @@ export interface AppReadyEvent {
    * Spotify auth skipped; current app uses camelCase. Inventory field `spotify_skipped` emits as `spotifySkipped`. Current source key: `spotifySkipped`.
    */
   spotifySkipped?: boolean;
+  /**
+   * Whether the Spotify app is installed on the phone. iOS gates the Launch Spotify handoff on it; absent means unknown and suppresses the handoff. Inventory field `spotify_installed` emits as `spotifyInstalled`. Current source key: `spotifyInstalled`.
+   */
+  spotifyInstalled?: boolean;
 }
 
 /**

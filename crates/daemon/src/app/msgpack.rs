@@ -198,6 +198,7 @@ fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
         is_admin: bool_field(&data, "is_admin", "isAdmin"),
         entitlements_verified: bool_field(&data, "entitlements_verified", "entitlementsVerified"),
         spotify_skipped: bool_field(&data, "spotify_skipped", "spotifySkipped"),
+        spotify_installed: bool_field(&data, "spotify_installed", "spotifyInstalled"),
     };
     bt_only_payload(event)
 }
@@ -1117,6 +1118,7 @@ pub struct MsgPackProtocolHandler {
     session_route: SharedAppSessionRoute,
     ota_pull_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     app_ready_received: Arc<AtomicBool>,
+    spotify_installed: Arc<AtomicBool>,
     hid_tx: Option<tokio::sync::mpsc::UnboundedSender<iap2_rs::HidCommand>>,
     ota_cmd_tx: Option<mpsc::Sender<crate::ota::Command>>,
     connection_peer: Option<Address>,
@@ -1138,6 +1140,7 @@ impl MsgPackProtocolHandler {
             session_route: Arc::new(Mutex::new(None)),
             ota_pull_task: Arc::new(Mutex::new(None)),
             app_ready_received: Arc::new(AtomicBool::new(false)),
+            spotify_installed: Arc::new(AtomicBool::new(false)),
             hid_tx: None,
             ota_cmd_tx: None,
             connection_peer: None,
@@ -1165,6 +1168,7 @@ impl MsgPackProtocolHandler {
             session_route: Arc::new(Mutex::new(None)),
             ota_pull_task: Arc::new(Mutex::new(None)),
             app_ready_received: Arc::new(AtomicBool::new(false)),
+            spotify_installed: Arc::new(AtomicBool::new(false)),
             hid_tx: None,
             ota_cmd_tx: None,
             connection_peer: None,
@@ -1177,6 +1181,10 @@ impl MsgPackProtocolHandler {
 
     pub fn app_ready_flag(&self) -> Arc<AtomicBool> {
         self.app_ready_received.clone()
+    }
+
+    pub fn spotify_installed_flag(&self) -> Arc<AtomicBool> {
+        self.spotify_installed.clone()
     }
 
     pub async fn set_session_info(
@@ -2211,7 +2219,11 @@ impl MsgPackProtocolHandler {
                         }
                     }
                 } else if topic == "app.ready" {
-                    self.app_ready_received.store(true, Ordering::Relaxed);
+                    self.spotify_installed.store(
+                        bool_field(&data, "spotify_installed", "spotifyInstalled") == Some(true),
+                        Ordering::Relaxed,
+                    );
+                    self.app_ready_received.store(true, Ordering::Release);
 
                     if let Some(datetime_str) = data.get("datetime").and_then(|v| v.as_str()) {
                         info!("Setting system datetime from app.ready: {}", datetime_str);

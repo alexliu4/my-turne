@@ -27,6 +27,7 @@ data class AppReadyEvent(
   @SerialName("is_admin") val isAdmin: Boolean? = null,
   @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
   @SerialName("spotify_skipped") val spotifySkipped: Boolean? = null,
+  @SerialName("spotify_installed") val spotifyInstalled: Boolean? = null,
 )
 
 @Serializable

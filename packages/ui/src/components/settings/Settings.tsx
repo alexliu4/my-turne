@@ -148,6 +148,15 @@ const settingsStructure: Record<string, SettingsSection> = {
         defaultValue: true,
       },
       {
+        id: "spotify-app-launch",
+        title: "Launch Spotify",
+        type: "toggle",
+        description:
+          "Open Spotify after connection, and automatically resume playback.",
+        storageKey: "spotifyAppLaunchEnabled",
+        defaultValue: true,
+      },
+      {
         id: "phone-calls",
         title: "Phone Calls",
         type: "toggle",
@@ -585,7 +594,8 @@ export default function Settings({
         const isMockingbirdToggle = item.storageKey === "mockingbirdUiEnabled";
         const isMicToggle = item.storageKey === "micMuted";
         const isAppLaunchToggle =
-          item.storageKey === "foregroundAppLaunchEnabled";
+          item.storageKey === "foregroundAppLaunchEnabled" ||
+          item.storageKey === "spotifyAppLaunchEnabled";
         const isNativePhoneToggle = item.requiresDirectPhone === true;
 
         const isMicConnectorLocked =

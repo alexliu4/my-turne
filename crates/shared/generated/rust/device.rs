@@ -20,6 +20,7 @@ pub struct AppReadyEvent {
     pub is_admin: Option<bool>,
     pub entitlements_verified: Option<bool>,
     pub spotify_skipped: Option<bool>,
+    pub spotify_installed: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

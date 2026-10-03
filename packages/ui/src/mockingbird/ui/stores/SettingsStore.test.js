@@ -227,3 +227,49 @@ describe("Mockingbird phone app launch setting", () => {
     store.unavailableSettingsBannerUiState.hideUnavailableBanner();
   });
 });
+
+describe("Mockingbird Launch Spotify setting", () => {
+  test("defaults on, is gated on the daemon setting, and delegates without optimistic persistence", () => {
+    const store = createStore();
+    const item = store.spotifyLaunchView.rows[0];
+    expect(store.submenuUiState.isToggleOn(item)).toBe(true);
+    expect(store.isSettingItemDisabled(item)).toBe(true);
+    const updates = [];
+    store.syncSharedAppLaunchSetting({
+      enabled: true,
+      ready: true,
+      saving: false,
+      error: null,
+      update: () => {},
+      spotifyEnabled: true,
+      updateSpotify: (value) => updates.push(value),
+    });
+    store.submenuUiState.handleSubmenuItemClicked(item);
+    expect(updates).toEqual([false]);
+    expect(store.spotifyAppLaunchEnabled).toBe(true);
+    store.syncSharedAppLaunchSetting({
+      enabled: true,
+      ready: true,
+      saving: true,
+      error: null,
+      update: () => {},
+      spotifyEnabled: false,
+      updateSpotify: (value) => updates.push(value),
+    });
+    store.submenuUiState.handleSubmenuItemClicked(item);
+    expect(updates).toEqual([false]);
+    expect(store.unavailableSettingsBannerUiState.message).toBe(
+      "Saving phone app setting...",
+    );
+    store.unavailableSettingsBannerUiState.hideUnavailableBanner();
+  });
+
+  test("appears in the Options menu after Auto Launch App", () => {
+    const store = createStore();
+    const options = store.settings.rows.find((row) => row.label === "Options");
+    const labels = options.rows.map((row) => row.label);
+    expect(labels.indexOf("Launch Spotify")).toBe(
+      labels.indexOf("Auto Launch App") + 1,
+    );
+  });
+});

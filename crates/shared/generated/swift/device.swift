@@ -31,6 +31,7 @@ public struct AppReadyEvent: Codable, Sendable {
   public let isAdmin: Bool?
   public let entitlementsVerified: Bool?
   public let spotifySkipped: Bool?
+  public let spotifyInstalled: Bool?
 
   public init(
     datetime: String?,
@@ -41,7 +42,8 @@ public struct AppReadyEvent: Codable, Sendable {
     hasLifetime: Bool?,
     isAdmin: Bool?,
     entitlementsVerified: Bool?,
-    spotifySkipped: Bool?
+    spotifySkipped: Bool?,
+    spotifyInstalled: Bool?
   ) {
     self.datetime = datetime
     self.timezone = timezone
@@ -52,6 +54,7 @@ public struct AppReadyEvent: Codable, Sendable {
     self.isAdmin = isAdmin
     self.entitlementsVerified = entitlementsVerified
     self.spotifySkipped = spotifySkipped
+    self.spotifyInstalled = spotifyInstalled
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -64,6 +67,7 @@ public struct AppReadyEvent: Codable, Sendable {
     case isAdmin = "is_admin"
     case entitlementsVerified = "entitlements_verified"
     case spotifySkipped = "spotify_skipped"
+    case spotifyInstalled = "spotify_installed"
   }
 }
 

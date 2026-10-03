@@ -181,3 +181,8 @@ uses the same shared preference as the main UI, and disables editing while the
 setting is unavailable or saving. Turning it off requests background launch
 for iPhone and Android while preserving the companion connection. Never persist
 another Mockingbird copy or optimistically change the acknowledged value.
+
+The Options menu's Launch Spotify toggle sits directly below it and mirrors the
+daemon-backed `spotifyAppLaunchEnabled` setting through the same
+`SettingsContext` loading, saving, and error gating. It defaults on and shares
+the same acknowledged-value rules.

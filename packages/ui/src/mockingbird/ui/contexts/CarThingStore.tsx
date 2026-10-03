@@ -84,9 +84,13 @@ export const CarThingStoreProvider = ({
       saving: isAppLaunchSettingSaving,
       error: appLaunchSettingError,
       update: (enabled) => updateSetting("foregroundAppLaunchEnabled", enabled),
+      spotifyEnabled: settings.spotifyAppLaunchEnabled !== false,
+      updateSpotify: (enabled) =>
+        updateSetting("spotifyAppLaunchEnabled", enabled),
     });
   }, [
     settings.foregroundAppLaunchEnabled,
+    settings.spotifyAppLaunchEnabled,
     isAppLaunchSettingReady,
     isAppLaunchSettingSaving,
     appLaunchSettingError,

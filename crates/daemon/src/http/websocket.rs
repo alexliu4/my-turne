@@ -790,7 +790,7 @@ impl WebSocketServer {
                     let _publication = APP_LAUNCH_PUBLICATION_LOCK.lock().await;
                     let result = if method == "device.appLaunch.set" {
                         match Self::decode_params(params) {
-                            Ok(settings) => crate::system::app_launch::set(settings).await,
+                            Ok(update) => crate::system::app_launch::update(update).await,
                             Err(error) => {
                                 self.send_error(
                                     id,

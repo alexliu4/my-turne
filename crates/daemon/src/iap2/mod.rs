@@ -56,18 +56,12 @@ use telephony::{CallLifecycleEvent, CallTracker};
 
 const NOCTURNE_EA_PROTOCOL: &str = "com.usenocturne.daemon";
 const DEFAULT_APP_BUNDLE_ID: &str = "com.usenocturne.nocturne";
-// iOS ignores RequestAppLaunch for an app that is already running, and it
-// background-launches the app itself shortly after the accessory connects.
-// The visible (foreground) launch therefore only happens when this fires
-// before the app's background EA session forms — keep the window tight so
-// the cold-start launch wins that race.
 const APP_LAUNCH_INITIAL_DELAY: Duration = Duration::from_millis(2_500);
-/// Used instead of [`APP_LAUNCH_INITIAL_DELAY`] when the phone paired moments
-/// ago (the Settings > Bluetooth setup flow): fire on the first tick so the
-/// launch request beats iOS's background spawn of the app.
 const APP_LAUNCH_FRESH_PAIR_DELAY: Duration = Duration::from_millis(250);
 const APP_LAUNCH_RETRY_INTERVAL: Duration = Duration::from_secs(15);
 const APP_LAUNCH_MAX_ATTEMPTS: u32 = 5;
+const SPOTIFY_BUNDLE_ID: &str = "com.spotify.client";
+const SPOTIFY_RESUME_WINDOW: Duration = Duration::from_secs(15);
 
 #[derive(Default, Clone)]
 struct NowPlayingState {
@@ -84,6 +78,7 @@ struct NowPlayingState {
     shuffle_mode: Option<String>,
     repeat_mode: Option<String>,
     app_name: Option<String>,
+    app_bundle: Option<String>,
 }
 
 impl NowPlayingState {
@@ -254,7 +249,35 @@ impl NowPlayingState {
             if let Some(app) = playback.app_display_name {
                 self.app_name = Some(app);
             }
+            if let Some(bundle) = playback.app_bundle {
+                self.app_bundle = Some(bundle);
+            }
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpotifyHandoff {
+    Idle,
+    AwaitingNowPlaying { deadline: Instant },
+    Finished,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SpotifyResume {
+    Wait,
+    Play,
+    AlreadyPlaying,
+}
+
+fn spotify_resume_action(state: &NowPlayingState) -> SpotifyResume {
+    if state.app_bundle.as_deref() != Some(SPOTIFY_BUNDLE_ID) {
+        return SpotifyResume::Wait;
+    }
+    match state.status.as_deref() {
+        Some("playing") => SpotifyResume::AlreadyPlaying,
+        Some(_) => SpotifyResume::Play,
+        None => SpotifyResume::Wait,
     }
 }
 
@@ -529,6 +552,10 @@ async fn run_iap2_connection(
     let app_ready_received = app_manager
         .app_ready_flag()
         .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    let spotify_installed = app_manager
+        .spotify_installed_flag()
+        .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    let mut spotify_handoff = SpotifyHandoff::Idle;
     let mut now_playing_state = NowPlayingState::default();
     let mut call_tracker = CallTracker::new(device_address.to_string());
     let mut active_ea: Option<ActiveEaStream> = None;
@@ -590,6 +617,7 @@ async fn run_iap2_connection(
                             if handle_session_event(event, context).await? {
                                 break;
                             }
+                            advance_spotify_handoff(&mut spotify_handoff, &now_playing_state, &session_hid_tx).await;
                             if let Some(active) = active_ea.as_ref() {
                                 if active.local_session_id != 0 && last_daemon_ready.elapsed() >= daemon_ready_interval {
                                     send_daemon_ready(active.local_session_id, Some(&active.outbound)).await;
@@ -674,6 +702,13 @@ async fn run_iap2_connection(
                 }
 
                 _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                    if spotify_handoff == SpotifyHandoff::Idle
+                        && app_ready_received.load(Ordering::Acquire)
+                    {
+                        spotify_handoff =
+                            start_spotify_handoff(spotify_installed.load(Ordering::Relaxed)).await;
+                    }
+                    advance_spotify_handoff(&mut spotify_handoff, &now_playing_state, &session_hid_tx).await;
                     if let Some(active) = active_ea.as_ref() {
                         if !app_ready_received.load(Ordering::Relaxed)
                             && last_daemon_ready.elapsed() >= daemon_ready_interval
@@ -1127,6 +1162,14 @@ async fn send_app_launch_with_settings(
     if !settings.foreground {
         return Ok(false);
     }
+    send_request_app_launch(link_command_tx, bundle_id).await?;
+    Ok(true)
+}
+
+async fn send_request_app_launch(
+    link_command_tx: &mpsc::Sender<Iap2Command>,
+    bundle_id: &str,
+) -> Result<()> {
     let frame: CsmFrame = RequestAppLaunch {
         bundle_id: bundle_id.to_string(),
         launch_method: AppLaunchMethod::WithoutUserAlert,
@@ -1139,7 +1182,55 @@ async fn send_app_launch_with_settings(
         })
         .await
         .map_err(|err| NocturnedError::Iap2Protocol(err.to_string()))?;
-    Ok(true)
+    Ok(())
+}
+
+async fn start_spotify_handoff(spotify_installed: bool) -> SpotifyHandoff {
+    if !spotify_installed {
+        return SpotifyHandoff::Finished;
+    }
+    let settings = match crate::system::app_launch::get().await {
+        Ok(settings) => settings,
+        Err(err) => {
+            warn!(%err, "Skipping Spotify handoff, app launch preference unavailable");
+            return SpotifyHandoff::Finished;
+        }
+    };
+    if !settings.spotify {
+        return SpotifyHandoff::Finished;
+    }
+    info!("Waiting for Spotify to claim Now Playing before resuming it");
+    SpotifyHandoff::AwaitingNowPlaying {
+        deadline: Instant::now() + SPOTIFY_RESUME_WINDOW,
+    }
+}
+
+async fn advance_spotify_handoff(
+    handoff: &mut SpotifyHandoff,
+    now_playing_state: &NowPlayingState,
+    hid_tx: &mpsc::Sender<HidCommand>,
+) {
+    let SpotifyHandoff::AwaitingNowPlaying { deadline } = *handoff else {
+        return;
+    };
+    match spotify_resume_action(now_playing_state) {
+        SpotifyResume::Play => {
+            *handoff = SpotifyHandoff::Finished;
+            info!("Resuming Spotify playback on the phone");
+            if let Err(err) = hid_tx
+                .send(HidCommand::Pulse(iap2_rs::csm::hid::report_bit::PLAY_PAUSE))
+                .await
+            {
+                warn!(%err, "Failed to queue Spotify resume");
+            }
+        }
+        SpotifyResume::AlreadyPlaying => *handoff = SpotifyHandoff::Finished,
+        SpotifyResume::Wait if Instant::now() >= deadline => {
+            *handoff = SpotifyHandoff::Finished;
+            info!("Spotify never became the Now Playing app, skipping resume");
+        }
+        SpotifyResume::Wait => {}
+    }
 }
 
 async fn send_daemon_ready(session_id: u8, outbound: Option<&EaStreamSender>) {
@@ -1462,7 +1553,10 @@ mod tests {
         let launched = send_app_launch_with_settings(
             &sender,
             DEFAULT_APP_BUNDLE_ID,
-            crate::system::app_launch::AppLaunchSettings { foreground: false },
+            crate::system::app_launch::AppLaunchSettings {
+                foreground: false,
+                spotify: true,
+            },
         )
         .await?;
         assert!(!launched);
@@ -1483,6 +1577,73 @@ mod tests {
             Ok(Iap2Command::Send { session_id: 1, .. })
         ));
         Ok(())
+    }
+
+    fn now_playing(bundle: Option<&str>, status: Option<&str>) -> NowPlayingState {
+        NowPlayingState {
+            app_bundle: bundle.map(ToOwned::to_owned),
+            status: status.map(ToOwned::to_owned),
+            ..NowPlayingState::default()
+        }
+    }
+
+    #[test]
+    fn spotify_resume_waits_for_spotify_to_own_now_playing() {
+        assert_eq!(
+            spotify_resume_action(&now_playing(Some("com.apple.Music"), Some("paused"))),
+            SpotifyResume::Wait
+        );
+        assert_eq!(
+            spotify_resume_action(&now_playing(None, Some("paused"))),
+            SpotifyResume::Wait
+        );
+        assert_eq!(
+            spotify_resume_action(&now_playing(Some(SPOTIFY_BUNDLE_ID), None)),
+            SpotifyResume::Wait
+        );
+        assert_eq!(
+            spotify_resume_action(&now_playing(Some(SPOTIFY_BUNDLE_ID), Some("paused"))),
+            SpotifyResume::Play
+        );
+        assert_eq!(
+            spotify_resume_action(&now_playing(Some(SPOTIFY_BUNDLE_ID), Some("playing"))),
+            SpotifyResume::AlreadyPlaying
+        );
+    }
+
+    #[tokio::test]
+    async fn spotify_handoff_presses_play_once_then_finishes() {
+        let (hid_tx, mut hid_rx) = mpsc::channel(4);
+        let mut handoff = SpotifyHandoff::AwaitingNowPlaying {
+            deadline: Instant::now() + SPOTIFY_RESUME_WINDOW,
+        };
+        let other = now_playing(Some("com.apple.Music"), Some("paused"));
+        advance_spotify_handoff(&mut handoff, &other, &hid_tx).await;
+        assert!(hid_rx.try_recv().is_err());
+        let spotify = now_playing(Some(SPOTIFY_BUNDLE_ID), Some("paused"));
+        advance_spotify_handoff(&mut handoff, &spotify, &hid_tx).await;
+        advance_spotify_handoff(&mut handoff, &spotify, &hid_tx).await;
+        assert!(matches!(hid_rx.try_recv(), Ok(HidCommand::Pulse(_))));
+        assert!(hid_rx.try_recv().is_err());
+        assert_eq!(handoff, SpotifyHandoff::Finished);
+    }
+
+    #[tokio::test]
+    async fn spotify_handoff_gives_up_after_resume_window() {
+        let (hid_tx, mut hid_rx) = mpsc::channel(4);
+        let mut handoff = SpotifyHandoff::AwaitingNowPlaying {
+            deadline: Instant::now(),
+        };
+        advance_spotify_handoff(&mut handoff, &NowPlayingState::default(), &hid_tx).await;
+        assert_eq!(handoff, SpotifyHandoff::Finished);
+        let spotify = now_playing(Some(SPOTIFY_BUNDLE_ID), Some("paused"));
+        advance_spotify_handoff(&mut handoff, &spotify, &hid_tx).await;
+        assert!(hid_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn spotify_handoff_never_starts_when_spotify_is_missing() {
+        assert_eq!(start_spotify_handoff(false).await, SpotifyHandoff::Finished);
     }
 
     fn media_update(

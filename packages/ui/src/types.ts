@@ -284,6 +284,7 @@ export interface SettingsState {
   mockingbirdUiEnabled?: boolean;
   micMuted?: boolean;
   foregroundAppLaunchEnabled?: boolean;
+  spotifyAppLaunchEnabled?: boolean;
   nativePhoneCallsEnabled?: boolean;
   nativeNotificationsEnabled?: boolean;
   showPlaybackTime?: boolean;
