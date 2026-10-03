@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import {
   acceptsPhoneMediaArtworkEvent,
+  applyPhoneTimingToSpotifyState,
   attachPushedArtwork,
+  classifySpotifyStateAgainstPhone,
+  createPhoneSpotifySnapshot,
+  projectPhoneSpotifyPosition,
+  rememberPhoneSpotifyTitle,
+  shouldAwaitPhoneCatchUp,
   canUsePhonePushedArtwork,
   createMediaGenerationCorrelator,
   fetchPlaybackStateAfterAppReady,
@@ -1077,5 +1083,203 @@ describe("cleared phone media updates", () => {
       ),
     ).toBe(false);
     expect(shouldClearDisplayedMediaForEmptyUpdate(null, true)).toBe(false);
+  });
+});
+
+describe("phone-authoritative Spotify playback", () => {
+  const timing = (progressMs, durationMs = 200_000, timestamp = 1_000) => ({
+    durationMs,
+    progressMs,
+    playbackRate: 1,
+    timestamp,
+  });
+  const spotifyState = (name, deviceType = "SMARTPHONE") => ({
+    is_playing: false,
+    progress_ms: 5_000,
+    timestamp: 10,
+    device: { id: "phone", type: deviceType },
+    item: { id: name, uri: `spotify:track:${name}`, name, duration_ms: 0 },
+  });
+  const snapshotFor = (title, nowMs = 1_000) =>
+    createPhoneSpotifySnapshot(
+      null,
+      title,
+      timing(30_000, 200_000, nowMs),
+      true,
+      nowMs,
+    );
+
+  it("rejects a delayed Spotify state for a track the phone already left", () => {
+    const history = rememberPhoneSpotifyTitle(
+      rememberPhoneSpotifyTitle([], "first", "second"),
+      "second",
+      "third",
+    );
+    expect(history).toEqual(["first", "second"]);
+    expect(
+      classifySpotifyStateAgainstPhone(
+        spotifyState("First"),
+        snapshotFor("third"),
+        history,
+        600_000,
+      ),
+    ).toBe("reject");
+  });
+
+  it("defers an unconfirmed track briefly, then trusts Spotify again", () => {
+    const snapshot = snapshotFor("current", 1_000);
+    expect(
+      classifySpotifyStateAgainstPhone(
+        spotifyState("Next"),
+        snapshot,
+        [],
+        5_000,
+      ),
+    ).toBe("defer");
+    expect(
+      classifySpotifyStateAgainstPhone(
+        spotifyState("Next"),
+        snapshot,
+        [],
+        20_000,
+      ),
+    ).toBe("accept");
+  });
+
+  it("accepts matching titles and playback owned by another device", () => {
+    const snapshot = snapshotFor("current");
+    expect(
+      classifySpotifyStateAgainstPhone(
+        spotifyState(" Current "),
+        snapshot,
+        [],
+        2_000,
+      ),
+    ).toBe("accept");
+    expect(
+      classifySpotifyStateAgainstPhone(
+        spotifyState("Old", "COMPUTER"),
+        snapshot,
+        ["old"],
+        2_000,
+      ),
+    ).toBe("accept");
+  });
+
+  it("applies the phone's elapsed time, status, and duration to Spotify state", () => {
+    const snapshot = snapshotFor("song", 50_000);
+    expect(
+      applyPhoneTimingToSpotifyState(spotifyState("Song"), snapshot),
+    ).toMatchObject({
+      is_playing: true,
+      progress_ms: 30_000,
+      timestamp: 50_000,
+      item: { duration_ms: 200_000 },
+    });
+    expect(
+      applyPhoneTimingToSpotifyState(spotifyState("Other"), snapshot),
+    ).toEqual(spotifyState("Other"));
+  });
+
+  it("projects past a repeated stale elapsed anchor instead of jumping back", () => {
+    const first = createPhoneSpotifySnapshot(
+      null,
+      "song",
+      timing(30_000),
+      true,
+      1_000,
+    );
+    const repeated = createPhoneSpotifySnapshot(
+      first,
+      "song",
+      timing(30_000, 200_000, 21_000),
+      false,
+      21_000,
+    );
+    expect(repeated.progressMs).toBe(50_000);
+    expect(repeated.timestamp).toBe(21_000);
+    expect(projectPhoneSpotifyPosition(repeated, 99_000)).toBe(50_000);
+  });
+
+  it("accepts fresh elapsed anchors and keeps duration across sparse updates", () => {
+    const first = createPhoneSpotifySnapshot(
+      null,
+      "song",
+      timing(30_000),
+      true,
+      1_000,
+    );
+    const seeked = createPhoneSpotifySnapshot(
+      first,
+      "song",
+      timing(10_000, 0, 5_000),
+      true,
+      5_000,
+    );
+    expect(seeked.progressMs).toBe(10_000);
+    expect(seeked.durationMs).toBe(200_000);
+    expect(projectPhoneSpotifyPosition(seeked, 500_000)).toBe(200_000);
+  });
+
+  it("ignores next-track timing that iOS sends under the old title", () => {
+    const current = createPhoneSpotifySnapshot(
+      null,
+      "song",
+      timing(100_000, 138_919),
+      true,
+      1_000,
+    );
+    const lagging = createPhoneSpotifySnapshot(
+      current,
+      "song",
+      timing(636, 134_000, 3_000),
+      true,
+      3_000,
+    );
+    expect(lagging.durationMs).toBe(138_919);
+    expect(lagging.progressMs).toBe(102_000);
+  });
+
+  it("keeps newer Spotify state while the phone briefly lags behind it", () => {
+    const lagging = {
+      displayTitleDiffers: true,
+      phoneTitleChanged: false,
+      spotifyAheadSince: 10_000,
+    };
+    expect(shouldAwaitPhoneCatchUp({ ...lagging, nowMs: 11_500 })).toBe(true);
+    expect(shouldAwaitPhoneCatchUp({ ...lagging, nowMs: 16_000 })).toBe(false);
+    expect(
+      shouldAwaitPhoneCatchUp({
+        ...lagging,
+        phoneTitleChanged: true,
+        nowMs: 11_500,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAwaitPhoneCatchUp({
+        ...lagging,
+        spotifyAheadSince: null,
+        nowMs: 11_500,
+      }),
+    ).toBe(false);
+  });
+
+  it("starts a new title from its own timeline", () => {
+    const first = createPhoneSpotifySnapshot(
+      null,
+      "first",
+      timing(30_000),
+      true,
+      1_000,
+    );
+    const next = createPhoneSpotifySnapshot(
+      first,
+      "second",
+      timing(30_000, 180_000, 9_000),
+      true,
+      9_000,
+    );
+    expect(next.progressMs).toBe(30_000);
+    expect(next.titleChangedAt).toBe(9_000);
   });
 });

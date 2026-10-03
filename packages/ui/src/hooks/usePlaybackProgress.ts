@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { consumeProgressResetSignal } from "./useSpotifyPlayerState";
 import type {
   PlaybackProgress,
   SpotifyPlaybackState as SpotifyPlayback,
@@ -10,12 +9,6 @@ type ProgressSnapshot = Omit<
   "updateProgress" | "triggerRefresh"
 >;
 type ProgressSubscriber = (snapshot: ProgressSnapshot) => void;
-type ProgressResetSignal = {
-  position?: number;
-  progressMs?: number;
-  timestamp?: number;
-  at?: number;
-};
 type PhoneMediaPauseGuard = {
   floorMs: number;
   expiresAtMs: number;
@@ -124,16 +117,6 @@ const animate = (timestamp: number) => {
   if (!_isPlaying || _duration <= 0) {
     _rafHandle = null;
     return;
-  }
-
-  const resetSignal = consumeProgressResetSignal();
-  if (resetSignal) {
-    const position = resetSignal.position ?? resetSignal.progressMs ?? 0;
-    const timestamp = resetSignal.timestamp ?? resetSignal.at ?? Date.now();
-    _anchorMs = position;
-    _anchorTimestamp = timestamp;
-    _serverProgressMs = position;
-    _progressMs = position;
   }
 
   const now = Date.now();

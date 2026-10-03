@@ -88,7 +88,7 @@ The main Settings factory-reset action sends one `device.factoryreset` request a
 
 Now Playing quick-access binding must use `src/utils/spotifyContext.ts`. Do not add local fixed-position parsing for Spotify context URIs because Liked Songs and personalized yearly playlists have multiple valid identities.
 
-Main Now Playing keeps phone-media progress mounted during the short interval between a track identity update and its first complete timing anchor. Render an unknown timeline as an empty bar with placeholder labels, and keep it disabled for seeking. Mockingbird other-media presentation intentionally has no progress bar and must not be changed as part of main-player timing work.
+Pending Spotify placeholders render the phone timeline the same way as phone media, and stay non-seekable. Main Now Playing keeps phone-media progress mounted during the short interval between a track identity update and its first complete timing anchor. Render an unknown timeline as an empty bar with placeholder labels, and keep it disabled for seeking. Mockingbird other-media presentation intentionally has no progress bar and must not be changed as part of main-player timing work.
 
 Main Now Playing may show lyrics for phone media and Spotify local files. Phone lines are presentation only and must not gain button roles, keyboard handlers, pointer affordances, or seek actions. Spotify local files use the normal synchronized-line seek behavior. Leave Mockingbird unchanged.
 

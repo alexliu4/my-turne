@@ -52,6 +52,13 @@ describe("Now Playing progress visibility", () => {
     });
   });
 
+  it("shows a pending Spotify item's phone timeline once it is known", () => {
+    expect(getNowPlayingProgressPresentation(true, 200_000, 0)).toEqual({
+      visible: true,
+      timelineKnown: true,
+    });
+  });
+
   it("preserves Spotify progress behavior", () => {
     expect(getNowPlayingProgressPresentation(false, 0, null)).toEqual({
       visible: true,

@@ -26,13 +26,6 @@ type AlbumChangeEvent = {
   trackUri?: string | null;
   timestamp: number;
 } | null;
-type ProgressResetSignal = {
-  at?: number;
-  progressMs?: number;
-  position?: number;
-  timestamp?: number;
-} | null;
-type NowPlayingTrackLatch = { title: string; timestamp: number };
 type MediaGeneration = number | null;
 type MediaGenerationCorrelator = {
   recordMetadata: (data: unknown) => void;
@@ -52,6 +45,21 @@ type SpotifyPhoneMediaUpdate = {
   media: NormalizedPhoneMediaAttributes;
   playback: NormalizedPhoneMediaAttributes;
   timestamp: number;
+};
+export type PhoneSpotifySnapshot = {
+  title: string;
+  isPlaying: boolean;
+  durationMs: number;
+  progressMs: number | null;
+  reportedProgressMs: number | null;
+  playbackRate: number;
+  timestamp: number;
+  titleChangedAt: number;
+};
+export type SpotifyStateAdmission = "accept" | "defer" | "reject";
+type DeferredSpotifyState = {
+  playback: SpotifyPlayback;
+  receivedAt: number;
 };
 
 /** @typedef {import("@schema/media_control").MediaNowPlayingUpdateEvent} MediaNowPlayingUpdateEvent */
@@ -73,12 +81,18 @@ let pendingSpotifyMediaUpdate: SpotifyPhoneMediaUpdate | null = null;
 let latestSpotifyPhoneMediaUpdate: SpotifyPhoneMediaUpdate | null = null;
 let spotifyFallbackTimeout: ReturnType<typeof setTimeout> | null = null;
 let cachedActiveDeviceType: string | null = null;
-let progressResetSignal: ProgressResetSignal = null;
-let nowPlayingTrackLatch: NowPlayingTrackLatch | null = null;
 let lastDealerEventTimestamp = 0;
 let lastCompleteDealerStateTimestamp = 0;
-const NOWPLAYING_PRECEDENCE_WINDOW_MS = 30000;
+let phoneSpotifySnapshot: PhoneSpotifySnapshot | null = null;
+let phoneSpotifyTitleHistory: string[] = [];
+let deferredSpotifyState: DeferredSpotifyState | null = null;
+let spotifyStateRevision = 0;
+let spotifyAheadOfPhoneSince: number | null = null;
 const DEALER_FRESH_THRESHOLD_MS = 8000;
+const PHONE_SPOTIFY_CONFIRMATION_WINDOW_MS = 15000;
+const PHONE_SPOTIFY_CATCH_UP_WINDOW_MS = 5000;
+const PHONE_SPOTIFY_TITLE_HISTORY_LIMIT = 12;
+const DEFERRED_SPOTIFY_STATE_TTL_MS = 60000;
 const PHONE_ARTWORK_CONTEXT_TTL_MS = 10000;
 const APP_READY_PLAYBACK_RETRY_DELAYS_MS = [0, 500, 1000, 2000, 4000];
 const APP_READY_PLAYBACK_REQUEST_TIMEOUT_MS = 4000;
@@ -552,6 +566,172 @@ export const reconcileSpotifyLocalMediaTiming = (
   };
 };
 
+export const normalizeTrackTitle = (title: unknown): string | null =>
+  typeof title === "string" && title.trim().length > 0
+    ? title.trim().toLowerCase()
+    : null;
+
+const isKnownNonSmartphoneDevice = (deviceType: unknown): boolean => {
+  const normalized = normalizeSpotifyDeviceType(deviceType);
+  return Boolean(
+    normalized && normalized !== "UNKNOWN" && normalized !== "SMARTPHONE",
+  );
+};
+
+export const projectPhoneSpotifyPosition = (
+  snapshot: PhoneSpotifySnapshot,
+  nowMs: number,
+): number | null => {
+  if (snapshot.progressMs === null) return null;
+  if (!snapshot.isPlaying) return snapshot.progressMs;
+  const projected =
+    snapshot.progressMs +
+    Math.max(0, nowMs - snapshot.timestamp) * snapshot.playbackRate;
+  return snapshot.durationMs > 0
+    ? Math.min(projected, snapshot.durationMs)
+    : projected;
+};
+
+export const createPhoneSpotifySnapshot = (
+  previous: PhoneSpotifySnapshot | null,
+  title: string,
+  timing: PhoneMediaTiming,
+  isPlaying: boolean,
+  nowMs: number,
+): PhoneSpotifySnapshot => {
+  const sameTrack = previous?.title === title ? previous : null;
+  const belongsToNextTrack = Boolean(
+    sameTrack &&
+    sameTrack.durationMs > 0 &&
+    timing.durationMs > 0 &&
+    timing.durationMs !== sameTrack.durationMs,
+  );
+  const repeatsStaleAnchor = Boolean(
+    sameTrack?.isPlaying &&
+    timing.progressMs !== null &&
+    timing.progressMs === sameTrack.reportedProgressMs &&
+    nowMs > sameTrack.timestamp,
+  );
+  const projectedPosition =
+    sameTrack &&
+    (timing.progressMs === null || repeatsStaleAnchor || belongsToNextTrack)
+      ? projectPhoneSpotifyPosition(sameTrack, nowMs)
+      : null;
+
+  return {
+    title,
+    isPlaying,
+    durationMs:
+      timing.durationMs > 0 && !belongsToNextTrack
+        ? timing.durationMs
+        : (sameTrack?.durationMs ?? 0),
+    progressMs: projectedPosition ?? timing.progressMs,
+    reportedProgressMs: belongsToNextTrack
+      ? (sameTrack?.reportedProgressMs ?? null)
+      : (timing.progressMs ?? sameTrack?.reportedProgressMs ?? null),
+    playbackRate: timing.playbackRate,
+    timestamp: projectedPosition !== null ? nowMs : timing.timestamp,
+    titleChangedAt: sameTrack ? sameTrack.titleChangedAt : nowMs,
+  };
+};
+
+export const rememberPhoneSpotifyTitle = (
+  history: readonly string[],
+  previousTitle: string | null,
+  nextTitle: string,
+): string[] => {
+  const retained = history.filter(
+    (title) => title !== nextTitle && title !== previousTitle,
+  );
+  if (previousTitle && previousTitle !== nextTitle) {
+    retained.push(previousTitle);
+  }
+  return retained.slice(-PHONE_SPOTIFY_TITLE_HISTORY_LIMIT);
+};
+
+export const classifySpotifyStateAgainstPhone = (
+  incoming: SpotifyPlayback,
+  snapshot: PhoneSpotifySnapshot | null,
+  history: readonly string[],
+  nowMs: number,
+): SpotifyStateAdmission => {
+  const incomingTitle = normalizeTrackTitle(incoming.item?.name);
+  if (
+    !snapshot ||
+    !incomingTitle ||
+    incomingTitle === snapshot.title ||
+    isKnownNonSmartphoneDevice(incoming.device?.type)
+  ) {
+    return "accept";
+  }
+  if (history.includes(incomingTitle)) return "reject";
+  return nowMs - snapshot.titleChangedAt < PHONE_SPOTIFY_CONFIRMATION_WINDOW_MS
+    ? "defer"
+    : "accept";
+};
+
+export const shouldAwaitPhoneCatchUp = ({
+  displayTitleDiffers,
+  phoneTitleChanged,
+  spotifyAheadSince,
+  nowMs,
+}: {
+  displayTitleDiffers: boolean;
+  phoneTitleChanged: boolean;
+  spotifyAheadSince: number | null;
+  nowMs: number;
+}): boolean =>
+  displayTitleDiffers &&
+  !phoneTitleChanged &&
+  spotifyAheadSince !== null &&
+  nowMs - spotifyAheadSince < PHONE_SPOTIFY_CATCH_UP_WINDOW_MS;
+
+export const applyPhoneTimingToSpotifyState = (
+  incoming: SpotifyPlayback,
+  snapshot: PhoneSpotifySnapshot | null,
+): SpotifyPlayback => {
+  if (
+    !snapshot ||
+    !incoming.item ||
+    normalizeTrackTitle(incoming.item.name) !== snapshot.title ||
+    isKnownNonSmartphoneDevice(incoming.device?.type)
+  ) {
+    return incoming;
+  }
+
+  const incomingDuration = finiteNumber(incoming.item.duration_ms) ?? 0;
+  return {
+    ...incoming,
+    is_playing: snapshot.isPlaying,
+    ...(snapshot.progressMs !== null
+      ? {
+          progress_ms: snapshot.progressMs,
+          timestamp: snapshot.timestamp,
+          playback_speed: snapshot.playbackRate,
+        }
+      : {}),
+    item:
+      incomingDuration <= 0 && snapshot.durationMs > 0
+        ? { ...incoming.item, duration_ms: snapshot.durationMs }
+        : incoming.item,
+  };
+};
+
+export const getPhoneSpotifyPlaybackTiming = (
+  snapshot: PhoneSpotifySnapshot,
+): Pick<
+  SpotifyPlayback,
+  "is_playing" | "progress_ms" | "timestamp" | "playback_speed"
+> | null =>
+  snapshot.progressMs === null
+    ? null
+    : {
+        is_playing: snapshot.isPlaying,
+        progress_ms: snapshot.progressMs,
+        timestamp: snapshot.timestamp,
+        playback_speed: snapshot.playbackRate,
+      };
+
 export const getPushedArtworkTargetUri = (
   item: SpotifyTrack | null | undefined,
   pendingTitle: string | null = null,
@@ -587,12 +767,6 @@ export const isPendingSpotifyTrackChange = (
     pendingTitle &&
     item?.name?.trim().toLowerCase() !== pendingTitle.trim().toLowerCase(),
   );
-
-export const consumeProgressResetSignal = () => {
-  const signal = progressResetSignal;
-  progressResetSignal = null;
-  return signal;
-};
 
 export const isSpotifyLocalImageUrl = (
   url: string | null | undefined,
@@ -923,6 +1097,118 @@ const promotePendingSpotifyArtwork = (
   currentArtworkTrackUri = item.uri;
   cleanupArtworkCache();
   return pendingArtworkUrl;
+};
+
+const buildSpotifyPendingPlaceholder = (
+  update: SpotifyPhoneMediaUpdate,
+  artworkUrl: string | null,
+): SpotifyPlayback => {
+  const { media, playback } = update;
+  const title = media.MediaItemTitle || "Unknown Title";
+  const artist = media.MediaItemArtist || "Unknown Artist";
+  const albumName = media.MediaItemAlbumName || media.MediaItemAlbum || title;
+  const snapshot =
+    phoneSpotifySnapshot?.title === normalizeTrackTitle(title)
+      ? phoneSpotifySnapshot
+      : null;
+  const timing = snapshot ? getPhoneSpotifyPlaybackTiming(snapshot) : null;
+  const fallbackTiming = normalizePhoneMediaTiming(media, playback);
+
+  return {
+    is_playing: snapshot
+      ? snapshot.isPlaying
+      : playback.PlaybackStatus === "playing",
+    timestamp: timing?.timestamp ?? Date.now(),
+    progress_ms: timing?.progress_ms ?? null,
+    context: null,
+    item: {
+      id: `spotify-pending-${title}`,
+      uri: `spotify:pending:${title}`,
+      type: "track",
+      name: title,
+      album: {
+        id: `spotify-pending-album-${albumName}`,
+        uri: `spotify:pending:album:${albumName}`,
+        name: albumName,
+        images: [{ url: artworkUrl || "/images/not-playing.webp" }],
+      },
+      artists: [
+        {
+          id: `spotify-pending-artist-${artist}`,
+          uri: `spotify:pending:artist:${artist}`,
+          name: artist,
+          type: "artist",
+        },
+      ],
+      duration_ms: snapshot?.durationMs ?? fallbackTiming.durationMs,
+      is_spotify_pending: true,
+    },
+    shuffle_state:
+      playback.PlaybackShuffleMode === "albums" ||
+      playback.PlaybackShuffleMode === "songs",
+    repeat_state:
+      playback.PlaybackRepeatMode === "one"
+        ? "track"
+        : playback.PlaybackRepeatMode === "all"
+          ? "context"
+          : "off",
+    device: null,
+    currently_playing_type: "track",
+    playback_speed: snapshot?.playbackRate ?? fallbackTiming.playbackRate,
+  };
+};
+
+const clearPhoneSpotifyAuthority = () => {
+  phoneSpotifySnapshot = null;
+  deferredSpotifyState = null;
+  spotifyAheadOfPhoneSince = null;
+};
+
+const admitSpotifyState = (
+  playback: SpotifyPlayback,
+): SpotifyPlayback | null => {
+  const nowMs = Date.now();
+  const admission = classifySpotifyStateAgainstPhone(
+    playback,
+    phoneSpotifySnapshot,
+    phoneSpotifyTitleHistory,
+    nowMs,
+  );
+  if (admission !== "accept") {
+    deferredSpotifyState = { playback, receivedAt: nowMs };
+    return null;
+  }
+
+  deferredSpotifyState = null;
+  spotifyStateRevision += 1;
+  const incomingTitle = normalizeTrackTitle(playback.item?.name);
+  spotifyAheadOfPhoneSince =
+    phoneSpotifySnapshot && incomingTitle
+      ? incomingTitle === phoneSpotifySnapshot.title
+        ? null
+        : (spotifyAheadOfPhoneSince ?? nowMs)
+      : null;
+  return applyPhoneTimingToSpotifyState(playback, phoneSpotifySnapshot);
+};
+
+const takeDeferredSpotifyState = (
+  title: string,
+  nowMs: number,
+): SpotifyPlayback | null => {
+  const deferred = deferredSpotifyState;
+  if (
+    !deferred ||
+    nowMs - deferred.receivedAt > DEFERRED_SPOTIFY_STATE_TTL_MS ||
+    normalizeTrackTitle(deferred.playback.item?.name) !== title
+  ) {
+    return null;
+  }
+  deferredSpotifyState = null;
+  spotifyStateRevision += 1;
+  return applyPhoneTimingToSpotifyState(
+    deferred.playback,
+    phoneSpotifySnapshot,
+  );
 };
 
 export const subscribeToPhoneVolume = (listener: PhoneVolumeListener) => {
@@ -1448,7 +1734,8 @@ export function useSpotifyPlayerState() {
           lastCompleteDealerStateTimestamp <= warmupStartedAt &&
           playback
         ) {
-          processPlaybackState(playback);
+          const admitted = admitSpotifyState(playback);
+          if (admitted) processPlaybackState(admitted);
         }
       })
       .catch((err) => {
@@ -1505,7 +1792,6 @@ export function useSpotifyPlayerState() {
           data.topic === "spotify.player.volume_changed")
       ) {
         markPlayerEvent();
-        lastDealerEventTimestamp = Date.now();
         const normalizedCluster = normalizeDealerCluster(data.data);
         const payloads = normalizedCluster
           ? [{ cluster: normalizedCluster }]
@@ -1523,10 +1809,6 @@ export function useSpotifyPlayerState() {
 
         if (payloads.length > 0 && payloads[0]?.cluster?.player_state) {
           const playerState = payloads[0].cluster.player_state;
-          if (hasUsableDealerArtwork(playerState)) {
-            lastCompleteDealerStateTimestamp = Date.now();
-            startupWarmupAbortRef.current?.abort();
-          }
 
           if (currentPlaybackRef.current?.item?.is_phone_media) {
             lastSpotifyDeviceStateChange = Date.now();
@@ -1693,30 +1975,15 @@ export function useSpotifyPlayerState() {
             playback_speed: playerState.options?.playback_speed || 1,
           };
 
-          if (nowPlayingTrackLatch) {
-            const latchAge = Date.now() - nowPlayingTrackLatch.timestamp;
-            if (latchAge < NOWPLAYING_PRECEDENCE_WINDOW_MS) {
-              const incomingDeviceTitle = playerState.track?.metadata?.title
-                ?.toLowerCase()
-                ?.trim();
-              if (
-                incomingDeviceTitle &&
-                incomingDeviceTitle !== nowPlayingTrackLatch.title
-              ) {
-                return;
-              }
-              if (
-                incomingDeviceTitle &&
-                incomingDeviceTitle === nowPlayingTrackLatch.title
-              ) {
-                nowPlayingTrackLatch = null;
-              }
-            } else {
-              nowPlayingTrackLatch = null;
-            }
-          }
+          const admitted = admitSpotifyState(transformedState);
+          if (!admitted) return;
 
-          processPlaybackState(transformedState);
+          lastDealerEventTimestamp = Date.now();
+          if (hasUsableDealerArtwork(playerState)) {
+            lastCompleteDealerStateTimestamp = lastDealerEventTimestamp;
+            startupWarmupAbortRef.current?.abort();
+          }
+          processPlaybackState(admitted);
         }
       }
     };
@@ -1768,6 +2035,7 @@ export function useSpotifyPlayerState() {
           incomingMediaGeneration !== previousMediaGeneration;
 
         const rejectPhoneMediaContext = () => {
+          clearPhoneSpotifyAuthority();
           clearPendingSpotifyArtworkContext();
           mediaGenerationCorrelator.recordMetadata(data.data);
           mediaGenerationCorrelator.rejectCurrentArtwork();
@@ -1854,39 +2122,109 @@ export function useSpotifyPlayerState() {
           : null;
         latestSpotifyPhoneMediaUpdate = spotifyPhoneMediaUpdate;
 
-        if (isSpotifyPhoneMedia) {
-          const currentItem = currentPlaybackRef.current?.item;
-          const incomingTitle = media.MediaItemTitle?.trim();
-          const isSameLocalTrack = Boolean(
-            isSpotifyLocalItem(currentItem) &&
-            incomingTitle &&
-            currentItem?.name?.trim().toLowerCase() ===
-              incomingTitle.toLowerCase(),
-          );
+        if (isSpotifyPhoneMedia && spotifyPhoneMediaUpdate) {
+          const receivedAt = Date.now();
+          const incomingTitle = media.MediaItemTitle || "Unknown Title";
+          const incomingTitleKey = normalizeTrackTitle(incomingTitle);
+          if (!incomingTitleKey) return;
+          const incomingIsPlaying = playback.PlaybackStatus === "playing";
+          const currentPlaybackState = currentPlaybackRef.current;
+          const currentItem = currentPlaybackState?.item;
+          const currentTitleKey = normalizeTrackTitle(currentItem?.name);
+          const hasRealSpotifyData = isResolvedSpotifyItem(currentItem);
+          const isTitleChange =
+            hasRealSpotifyData &&
+            currentTitleKey !== null &&
+            currentTitleKey !== incomingTitleKey;
 
-          if (isSameLocalTrack) {
+          const activeDeviceType =
+            normalizeSpotifyDeviceType(currentPlaybackState?.device?.type) ??
+            cachedActiveDeviceType;
+          const dealerIsFresh =
+            lastDealerEventTimestamp > 0 &&
+            receivedAt - lastDealerEventTimestamp < DEALER_FRESH_THRESHOLD_MS;
+          if (
+            isTitleChange &&
+            dealerIsFresh &&
+            activeDeviceType !== "SMARTPHONE"
+          ) {
+            clearPhoneSpotifyAuthority();
+            clearPendingSpotifyArtworkContext();
+            mediaGenerationCorrelator.rejectCurrentArtwork();
+            pendingSpotifyMediaUpdate = null;
+            if (spotifyFallbackTimeout) {
+              clearTimeout(spotifyFallbackTimeout);
+              spotifyFallbackTimeout = null;
+            }
+            return;
+          }
+
+          const previousSnapshot = phoneSpotifySnapshot;
+          phoneSpotifyTitleHistory = rememberPhoneSpotifyTitle(
+            phoneSpotifyTitleHistory,
+            previousSnapshot?.title ?? null,
+            incomingTitleKey,
+          );
+          const snapshot = createPhoneSpotifySnapshot(
+            previousSnapshot,
+            incomingTitleKey,
+            normalizePhoneMediaTiming(
+              media,
+              playback,
+              data.server_timestamp_ms,
+            ),
+            incomingIsPlaying,
+            receivedAt,
+          );
+          phoneSpotifySnapshot = snapshot;
+          const phoneTiming = getPhoneSpotifyPlaybackTiming(snapshot);
+
+          const confirmedSpotifyState = takeDeferredSpotifyState(
+            incomingTitleKey,
+            receivedAt,
+          );
+          if (confirmedSpotifyState) {
+            spotifyAheadOfPhoneSince = null;
+            processPlaybackState(confirmedSpotifyState);
+            return;
+          }
+
+          if (currentTitleKey === incomingTitleKey) {
+            spotifyAheadOfPhoneSince = null;
+          } else if (
+            hasRealSpotifyData &&
+            shouldAwaitPhoneCatchUp({
+              displayTitleDiffers: isTitleChange,
+              phoneTitleChanged: previousSnapshot?.title !== incomingTitleKey,
+              spotifyAheadSince: spotifyAheadOfPhoneSince,
+              nowMs: receivedAt,
+            })
+          ) {
+            return;
+          }
+
+          if (
+            isSpotifyLocalItem(currentItem) &&
+            currentTitleKey === incomingTitleKey
+          ) {
             pendingSpotifyMediaUpdate = null;
             if (spotifyFallbackTimeout) {
               clearTimeout(spotifyFallbackTimeout);
               spotifyFallbackTimeout = null;
             }
 
-            const incomingIsPlaying = playback.PlaybackStatus === "playing";
-            const mediaUpdateTimestamp = Date.now();
-
             setCurrentPlayback((prevPlayback) => {
               if (!prevPlayback?.item) return prevPlayback;
               const artistName = media.MediaItemArtist?.trim();
               const hasNamedArtist =
                 getNamedArtists(prevPlayback.item.artists).length > 0;
-              const durationMs =
-                media.MediaItemDuration ||
-                media.MediaItemPlaybackDurationInMilliseconds;
-              const timing = reconcileSpotifyLocalMediaTiming(
-                prevPlayback,
-                incomingIsPlaying,
-                mediaUpdateTimestamp,
-              );
+              const timing =
+                phoneTiming ??
+                reconcileSpotifyLocalMediaTiming(
+                  prevPlayback,
+                  incomingIsPlaying,
+                  receivedAt,
+                );
               const updatedPlayback = {
                 ...prevPlayback,
                 ...timing,
@@ -1902,8 +2240,8 @@ export function useSpotifyPlayerState() {
                         ],
                       }
                     : {}),
-                  ...(durationMs && durationMs > 0
-                    ? { duration_ms: durationMs }
+                  ...(snapshot.durationMs > 0
+                    ? { duration_ms: snapshot.durationMs }
                     : {}),
                   is_local: true,
                 },
@@ -1918,166 +2256,107 @@ export function useSpotifyPlayerState() {
 
           if (spotifyFallbackTimeout) {
             clearTimeout(spotifyFallbackTimeout);
+            spotifyFallbackTimeout = null;
           }
 
           const commitSpotifyPendingPlaceholder = () => {
-            const currentItem = currentPlaybackRef.current?.item;
-            const hasRealSpotifyData = isResolvedSpotifyItem(currentItem);
-
-            if (pendingSpotifyMediaUpdate && !hasRealSpotifyData) {
-              const { media: pendingMedia, playback: pendingPlayback } =
-                pendingSpotifyMediaUpdate;
-              const title = pendingMedia.MediaItemTitle || "Unknown Title";
-              const artist = pendingMedia.MediaItemArtist || "Unknown Artist";
-              const albumName = pendingMedia.MediaItemAlbumName || title;
-              const durationMs =
-                pendingMedia.MediaItemPlaybackDurationInMilliseconds || 0;
-
-              const newTrackUri = `spotify:pending:${title}`;
-              const cachedArtwork = artworkCache.get(newTrackUri);
-
-              const shuffleState =
-                pendingPlayback.PlaybackShuffleMode === "albums" ||
-                pendingPlayback.PlaybackShuffleMode === "songs";
-              const repeatState =
-                pendingPlayback.PlaybackRepeatMode === "one"
-                  ? "track"
-                  : pendingPlayback.PlaybackRepeatMode === "all"
-                    ? "context"
-                    : "off";
-
-              const placeholderState = {
-                is_playing: pendingPlayback.PlaybackStatus === "playing",
-                timestamp: Date.now(),
-                progress_ms: null,
-                context: null,
-                item: {
-                  id: `spotify-pending-${title}`,
-                  uri: newTrackUri,
-                  type: "track",
-                  name: title,
-                  album: {
-                    id: `spotify-pending-album-${albumName}`,
-                    uri: `spotify:pending:album:${albumName}`,
-                    name: albumName,
-                    images: cachedArtwork
-                      ? [{ url: cachedArtwork }]
-                      : [{ url: "/images/not-playing.webp" }],
-                  },
-                  artists: [
-                    {
-                      id: `spotify-pending-artist-${artist}`,
-                      uri: `spotify:pending:artist:${artist}`,
-                      name: artist,
-                      type: "artist",
-                    },
-                  ],
-                  duration_ms: durationMs,
-                  is_spotify_pending: true,
-                },
-                shuffle_state: shuffleState,
-                repeat_state: repeatState,
-                device: null,
-                currently_playing_type: "track",
-                playback_speed: pendingPlayback.PlaybackRate || 1,
-              };
-
-              processPlaybackState(placeholderState);
-              pendingSpotifyMediaUpdate = null;
+            const pendingUpdate = pendingSpotifyMediaUpdate;
+            if (
+              !pendingUpdate ||
+              isResolvedSpotifyItem(currentPlaybackRef.current?.item)
+            ) {
+              return;
             }
+            const pendingTitle =
+              pendingUpdate.media.MediaItemTitle || "Unknown Title";
+            processPlaybackState(
+              buildSpotifyPendingPlaceholder(
+                pendingUpdate,
+                artworkCache.get(`spotify:pending:${pendingTitle}`) ?? null,
+              ),
+            );
+            pendingSpotifyMediaUpdate = null;
           };
 
-          spotifyFallbackTimeout = setTimeout(() => {
-            commitSpotifyPendingPlaceholder();
-            spotifyFallbackTimeout = null;
-          }, 10000);
-
-          const hasRealSpotifyData = isResolvedSpotifyItem(currentItem);
-
-          if (currentItem?.is_phone_media) {
-            clearTimeout(spotifyFallbackTimeout);
-            spotifyFallbackTimeout = null;
+          if (currentItem?.is_phone_media || currentItem?.is_spotify_pending) {
             commitSpotifyPendingPlaceholder();
             return;
           }
 
+          spotifyFallbackTimeout = setTimeout(() => {
+            spotifyFallbackTimeout = null;
+            commitSpotifyPendingPlaceholder();
+          }, 10000);
+
           if (hasRealSpotifyData) {
-            const incomingTitle = media.MediaItemTitle;
-            const currentTitle = currentItem?.name;
-            const isTitleChange =
-              incomingTitle &&
-              currentTitle &&
-              incomingTitle.toLowerCase().trim() !==
-                currentTitle.toLowerCase().trim();
-
-            if (isTitleChange) {
-              const dealerIsFresh =
-                lastDealerEventTimestamp > 0 &&
-                Date.now() - lastDealerEventTimestamp <
-                  DEALER_FRESH_THRESHOLD_MS;
-              if (dealerIsFresh) {
-                clearPendingSpotifyArtworkContext();
-                mediaGenerationCorrelator.rejectCurrentArtwork();
-                pendingSpotifyMediaUpdate = null;
-                if (spotifyFallbackTimeout) {
-                  clearTimeout(spotifyFallbackTimeout);
-                  spotifyFallbackTimeout = null;
-                }
-                return;
-              }
-            }
-
-            const title = incomingTitle || currentItem?.name;
             const artist = media.MediaItemArtist;
-            const isPlaying = playback.PlaybackStatus === "playing";
-
-            if (isTitleChange) {
-              progressResetSignal = { position: 0, timestamp: Date.now() };
-              nowPlayingTrackLatch = {
-                title: incomingTitle.toLowerCase().trim(),
-                timestamp: Date.now(),
-              };
-            }
+            const phoneAlbumName =
+              media.MediaItemAlbumName || media.MediaItemAlbum || null;
+            const pendingUri = `spotify:pending:${incomingTitle}`;
+            const pendingArtwork = artworkCache.get(pendingUri);
 
             setCurrentPlayback((prevPlayback) => {
               if (!prevPlayback?.item) return prevPlayback;
 
-              const iap2Duration = media.MediaItemDuration;
-
-              let newProgressMs;
-              if (isTitleChange) {
-                newProgressMs = 0;
-              } else {
-                let estimatedProgress = prevPlayback.progress_ms || 0;
-                if (prevPlayback.is_playing && prevPlayback.timestamp) {
-                  const elapsed = Date.now() - prevPlayback.timestamp;
-                  estimatedProgress += elapsed;
-                }
-                const duration = iap2Duration || prevPlayback.item?.duration_ms;
-                if (duration && duration > 0 && estimatedProgress > duration) {
-                  estimatedProgress = duration;
-                }
-                newProgressMs = estimatedProgress;
+              if (!isTitleChange) {
+                const timing =
+                  phoneTiming ??
+                  reconcileSpotifyLocalMediaTiming(
+                    prevPlayback,
+                    incomingIsPlaying,
+                    receivedAt,
+                  );
+                const prevDuration =
+                  finiteNumber(prevPlayback.item.duration_ms) ?? 0;
+                const updatedPlayback = {
+                  ...prevPlayback,
+                  ...timing,
+                  item:
+                    prevDuration <= 0 && snapshot.durationMs > 0
+                      ? {
+                          ...prevPlayback.item,
+                          duration_ms: snapshot.durationMs,
+                        }
+                      : prevPlayback.item,
+                };
+                currentPlaybackRef.current = updatedPlayback;
+                return updatedPlayback;
               }
 
+              const albumName = phoneAlbumName || incomingTitle;
               const updatedPlayback = {
                 ...prevPlayback,
-                is_playing: isPlaying,
-                timestamp: Date.now(),
-                progress_ms: newProgressMs,
-                item: isTitleChange
-                  ? {
-                      ...prevPlayback.item,
-                      id: `spotify-transitional-${Date.now()}`,
-                      name: title,
-                      artists: artist
-                        ? [{ ...prevPlayback.item.artists?.[0], name: artist }]
-                        : prevPlayback.item.artists,
-                      ...(iap2Duration && iap2Duration > 0
-                        ? { duration_ms: iap2Duration }
-                        : {}),
-                    }
-                  : prevPlayback.item,
+                ...(phoneTiming ?? {
+                  is_playing: incomingIsPlaying,
+                  progress_ms: 0,
+                  timestamp: receivedAt,
+                }),
+                item: {
+                  ...prevPlayback.item,
+                  id: `spotify-transitional-${receivedAt}`,
+                  uri: pendingUri,
+                  name: incomingTitle,
+                  album: {
+                    id: `spotify-pending-album-${albumName}`,
+                    uri: `spotify:pending:album:${albumName}`,
+                    name: albumName,
+                    images: pendingArtwork
+                      ? [{ url: pendingArtwork }]
+                      : prevPlayback.item.album?.images,
+                  },
+                  artists: artist
+                    ? [
+                        {
+                          id: `spotify-pending-artist-${artist}`,
+                          uri: `spotify:pending:artist:${artist}`,
+                          name: artist,
+                          type: "artist",
+                        },
+                      ]
+                    : prevPlayback.item.artists,
+                  duration_ms: snapshot.durationMs,
+                  is_local: false,
+                },
               };
               currentPlaybackRef.current = updatedPlayback;
               return updatedPlayback;
@@ -2235,6 +2514,7 @@ export function useSpotifyPlayerState() {
           currently_active_application: playback.PlaybackAppName || null,
         };
 
+        clearPhoneSpotifyAuthority();
         processPlaybackState(transformedState);
       } else if (
         data.type === "event" &&
@@ -2327,60 +2607,17 @@ export function useSpotifyPlayerState() {
               pendingSpotifyMediaUpdate &&
               (!hasRealSpotifyData || pendingArtworkIsTrackChange)
             ) {
-              const { media, playback } = pendingSpotifyMediaUpdate;
-              const title = media.MediaItemTitle || "Unknown Title";
-              const artist = media.MediaItemArtist || "Unknown Artist";
-              const albumName = media.MediaItemAlbumName || title;
-              const durationMs =
-                media.MediaItemPlaybackDurationInMilliseconds || 0;
-
+              const pendingUpdate = pendingSpotifyMediaUpdate;
+              const title =
+                pendingUpdate.media.MediaItemTitle || "Unknown Title";
               const newTrackUri = `spotify:pending:${title}`;
               artworkCache.set(newTrackUri, phoneMediaArtworkBlobUrl);
               artworkDeviceOwners.set(newTrackUri, artworkOwnerDeviceId);
 
-              const shuffleState =
-                playback.PlaybackShuffleMode === "albums" ||
-                playback.PlaybackShuffleMode === "songs";
-              const repeatState =
-                playback.PlaybackRepeatMode === "one"
-                  ? "track"
-                  : playback.PlaybackRepeatMode === "all"
-                    ? "context"
-                    : "off";
-
-              const placeholderState = {
-                is_playing: playback.PlaybackStatus === "playing",
-                timestamp: Date.now(),
-                progress_ms: null,
-                context: null,
-                item: {
-                  id: `spotify-pending-${title}`,
-                  uri: newTrackUri,
-                  type: "track",
-                  name: title,
-                  album: {
-                    id: `spotify-pending-album-${albumName}`,
-                    uri: `spotify:pending:album:${albumName}`,
-                    name: albumName,
-                    images: [{ url: phoneMediaArtworkBlobUrl }],
-                  },
-                  artists: [
-                    {
-                      id: `spotify-pending-artist-${artist}`,
-                      uri: `spotify:pending:artist:${artist}`,
-                      name: artist,
-                      type: "artist",
-                    },
-                  ],
-                  duration_ms: durationMs,
-                  is_spotify_pending: true,
-                },
-                shuffle_state: shuffleState,
-                repeat_state: repeatState,
-                device: null,
-                currently_playing_type: "track",
-                playback_speed: playback.PlaybackRate || 1,
-              };
+              const placeholderState = buildSpotifyPendingPlaceholder(
+                pendingUpdate,
+                phoneMediaArtworkBlobUrl,
+              );
 
               processPlaybackState(placeholderState);
               pendingSpotifyMediaUpdate = null;
@@ -2484,37 +2721,21 @@ export function useSpotifyPlayerState() {
 
         console.log("Artwork file transfer failed, fetching from Spotify API");
 
-        pendingSpotifyMediaUpdate = null;
-        if (spotifyFallbackTimeout) {
-          clearTimeout(spotifyFallbackTimeout);
-          spotifyFallbackTimeout = null;
-        }
-
+        const requestRevision = spotifyStateRevision;
         getPlayerState()
           .then((playerData) => {
-            if (playerData && Object.keys(playerData).length > 0) {
-              if (nowPlayingTrackLatch) {
-                const latchAge = Date.now() - nowPlayingTrackLatch.timestamp;
-                if (latchAge < NOWPLAYING_PRECEDENCE_WINDOW_MS) {
-                  const fetchedTitle = playerData.item?.name
-                    ?.toLowerCase()
-                    ?.trim();
-                  if (
-                    fetchedTitle &&
-                    fetchedTitle !== nowPlayingTrackLatch.title
-                  ) {
-                    return;
-                  }
-                  if (
-                    fetchedTitle &&
-                    fetchedTitle === nowPlayingTrackLatch.title
-                  ) {
-                    nowPlayingTrackLatch = null;
-                  }
-                } else {
-                  nowPlayingTrackLatch = null;
-                }
-              }
+            if (
+              requestRevision === spotifyStateRevision &&
+              playerData &&
+              Object.keys(playerData).length > 0
+            ) {
+              const admitted = admitSpotifyState(
+                reconcilePolledPlaybackTiming(
+                  playerData,
+                  currentPlaybackRef.current,
+                ),
+              );
+              if (!admitted) return;
 
               if (nowPlayingUpdateTimeout) {
                 clearTimeout(nowPlayingUpdateTimeout);
@@ -2523,12 +2744,7 @@ export function useSpotifyPlayerState() {
               setIsReceivingNowPlayingUpdates(false);
               isReceivingNowPlayingUpdatesGlobal = false;
 
-              processPlaybackState(
-                reconcilePolledPlaybackTiming(
-                  playerData,
-                  currentPlaybackRef.current,
-                ),
-              );
+              processPlaybackState(admitted);
             }
           })
           .catch((err) => {
@@ -2574,28 +2790,19 @@ export function useSpotifyPlayerState() {
       }
 
       try {
+        const requestRevision = spotifyStateRevision;
         const data = await getPlayerState();
+        if (requestRevision !== spotifyStateRevision) return;
 
         if (!data || Object.keys(data).length === 0) {
-          resetPlaybackState();
-        } else {
-          if (nowPlayingTrackLatch) {
-            const latchAge = Date.now() - nowPlayingTrackLatch.timestamp;
-            if (latchAge < NOWPLAYING_PRECEDENCE_WINDOW_MS) {
-              const fetchedTitle = data.item?.name?.toLowerCase()?.trim();
-              if (fetchedTitle && fetchedTitle !== nowPlayingTrackLatch.title) {
-                return;
-              }
-              if (fetchedTitle && fetchedTitle === nowPlayingTrackLatch.title) {
-                nowPlayingTrackLatch = null;
-              }
-            } else {
-              nowPlayingTrackLatch = null;
-            }
+          if (!phoneSpotifySnapshot) {
+            resetPlaybackState();
           }
-          processPlaybackState(
+        } else {
+          const admitted = admitSpotifyState(
             reconcilePolledPlaybackTiming(data, currentPlaybackRef.current),
           );
+          if (admitted) processPlaybackState(admitted);
         }
       } catch (err) {
         console.error("Error refreshing playback state:", err);

@@ -63,6 +63,12 @@ const APP_LAUNCH_MAX_ATTEMPTS: u32 = 5;
 const SPOTIFY_BUNDLE_ID: &str = "com.spotify.client";
 const SPOTIFY_RESUME_WINDOW: Duration = Duration::from_secs(15);
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ElapsedAnchor {
+    position_ms: u64,
+    captured_at: Instant,
+}
+
 #[derive(Default, Clone)]
 struct NowPlayingState {
     persistent_id: Option<u64>,
@@ -73,7 +79,8 @@ struct NowPlayingState {
     like_supported: Option<bool>,
     liked: Option<bool>,
     status: Option<String>,
-    elapsed_ms: Option<u64>,
+    elapsed: Option<ElapsedAnchor>,
+    playback_speed_hundredths: Option<u16>,
     playback_rate: Option<f64>,
     shuffle_mode: Option<String>,
     repeat_mode: Option<String>,
@@ -82,7 +89,28 @@ struct NowPlayingState {
 }
 
 impl NowPlayingState {
-    fn to_event(&self) -> MediaNowPlayingUpdateEvent {
+    fn elapsed_ms_at(&self, now: Instant) -> Option<u64> {
+        let anchor = self.elapsed?;
+        if self.status.as_deref() != Some("playing") {
+            return Some(anchor.position_ms);
+        }
+        let rate = self
+            .playback_speed_hundredths
+            .map_or(1.0, |speed| f64::from(speed) / 100.0);
+        let advanced_ms = now
+            .saturating_duration_since(anchor.captured_at)
+            .as_secs_f64()
+            * 1000.0
+            * rate;
+        let projected = anchor.position_ms.saturating_add(advanced_ms as u64);
+        Some(
+            self.duration_ms
+                .filter(|duration| *duration > 0)
+                .map_or(projected, |duration| projected.min(duration)),
+        )
+    }
+
+    fn to_event(&self, now: Instant) -> MediaNowPlayingUpdateEvent {
         let mut json = serde_json::json!({});
         let mut media_json = serde_json::json!({});
         let mut has_media = false;
@@ -129,7 +157,7 @@ impl NowPlayingState {
             playback_json["PlaybackStatus"] = serde_json::json!(status);
             has_playback = true;
         }
-        if let Some(elapsed) = self.elapsed_ms {
+        if let Some(elapsed) = self.elapsed_ms_at(now) {
             playback_json["PlaybackElapsedTimeInMilliseconds"] = serde_json::json!(elapsed);
             has_playback = true;
         }
@@ -164,7 +192,14 @@ impl NowPlayingState {
         *self = Self::default();
     }
 
-    fn apply_update(&mut self, update: NowPlayingUpdate) {
+    fn apply_update(&mut self, update: NowPlayingUpdate, now: Instant) {
+        if let Some(position_ms) = self.elapsed_ms_at(now) {
+            self.elapsed = Some(ElapsedAnchor {
+                position_ms,
+                captured_at: now,
+            });
+        }
+
         if update
             .playback
             .as_ref()
@@ -203,7 +238,7 @@ impl NowPlayingState {
             self.duration_ms = None;
             self.like_supported = None;
             self.liked = None;
-            self.elapsed_ms = None;
+            self.elapsed = None;
         }
 
         if let Some(media) = update.media_item {
@@ -235,9 +270,13 @@ impl NowPlayingState {
                 self.status = Some(playback_status(status).to_string());
             }
             if let Some(position) = playback.position_ms {
-                self.elapsed_ms = Some(u64::from(position));
+                self.elapsed = Some(ElapsedAnchor {
+                    position_ms: u64::from(position),
+                    captured_at: now,
+                });
             }
             if let Some(speed) = playback.playback_speed_hundredths {
+                self.playback_speed_hundredths = Some(speed);
                 self.playback_rate = (speed > 0).then_some(f64::from(speed) / 100.0);
             }
             if let Some(shuffle) = playback.shuffle_mode {
@@ -908,13 +947,14 @@ async fn handle_now_playing_update(
     state: &mut NowPlayingState,
 ) {
     debug!("Now Playing update received");
-    state.apply_update(update);
+    let now = Instant::now();
+    state.apply_update(update, now);
 
     if let Some(ws_server) = websocket_server {
         ws_server
             .broadcast_event(
                 "media.now_playing.update".to_string(),
-                media_control_payload(state.to_event()),
+                media_control_payload(state.to_event(now)),
             )
             .await;
     }
@@ -1672,17 +1712,14 @@ mod tests {
 
     #[test]
     fn now_playing_state_emits_spec_timing_fields() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "Video",
-            180_000,
-            42_500,
-            PlaybackState::Playing,
-            125,
-        ));
+        state.apply_update(
+            media_update(1, "Video", 180_000, 42_500, PlaybackState::Playing, 125),
+            now,
+        );
 
-        let event = media_control_payload(state.to_event());
+        let event = media_control_payload(state.to_event(now));
         assert_eq!(
             event["media_item_attributes"]["MediaItemPlaybackDurationInMilliseconds"],
             180_000
@@ -1697,156 +1734,243 @@ mod tests {
 
     #[test]
     fn now_playing_state_emits_and_resets_like_metadata() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
         let mut first = media_update(1, "Liked", 180_000, 42_500, PlaybackState::Playing, 100);
         let first_media = first.media_item.as_mut().expect("media item");
         first_media.like_supported = Some(true);
         first_media.liked = Some(true);
-        state.apply_update(first);
+        state.apply_update(first, now);
 
-        let event = media_control_payload(state.to_event());
+        let event = media_control_payload(state.to_event(now));
         assert_eq!(
             event["media_item_attributes"]["MediaItemLikeSupported"],
             true
         );
         assert_eq!(event["media_item_attributes"]["MediaItemLiked"], true);
 
-        state.apply_update(NowPlayingUpdate {
-            media_item: Some(MediaItemAttributes {
-                persistent_id: Some(2),
-                title: Some("Next".to_string()),
-                ..Default::default()
-            }),
-            playback: None,
-        });
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: Some(MediaItemAttributes {
+                    persistent_id: Some(2),
+                    title: Some("Next".to_string()),
+                    ..Default::default()
+                }),
+                playback: None,
+            },
+            now,
+        );
         assert_eq!(state.like_supported, None);
         assert_eq!(state.liked, None);
     }
 
     #[test]
     fn position_delta_preserves_media_and_updates_pause_anchor() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "Video",
-            180_000,
-            42_500,
-            PlaybackState::Playing,
-            100,
-        ));
-        state.apply_update(NowPlayingUpdate {
-            media_item: None,
-            playback: Some(PlaybackAttributes {
-                state: Some(PlaybackState::Paused),
-                position_ms: Some(47_250),
-                ..Default::default()
-            }),
-        });
+        state.apply_update(
+            media_update(1, "Video", 180_000, 42_500, PlaybackState::Playing, 100),
+            now,
+        );
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: None,
+                playback: Some(PlaybackAttributes {
+                    state: Some(PlaybackState::Paused),
+                    position_ms: Some(47_250),
+                    ..Default::default()
+                }),
+            },
+            now,
+        );
 
         assert_eq!(state.title.as_deref(), Some("Video"));
         assert_eq!(state.duration_ms, Some(180_000));
-        assert_eq!(state.elapsed_ms, Some(47_250));
+        assert_eq!(state.elapsed_ms_at(now), Some(47_250));
         assert_eq!(state.status.as_deref(), Some("paused"));
     }
 
     #[test]
     fn track_change_drops_stale_timing_until_fresh_values_arrive() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "First",
-            180_000,
-            42_500,
-            PlaybackState::Playing,
-            100,
-        ));
-        state.apply_update(NowPlayingUpdate {
-            media_item: Some(MediaItemAttributes {
-                persistent_id: Some(2),
-                title: Some("Second".to_string()),
-                ..Default::default()
-            }),
-            playback: None,
-        });
+        state.apply_update(
+            media_update(1, "First", 180_000, 42_500, PlaybackState::Playing, 100),
+            now,
+        );
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: Some(MediaItemAttributes {
+                    persistent_id: Some(2),
+                    title: Some("Second".to_string()),
+                    ..Default::default()
+                }),
+                playback: None,
+            },
+            now,
+        );
 
         assert_eq!(state.title.as_deref(), Some("Second"));
         assert_eq!(state.duration_ms, None);
-        assert_eq!(state.elapsed_ms, None);
+        assert_eq!(state.elapsed, None);
     }
 
     #[test]
     fn stopped_update_clears_media_and_keeps_terminal_status() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "Video",
-            180_000,
-            42_500,
-            PlaybackState::Playing,
-            100,
-        ));
-        state.apply_update(NowPlayingUpdate {
-            media_item: None,
-            playback: Some(PlaybackAttributes {
-                state: Some(PlaybackState::Stopped),
-                ..Default::default()
-            }),
-        });
+        state.apply_update(
+            media_update(1, "Video", 180_000, 42_500, PlaybackState::Playing, 100),
+            now,
+        );
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: None,
+                playback: Some(PlaybackAttributes {
+                    state: Some(PlaybackState::Stopped),
+                    ..Default::default()
+                }),
+            },
+            now,
+        );
 
         assert_eq!(state.title, None);
-        assert_eq!(state.elapsed_ms, None);
+        assert_eq!(state.elapsed, None);
         assert_eq!(state.status.as_deref(), Some("stopped"));
     }
 
     #[test]
     fn persistent_id_change_clears_same_title_timing() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "Episode",
-            180_000,
-            42_500,
-            PlaybackState::Playing,
-            100,
-        ));
-        state.apply_update(NowPlayingUpdate {
-            media_item: Some(MediaItemAttributes {
-                persistent_id: Some(2),
-                title: Some("Episode".to_string()),
-                ..Default::default()
-            }),
-            playback: None,
-        });
+        state.apply_update(
+            media_update(1, "Episode", 180_000, 42_500, PlaybackState::Playing, 100),
+            now,
+        );
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: Some(MediaItemAttributes {
+                    persistent_id: Some(2),
+                    title: Some("Episode".to_string()),
+                    ..Default::default()
+                }),
+                playback: None,
+            },
+            now,
+        );
 
         assert_eq!(state.persistent_id, Some(2));
         assert_eq!(state.title.as_deref(), Some("Episode"));
         assert_eq!(state.duration_ms, None);
-        assert_eq!(state.elapsed_ms, None);
+        assert_eq!(state.elapsed, None);
     }
 
     #[test]
     fn provisional_empty_title_completion_preserves_timing() {
+        let now = Instant::now();
         let mut state = NowPlayingState::default();
-        state.apply_update(media_update(
-            1,
-            "",
-            1_122_901,
-            15_301,
-            PlaybackState::Playing,
-            100,
-        ));
-        state.apply_update(NowPlayingUpdate {
-            media_item: Some(MediaItemAttributes {
-                title: Some("Video".to_string()),
-                artist: Some("Creator".to_string()),
-                ..Default::default()
-            }),
-            playback: None,
-        });
+        state.apply_update(
+            media_update(1, "", 1_122_901, 15_301, PlaybackState::Playing, 100),
+            now,
+        );
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: Some(MediaItemAttributes {
+                    title: Some("Video".to_string()),
+                    artist: Some("Creator".to_string()),
+                    ..Default::default()
+                }),
+                playback: None,
+            },
+            now,
+        );
 
         assert_eq!(state.title.as_deref(), Some("Video"));
         assert_eq!(state.artist.as_deref(), Some("Creator"));
         assert_eq!(state.duration_ms, Some(1_122_901));
-        assert_eq!(state.elapsed_ms, Some(15_301));
+        assert_eq!(state.elapsed_ms_at(now), Some(15_301));
+    }
+
+    #[test]
+    fn rebroadcast_projects_retained_elapsed_while_playing() {
+        let start = Instant::now();
+        let mut state = NowPlayingState::default();
+        state.apply_update(
+            media_update(1, "Song", 180_000, 42_500, PlaybackState::Playing, 100),
+            start,
+        );
+        let later = start + Duration::from_secs(30);
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: Some(MediaItemAttributes {
+                    liked: Some(true),
+                    ..Default::default()
+                }),
+                playback: None,
+            },
+            later,
+        );
+
+        let event = media_control_payload(state.to_event(later));
+        assert_eq!(
+            event["playback_attributes"]["PlaybackElapsedTimeInMilliseconds"],
+            72_500
+        );
+    }
+
+    #[test]
+    fn status_only_pause_freezes_at_projected_position() {
+        let start = Instant::now();
+        let mut state = NowPlayingState::default();
+        state.apply_update(
+            media_update(1, "Song", 180_000, 10_000, PlaybackState::Playing, 150),
+            start,
+        );
+        let paused_at = start + Duration::from_secs(4);
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: None,
+                playback: Some(PlaybackAttributes {
+                    state: Some(PlaybackState::Paused),
+                    ..Default::default()
+                }),
+            },
+            paused_at,
+        );
+
+        assert_eq!(state.elapsed_ms_at(paused_at), Some(16_000));
+        assert_eq!(
+            state.elapsed_ms_at(paused_at + Duration::from_secs(60)),
+            Some(16_000)
+        );
+    }
+
+    #[test]
+    fn projected_elapsed_respects_zero_speed_and_duration() {
+        let start = Instant::now();
+        let mut state = NowPlayingState::default();
+        state.apply_update(
+            media_update(1, "Song", 20_000, 5_000, PlaybackState::Playing, 0),
+            start,
+        );
+        assert_eq!(
+            state.elapsed_ms_at(start + Duration::from_secs(10)),
+            Some(5_000)
+        );
+
+        state.apply_update(
+            NowPlayingUpdate {
+                media_item: None,
+                playback: Some(PlaybackAttributes {
+                    playback_speed_hundredths: Some(100),
+                    ..Default::default()
+                }),
+            },
+            start,
+        );
+        assert_eq!(
+            state.elapsed_ms_at(start + Duration::from_secs(60)),
+            Some(20_000)
+        );
     }
 }

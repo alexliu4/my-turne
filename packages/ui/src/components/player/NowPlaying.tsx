@@ -75,12 +75,12 @@ export const getNowPlayingLeadingControl = (
 };
 
 export const getNowPlayingProgressPresentation = (
-  isPhoneMedia: boolean,
+  usesPhoneTimeline: boolean,
   durationMs: unknown,
   progressMs: unknown,
 ): { visible: boolean; timelineKnown: boolean } => {
   const timelineKnown =
-    !isPhoneMedia ||
+    !usesPhoneTimeline ||
     (typeof durationMs === "number" &&
       Number.isFinite(durationMs) &&
       durationMs > 0 &&
@@ -148,7 +148,7 @@ function NowPlaying({
   const isPhoneMedia = currentPlayback?.item?.is_phone_media === true;
   const isSpotifyPending = currentPlayback?.item?.is_spotify_pending === true;
   const progressPresentation = getNowPlayingProgressPresentation(
-    isPhoneMedia,
+    isPhoneMedia || isSpotifyPending,
     currentPlayback?.item?.duration_ms,
     currentPlayback?.progress_ms,
   );
@@ -1310,7 +1310,7 @@ function NowPlaying({
       >
         <ProgressBar
           progress={
-            isSpotifyPending || !hasKnownTimeline
+            !hasKnownTimeline
               ? null
               : currentPlayback?.item && !isStartingPlayback
                 ? 1
@@ -1346,7 +1346,7 @@ function NowPlaying({
               <>
                 <span className="text-white/60 text-[20px]">
                   <PlaybackTimeLabel
-                    isSpotifyPending={isSpotifyPending || !hasKnownTimeline}
+                    isSpotifyPending={!hasKnownTimeline}
                     isElapsed={true}
                   />
                 </span>
