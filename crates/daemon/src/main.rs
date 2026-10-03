@@ -137,9 +137,9 @@ async fn main() -> Result<()> {
                     None,
                     None,
                 ),
-                ota::OtaEvent::Complete { update_id } => (
+                ota::OtaEvent::Complete { update_id, version } => (
                     "ota.complete".to_string(),
-                    serde_json::json!({ "updateId": update_id }),
+                    serde_json::json!({ "updateId": update_id, "version": version }),
                     true,
                     None,
                     None,

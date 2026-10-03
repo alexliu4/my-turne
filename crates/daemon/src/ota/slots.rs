@@ -40,6 +40,10 @@ pub fn active_slot() -> Result<char, SlotsError> {
     }
 }
 
+pub fn image_restart_pending() -> Result<bool, SlotsError> {
+    Ok(active_slot()? != running_slot()?)
+}
+
 pub fn inactive_slot() -> Result<char, SlotsError> {
     inactive_from_running_slot(running_slot()?)
 }

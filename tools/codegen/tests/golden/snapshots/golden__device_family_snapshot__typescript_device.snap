@@ -1430,6 +1430,14 @@ export interface DeviceVersionResponse {
    */
   bandaidVersion?: string;
   /**
+   * Whether an installed image is staged in the inactive slot and waits for a restart. Absent when the slot state cannot be read. Inventory field `image_restart_pending` emits as `imageRestartPending`. Current source key: `imageRestartPending`.
+   */
+  imageRestartPending?: boolean;
+  /**
+   * Whether a promoted daemon or bandaid update waits for the running daemon to restart. Inventory field `component_activation_pending` emits as `componentActivationPending`. Current source key: `componentActivationPending`.
+   */
+  componentActivationPending?: boolean;
+  /**
    * Build git hash. Inventory field `git_hash` emits as `gitHash`. Current source key: `gitHash`.
    */
   gitHash?: string;

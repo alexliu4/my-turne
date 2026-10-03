@@ -310,6 +310,8 @@ data class DeviceVersionResponse(
   @SerialName("short_version") val shortVersion: String? = null,
   @SerialName("image_version") val imageVersion: String? = null,
   @SerialName("bandaid_version") val bandaidVersion: String? = null,
+  @SerialName("image_restart_pending") val imageRestartPending: Boolean? = null,
+  @SerialName("component_activation_pending") val componentActivationPending: Boolean? = null,
   @SerialName("git_hash") val gitHash: String? = null,
   @SerialName("build_date") val buildDate: String? = null,
   @SerialName("error") val error: String? = null,

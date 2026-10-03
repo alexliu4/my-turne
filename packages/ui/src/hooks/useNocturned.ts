@@ -233,6 +233,9 @@ export const normalizeDeviceInfoResponse = (
   };
 };
 
+const booleanOrNull = (value: unknown): boolean | null =>
+  typeof value === "boolean" ? value : null;
+
 const cleanDeviceVersion = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const version = value.trim().replace(/^v/, "");
@@ -247,6 +250,12 @@ export const normalizeDeviceVersionResponse = (value: unknown) => {
     imageVersion: cleanDeviceVersion(info?.imageVersion ?? info?.image_version),
     bandaidVersion: cleanDeviceVersion(
       info?.bandaidVersion ?? info?.bandaid_version,
+    ),
+    imageRestartPending: booleanOrNull(
+      info?.imageRestartPending ?? info?.image_restart_pending,
+    ),
+    componentActivationPending: booleanOrNull(
+      info?.componentActivationPending ?? info?.component_activation_pending,
     ),
   };
 };
@@ -2040,6 +2049,12 @@ export const useNocturneInfo = () => {
   const [version, setVersion] = useState<string | null>(null);
   const [imageVersion, setImageVersion] = useState<string | null>(null);
   const [bandaidVersion, setBandaidVersion] = useState<string | null>(null);
+  const [imageRestartPending, setImageRestartPending] = useState<
+    boolean | null
+  >(null);
+  const [componentActivationPending, setComponentActivationPending] = useState<
+    boolean | null
+  >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -2056,12 +2071,16 @@ export const useNocturneInfo = () => {
       setVersion(normalized.shortVersion ?? normalized.version);
       setImageVersion(normalized.imageVersion);
       setBandaidVersion(normalized.bandaidVersion);
+      setImageRestartPending(normalized.imageRestartPending);
+      setComponentActivationPending(normalized.componentActivationPending);
     } catch (err) {
       console.error("Failed to fetch info from nocturned:", err);
       setError(getErrorMessage(err));
       setVersion(null);
       setImageVersion(null);
       setBandaidVersion(null);
+      setImageRestartPending(null);
+      setComponentActivationPending(null);
     } finally {
       setIsLoading(false);
     }
@@ -2075,6 +2094,8 @@ export const useNocturneInfo = () => {
     version,
     imageVersion,
     bandaidVersion,
+    imageRestartPending,
+    componentActivationPending,
     isLoading,
     error,
     refetch: fetchInfo,

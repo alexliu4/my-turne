@@ -281,12 +281,29 @@ export function installedVersionForOtaKind(
 export function shouldClearRestoredImageOtaState(
   state: Pick<OTAState, "isActive" | "isComplete" | "kind" | "version">,
   imageVersion: string | null,
+  imageRestartPending: boolean | null = null,
 ): boolean {
+  if (state.kind !== "image") return false;
+  if (state.isComplete && imageRestartPending === false) return true;
   return (
-    state.kind === "image" &&
     (state.isActive || state.isComplete) &&
     isOtaTargetInstalled(imageVersion, state.version)
   );
+}
+
+export function shouldClearRestoredComponentOtaState(
+  state: Pick<OTAState, "isActive" | "isComplete" | "kind" | "version">,
+  installedVersion: string | null,
+  componentActivationPending: boolean | null = null,
+): boolean {
+  if (state.kind !== "builtinWebapp" && !requiresDaemonActivation(state.kind)) {
+    return false;
+  }
+  const finished =
+    state.isComplete ||
+    (state.isActive && isOtaTargetInstalled(installedVersion, state.version));
+  if (!finished) return false;
+  return state.kind === "builtinWebapp" || componentActivationPending === false;
 }
 
 export function shouldDeferDiscoveryForReconciledOtaState(
@@ -301,22 +318,30 @@ export function reconcileRestoredInstalledOtaState(
   currentVersion: string | null,
   imageVersion: string | null,
   bandaidVersion: string | null,
+  imageRestartPending: boolean | null = null,
+  componentActivationPending: boolean | null = null,
 ): OTAState {
-  if (shouldClearRestoredImageOtaState(state, imageVersion)) {
-    return INITIAL_OTA_STATE;
-  }
+  const installedVersion = installedVersionForOtaKind(
+    state.kind,
+    currentVersion,
+    imageVersion,
+    bandaidVersion,
+  );
   if (
-    state.isActive &&
-    isOtaTargetInstalled(
-      installedVersionForOtaKind(
-        state.kind,
-        currentVersion,
-        imageVersion,
-        bandaidVersion,
-      ),
-      state.version,
+    shouldClearRestoredImageOtaState(
+      state,
+      imageVersion,
+      imageRestartPending,
+    ) ||
+    shouldClearRestoredComponentOtaState(
+      state,
+      installedVersion,
+      componentActivationPending,
     )
   ) {
+    return INITIAL_OTA_STATE;
+  }
+  if (state.isActive && isOtaTargetInstalled(installedVersion, state.version)) {
     return {
       ...state,
       isActive: false,
@@ -555,6 +580,7 @@ export function reduceOtaLifecycleEvent(
     }
     return {
       ...state,
+      version: displayVersion(data.version) ?? state.version,
       isActive: false,
       isInstallPending: false,
       isComplete: true,
@@ -574,6 +600,8 @@ export function OTAProvider({ children, initialDataLoaded }: OTAProviderProps) {
     version: currentVersion,
     imageVersion,
     bandaidVersion,
+    imageRestartPending,
+    componentActivationPending,
     refetch: refetchInfo,
   } = useNocturneInfo();
   const { settings } = useSettings();
@@ -960,6 +988,8 @@ export function OTAProvider({ children, initialDataLoaded }: OTAProviderProps) {
         currentVersion,
         imageVersion,
         bandaidVersion,
+        imageRestartPending,
+        componentActivationPending,
       );
       if (reconciledState !== otaState) {
         installedImageReconciliationPendingRef.current =
@@ -1004,7 +1034,9 @@ export function OTAProvider({ children, initialDataLoaded }: OTAProviderProps) {
     appReadyState.ready,
     bandaidVersion,
     clearActiveRecoveryTimeout,
+    componentActivationPending,
     currentVersion,
+    imageRestartPending,
     imageVersion,
     otaState.isActive,
     otaState.isComplete,

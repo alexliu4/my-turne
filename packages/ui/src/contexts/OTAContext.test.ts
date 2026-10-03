@@ -22,6 +22,7 @@ import {
   scheduleInstallRetry,
   shouldAutoInstallUpdate,
   shouldClearRestoredImageOtaState,
+  shouldClearRestoredComponentOtaState,
   shouldDeferDiscoveryForReconciledOtaState,
   shouldStartAutomaticInstall,
   shouldTriggerDiscoveryForAppReady,
@@ -344,6 +345,49 @@ describe("shouldClearRestoredImageOtaState", () => {
     ).toBe(completedImage);
   });
 
+  test("clears a versionless completed image once no slot is staged", () => {
+    const versionlessImage = {
+      ...restoredImage,
+      isActive: false,
+      isComplete: true,
+      version: null,
+    };
+    expect(
+      shouldClearRestoredImageOtaState(
+        versionlessImage,
+        "4.2.0+20260726060000",
+      ),
+    ).toBe(false);
+    expect(
+      reconcileRestoredInstalledOtaState(
+        versionlessImage,
+        "4.2.0+20260726060000",
+        "4.2.0+20260726060000",
+        "4.2.0+20260726060000",
+        false,
+      ),
+    ).toBe(INITIAL_OTA_STATE);
+    expect(
+      reconcileRestoredInstalledOtaState(
+        versionlessImage,
+        "4.2.0+20260726060000",
+        "4.2.0+20260726060000",
+        "4.2.0+20260726060000",
+        true,
+      ),
+    ).toBe(versionlessImage);
+  });
+
+  test("keeps an interrupted image write for version reconciliation", () => {
+    expect(
+      shouldClearRestoredImageOtaState(
+        restoredImage,
+        "4.1.0+20260725060000",
+        false,
+      ),
+    ).toBe(false);
+  });
+
   test("preserves component completion until its explicit reload action", () => {
     const completedBandaid = {
       ...restoredImage,
@@ -365,6 +409,83 @@ describe("shouldClearRestoredImageOtaState", () => {
         "4.2.0+20260726060000",
       ),
     ).toBe(completedBandaid);
+  });
+
+  test("keeps a daemon prompt while the running daemon awaits activation", () => {
+    for (const kind of ["daemon", "bandaid"]) {
+      const completed = {
+        ...restoredImage,
+        isActive: false,
+        isComplete: true,
+        kind,
+      };
+      expect(
+        reconcileRestoredInstalledOtaState(
+          completed,
+          "4.2.0+20260726060000",
+          "4.1.0+20260725060000",
+          "4.2.0+20260726060000",
+          false,
+          true,
+        ),
+      ).toBe(completed);
+      expect(
+        reconcileRestoredInstalledOtaState(
+          completed,
+          "4.2.0+20260726060000",
+          "4.1.0+20260725060000",
+          "4.2.0+20260726060000",
+          false,
+          false,
+        ),
+      ).toBe(INITIAL_OTA_STATE);
+    }
+  });
+
+  test("clears a restored webapp prompt because the page already reloaded", () => {
+    const completedWebapp = {
+      ...restoredImage,
+      isActive: false,
+      isComplete: true,
+      kind: "builtinWebapp",
+      version: null,
+    };
+    expect(shouldClearRestoredComponentOtaState(completedWebapp, null)).toBe(
+      true,
+    );
+    expect(
+      reconcileRestoredInstalledOtaState(
+        completedWebapp,
+        "4.2.0+20260726060000",
+        "4.1.0+20260725060000",
+        "4.2.0+20260726060000",
+      ),
+    ).toBe(INITIAL_OTA_STATE);
+  });
+
+  test("clears an installed component write only once activation is done", () => {
+    const activeBandaid = { ...restoredImage, kind: "bandaid" };
+    expect(
+      shouldClearRestoredComponentOtaState(
+        activeBandaid,
+        "4.2.0+20260726060000",
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      shouldClearRestoredComponentOtaState(
+        activeBandaid,
+        "4.1.0+20260725060000",
+        false,
+      ),
+    ).toBe(false);
+    expect(
+      shouldClearRestoredComponentOtaState(
+        activeBandaid,
+        "4.2.0+20260726060000",
+        null,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -608,6 +729,23 @@ describe("OTA lifecycle state", () => {
       kind: "image",
       version: "4.2.0+20260726060000",
       error: null,
+    });
+  });
+
+  test("takes the daemon's target version from completion", () => {
+    const begun = reduceOtaLifecycleEvent(INITIAL_OTA_STATE, "ota.begin", {
+      updateId: "update-a",
+      kind: "image",
+    });
+    expect(begun.version).toBeNull();
+    expect(
+      reduceOtaLifecycleEvent(begun, "ota.complete", {
+        updateId: "update-a",
+        version: "4.2.0+20260726060000",
+      }),
+    ).toMatchObject({
+      isComplete: true,
+      version: "4.2.0+20260726060000",
     });
   });
 

@@ -409,6 +409,10 @@ pub fn collect_device_version_metadata() -> DeviceVersionResponse {
             short_version: non_empty_option(info.short_version),
             image_version: non_empty_option(info.image_version),
             bandaid_version: non_empty_option(info.bandaid_version),
+            image_restart_pending: crate::ota::slots::image_restart_pending()
+                .inspect_err(|err| tracing::warn!(%err, "failed to read staged image slot"))
+                .ok(),
+            component_activation_pending: Some(crate::ota::component_activation_pending()),
             git_hash: non_empty_option(info.git_hash),
             build_date: non_empty_option(info.build_date),
             error: None,
@@ -418,6 +422,8 @@ pub fn collect_device_version_metadata() -> DeviceVersionResponse {
             short_version: None,
             image_version: None,
             bandaid_version: None,
+            image_restart_pending: None,
+            component_activation_pending: Some(crate::ota::component_activation_pending()),
             git_hash: None,
             build_date: None,
             error: Some(e.to_string()),

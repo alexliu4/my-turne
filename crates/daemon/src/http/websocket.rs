@@ -1365,11 +1365,17 @@ impl WebSocketServer {
                 }
 
                 if method == "device.version" {
-                    self.send_typed_response(
-                        id,
-                        crate::system::config::collect_device_version_metadata(),
+                    match tokio::task::spawn_blocking(
+                        crate::system::config::collect_device_version_metadata,
                     )
-                    .await;
+                    .await
+                    {
+                        Ok(metadata) => self.send_typed_response(id, metadata).await,
+                        Err(err) => {
+                            warn!(%err, "device.version metadata task failed");
+                            self.send_error(id, err.to_string()).await;
+                        }
+                    }
                     return Ok(());
                 }
 

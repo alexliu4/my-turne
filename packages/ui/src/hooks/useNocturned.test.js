@@ -391,6 +391,8 @@ describe("device info normalization", () => {
       shortVersion: "4.1.1+20260727010101",
       imageVersion: "4.1.0+20260726010101",
       bandaidVersion: "4.1.1+20260727010101",
+      imageRestartPending: false,
+      componentActivationPending: false,
     });
   });
 

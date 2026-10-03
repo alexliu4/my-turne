@@ -273,6 +273,8 @@ pub struct DeviceVersionResponse {
     pub short_version: Option<String>,
     pub image_version: Option<String>,
     pub bandaid_version: Option<String>,
+    pub image_restart_pending: Option<bool>,
+    pub component_activation_pending: Option<bool>,
     pub git_hash: Option<String>,
     pub build_date: Option<String>,
     pub error: Option<String>,

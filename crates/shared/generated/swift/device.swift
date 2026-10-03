@@ -675,6 +675,8 @@ public struct DeviceVersionResponse: Codable, Sendable {
   public let shortVersion: String?
   public let imageVersion: String?
   public let bandaidVersion: String?
+  public let imageRestartPending: Bool?
+  public let componentActivationPending: Bool?
   public let gitHash: String?
   public let buildDate: String?
   public let error: String?
@@ -684,6 +686,8 @@ public struct DeviceVersionResponse: Codable, Sendable {
     shortVersion: String?,
     imageVersion: String?,
     bandaidVersion: String?,
+    imageRestartPending: Bool?,
+    componentActivationPending: Bool?,
     gitHash: String?,
     buildDate: String?,
     error: String?
@@ -692,6 +696,8 @@ public struct DeviceVersionResponse: Codable, Sendable {
     self.shortVersion = shortVersion
     self.imageVersion = imageVersion
     self.bandaidVersion = bandaidVersion
+    self.imageRestartPending = imageRestartPending
+    self.componentActivationPending = componentActivationPending
     self.gitHash = gitHash
     self.buildDate = buildDate
     self.error = error
@@ -702,6 +708,8 @@ public struct DeviceVersionResponse: Codable, Sendable {
     case shortVersion = "short_version"
     case imageVersion = "image_version"
     case bandaidVersion = "bandaid_version"
+    case imageRestartPending = "image_restart_pending"
+    case componentActivationPending = "component_activation_pending"
     case gitHash = "git_hash"
     case buildDate = "build_date"
     case error = "error"

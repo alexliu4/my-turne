@@ -11,6 +11,7 @@ use std::{
     cmp::Ordering,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering as AtomicOrdering},
     time::{Duration, Instant},
 };
 
@@ -38,13 +39,14 @@ use self::{
 const STREAMING_PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(100);
 const UPDATE_ID_MAX_LEN: usize = 128;
 const TARGET_VERSION_MAX_LEN: usize = 128;
-/// The bandaid overlay partition root. `/var/lib/bandaid/nocturne` is the ext4
-/// bandaid partition's `nocturne/` dir, bind-mounted at `/opt/nocturne` (the
-/// path the daemon serves + runs from). Bandaid swaps MUST land here so they
-/// take effect via the bind mount; the deploy tooling (`just daemon-install`)
-/// targets the same path.
 const BANDAID_ROOT: &str = "/var/lib/bandaid/nocturne";
 pub(crate) const BANDAID_VERSION_PATH: &str = "/var/lib/bandaid/nocturne/.floor-version";
+
+static COMPONENT_ACTIVATION_PENDING: AtomicBool = AtomicBool::new(false);
+
+pub fn component_activation_pending() -> bool {
+    COMPONENT_ACTIVATION_PENDING.load(AtomicOrdering::Relaxed)
+}
 
 pub type OtaEventTx = mpsc::Sender<OtaEvent>;
 
@@ -97,6 +99,7 @@ pub enum OtaEvent {
     Error(OtaError),
     Complete {
         update_id: String,
+        version: Option<String>,
     },
     AssetRange {
         #[serde(skip)]
@@ -1255,12 +1258,15 @@ impl OtaActor {
         }
         clear_manifest(&self.persist_dir).await;
         if !matches!(kind, OtaKind::Image) {
-            if let Some(version) = target_version {
-                self.installed_versions.bandaid = Ok(version);
+            if let Some(version) = &target_version {
+                self.installed_versions.bandaid = Ok(version.clone());
             }
         }
+        if matches!(kind, OtaKind::Daemon | OtaKind::Bandaid) {
+            COMPONENT_ACTIVATION_PENDING.store(true, AtomicOrdering::Relaxed);
+        }
         self.state = OtaState::Idle;
-        emit_complete(&self.events_tx, update_id).await;
+        emit_complete(&self.events_tx, update_id, target_version).await;
     }
 
     async fn handle_write_failed(
@@ -1544,8 +1550,10 @@ async fn emit_error(events_tx: &OtaEventTx, code: OtaErrorCode, msg: String) {
         .await;
 }
 
-async fn emit_complete(events_tx: &OtaEventTx, update_id: String) {
-    let _ = events_tx.send(OtaEvent::Complete { update_id }).await;
+async fn emit_complete(events_tx: &OtaEventTx, update_id: String, version: Option<String>) {
+    let _ = events_tx
+        .send(OtaEvent::Complete { update_id, version })
+        .await;
 }
 
 #[cfg(any(feature = "device", test))]
@@ -1929,6 +1937,7 @@ mod tests {
         events_tx
             .send(OtaEvent::Complete {
                 update_id: "channel-blocker".into(),
+                version: None,
             })
             .await
             .unwrap();
@@ -1978,13 +1987,14 @@ mod tests {
 
         assert!(matches!(
             events_rx.recv().await,
-            Some(OtaEvent::Complete { update_id }) if update_id == "channel-blocker"
+            Some(OtaEvent::Complete { update_id, .. }) if update_id == "channel-blocker"
         ));
         assert!(matches!(
             events_rx.recv().await,
-            Some(OtaEvent::Complete { update_id }) if update_id == sha
+            Some(OtaEvent::Complete { update_id, .. }) if update_id == sha
         ));
         completion.await.unwrap();
+        assert!(component_activation_pending());
 
         assert!(!tokio::fs::try_exists(transfers.path(&sha)).await.unwrap());
         assert!(!tokio::fs::try_exists(transfers.meta_path(&sha))
