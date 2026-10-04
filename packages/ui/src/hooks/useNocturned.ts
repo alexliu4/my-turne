@@ -16,6 +16,9 @@ type SubscribedState = {
   isAdmin: boolean;
   entitlementsVerified: boolean;
 };
+
+const DEVICE_TIME_SYNC_RETRY_DELAY_MS = 1000;
+
 export type PhoneNetworkStatus = "unknown" | "connected" | "disconnected";
 type BluetoothConnectionSnapshot = {
   connected: boolean;
@@ -1193,6 +1196,9 @@ const setupGlobalWebSocket = async () => {
                 break;
               } catch (err) {
                 console.error("Failed to sync device time, retrying...", err);
+                await new Promise((resolve) =>
+                  setTimeout(resolve, DEVICE_TIME_SYNC_RETRY_DELAY_MS),
+                );
               }
             }
 

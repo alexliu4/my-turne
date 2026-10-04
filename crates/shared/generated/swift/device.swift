@@ -23,6 +23,7 @@ public struct AmbientLightUpdateEvent: Codable, Sendable {
 
 public struct AppReadyEvent: Codable, Sendable {
   public let datetime: String?
+  public let timestamp: UInt64?
   public let timezone: Value?
   public let platform: String?
   public let subscribed: Bool?
@@ -35,6 +36,7 @@ public struct AppReadyEvent: Codable, Sendable {
 
   public init(
     datetime: String?,
+    timestamp: UInt64?,
     timezone: Value?,
     platform: String?,
     subscribed: Bool?,
@@ -46,6 +48,7 @@ public struct AppReadyEvent: Codable, Sendable {
     spotifyInstalled: Bool?
   ) {
     self.datetime = datetime
+    self.timestamp = timestamp
     self.timezone = timezone
     self.platform = platform
     self.subscribed = subscribed
@@ -59,6 +62,7 @@ public struct AppReadyEvent: Codable, Sendable {
 
   private enum CodingKeys: String, CodingKey {
     case datetime = "datetime"
+    case timestamp = "timestamp"
     case timezone = "timezone"
     case platform = "platform"
     case subscribed = "subscribed"
@@ -637,18 +641,22 @@ public struct DeviceTimeGetRequest: Codable, Sendable {
 public struct DeviceTimeGetResponse: Codable, Sendable {
   public let datetime: String
   public let time: String?
+  public let timestampMs: UInt64?
 
   public init(
     datetime: String,
-    time: String?
+    time: String?,
+    timestampMs: UInt64?
   ) {
     self.datetime = datetime
     self.time = time
+    self.timestampMs = timestampMs
   }
 
   private enum CodingKeys: String, CodingKey {
     case datetime = "datetime"
     case time = "time"
+    case timestampMs = "timestamp_ms"
   }
 }
 

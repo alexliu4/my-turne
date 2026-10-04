@@ -49,6 +49,10 @@ export interface AppReadyEvent {
    */
   datetime?: string;
   /**
+   * Phone UTC time in Unix milliseconds when the event was built. Inventory field `timestamp` emits as `timestamp`.
+   */
+  timestamp?: number;
+  /**
    * Phone timezone. Inventory field `timezone` emits as `timezone`.
    */
   timezone?: AppReadyEventTimezone;
@@ -1312,6 +1316,10 @@ export interface DeviceTimeGetResponse {
    * Phone-provided local HH:mm:ss time string for UI display. Inventory field `time` emits as `time`.
    */
   time?: string;
+  /**
+   * Phone UTC time in Unix milliseconds when the response was built. Inventory field `timestamp_ms` emits as `timestampMs`.
+   */
+  timestampMs?: number;
 }
 
 /**

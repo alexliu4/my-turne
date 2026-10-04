@@ -2,6 +2,7 @@
 
 pub mod ab;
 pub mod app_launch;
+pub mod clock;
 pub mod config;
 pub mod factory_reset;
 

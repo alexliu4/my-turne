@@ -190,6 +190,7 @@ fn i64_field(data: &serde_json::Value, snake: &str, camel: &str) -> Option<i64> 
 fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
     let event = AppReadyEvent {
         datetime: string_field(&data, "datetime", "datetime"),
+        timestamp: u64_field(&data, "timestamp", "timestamp"),
         timezone: data.get("timezone").cloned(),
         platform: string_field(&data, "platform", "platform"),
         subscribed: bool_field(&data, "subscribed", "subscribed"),
@@ -1105,6 +1106,11 @@ fn parse_one_chunk_envelope(data: &[u8]) -> ChunkEnvelopeParse {
     }
 }
 
+struct PendingMethod {
+    method: String,
+    sent_at: Instant,
+}
+
 pub struct MsgPackProtocolHandler {
     pending_messages: HashMap<String, ChunkedMessage>,
     inbound_buffers: HashMap<u8, BytesMut>,
@@ -1113,7 +1119,7 @@ pub struct MsgPackProtocolHandler {
     websocket_message_ids: HashSet<String>,
     image_cache: Option<Arc<Mutex<ImageCache>>>,
     pending_image_requests: HashMap<String, String>,
-    pending_methods: HashMap<String, String>,
+    pending_methods: HashMap<String, PendingMethod>,
     pending_calls: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
     session_route: SharedAppSessionRoute,
     ota_pull_task: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -1523,7 +1529,13 @@ impl MsgPackProtocolHandler {
 
     pub fn mark_method_for_message(&mut self, message_id: String, method: String) {
         debug!("Marking method {} for message ID: {}", method, message_id);
-        self.pending_methods.insert(message_id, method);
+        self.pending_methods.insert(
+            message_id,
+            PendingMethod {
+                method,
+                sent_at: Instant::now(),
+            },
+        );
     }
 
     pub fn mark_as_image_request(&mut self, message_id: String, url: String) {
@@ -2072,24 +2084,22 @@ impl MsgPackProtocolHandler {
                     }
                 }
 
-                if let Some(method) = self.pending_methods.remove(&id) {
-                    if method.as_str() == "device.time.get" {
+                if let Some(pending) = self.pending_methods.remove(&id) {
+                    if pending.method.as_str() == "device.time.get" {
                         if let Ok(response) =
                             serde_json::from_value::<DeviceTimeGetResponse>(result.clone())
                         {
-                            let datetime_str = response.datetime;
-                            info!("Setting system datetime to: {}", datetime_str);
-                            tokio::spawn(async move {
-                                if let Err(e) = tokio::process::Command::new("date")
-                                    .args(["-s", &datetime_str])
-                                    .output()
-                                    .await
-                                {
-                                    error!("Failed to set datetime: {}", e);
-                                } else {
-                                    info!("Datetime set successfully to {}", datetime_str);
-                                }
-                            });
+                            if let Some(phone_unix_ms) = response.timestamp_ms {
+                                crate::system::clock::sync_from_phone_time_response(
+                                    phone_unix_ms,
+                                    pending.sent_at.elapsed(),
+                                );
+                            } else {
+                                crate::system::clock::sync_from_phone_datetime_response(
+                                    &response.datetime,
+                                    pending.sent_at.elapsed(),
+                                );
+                            }
                         }
                     }
                 }
@@ -2225,23 +2235,11 @@ impl MsgPackProtocolHandler {
                     );
                     self.app_ready_received.store(true, Ordering::Release);
 
-                    if let Some(datetime_str) = data.get("datetime").and_then(|v| v.as_str()) {
-                        info!("Setting system datetime from app.ready: {}", datetime_str);
-                        let datetime_str = datetime_str.to_string();
-                        tokio::spawn(async move {
-                            if let Err(e) = tokio::process::Command::new("date")
-                                .args(["-s", &datetime_str])
-                                .output()
-                                .await
-                            {
-                                error!("Failed to set datetime from app.ready: {}", e);
-                            } else {
-                                info!(
-                                    "Datetime set successfully from app.ready to {}",
-                                    datetime_str
-                                );
-                            }
-                        });
+                    if let Some(phone_unix_ms) = data.get("timestamp").and_then(|v| v.as_u64()) {
+                        crate::system::clock::sync_from_app_ready(phone_unix_ms);
+                    } else if let Some(datetime_str) = data.get("datetime").and_then(|v| v.as_str())
+                    {
+                        crate::system::clock::sync_from_app_ready_datetime(datetime_str);
                     }
 
                     if let Some(tz) = data.get("timezone") {
