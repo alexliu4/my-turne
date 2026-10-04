@@ -57,6 +57,10 @@ export type PhoneSpotifySnapshot = {
   titleChangedAt: number;
 };
 export type SpotifyStateAdmission = "accept" | "defer" | "reject";
+export type CompanionClockSample = {
+  offsetMs: number;
+  observedAt: number;
+};
 type DeferredSpotifyState = {
   playback: SpotifyPlayback;
   receivedAt: number;
@@ -88,9 +92,11 @@ let phoneSpotifyTitleHistory: string[] = [];
 let deferredSpotifyState: DeferredSpotifyState | null = null;
 let spotifyStateRevision = 0;
 let spotifyAheadOfPhoneSince: number | null = null;
+let companionClockSamples: CompanionClockSample[] = [];
 const DEALER_FRESH_THRESHOLD_MS = 8000;
 const PHONE_SPOTIFY_CONFIRMATION_WINDOW_MS = 15000;
 const PHONE_SPOTIFY_CATCH_UP_WINDOW_MS = 5000;
+const COMPANION_CLOCK_SAMPLE_WINDOW_MS = 15000;
 const PHONE_SPOTIFY_TITLE_HISTORY_LIMIT = 12;
 const DEFERRED_SPOTIFY_STATE_TTL_MS = 60000;
 const PHONE_ARTWORK_CONTEXT_TTL_MS = 10000;
@@ -670,6 +676,38 @@ export const classifySpotifyStateAgainstPhone = (
     : "accept";
 };
 
+export const recordCompanionClockSample = (
+  samples: readonly CompanionClockSample[],
+  phoneTimestampMs: unknown,
+  localNowMs: number,
+  monotonicNowMs: number,
+): CompanionClockSample[] => {
+  const phoneTimestamp = finiteNumber(phoneTimestampMs);
+  if (phoneTimestamp === null || phoneTimestamp <= 0) return [...samples];
+  return [
+    ...samples.filter(
+      (sample) =>
+        monotonicNowMs - sample.observedAt <= COMPANION_CLOCK_SAMPLE_WINDOW_MS,
+    ),
+    { offsetMs: phoneTimestamp - localNowMs, observedAt: monotonicNowMs },
+  ];
+};
+
+export const estimateCompanionClockOffset = (
+  samples: readonly CompanionClockSample[],
+): number =>
+  samples.length > 0
+    ? Math.max(...samples.map((sample) => sample.offsetMs))
+    : 0;
+
+export const localizeSpotifyTimestamp = (
+  timestamp: unknown,
+  clockOffsetMs: number,
+): number | null => {
+  const parsed = finiteNumber(timestamp);
+  return parsed !== null && parsed > 0 ? parsed - clockOffsetMs : null;
+};
+
 export const shouldAwaitPhoneCatchUp = ({
   displayTitleDiffers,
   phoneTitleChanged,
@@ -1158,6 +1196,16 @@ const buildSpotifyPendingPlaceholder = (
   };
 };
 
+const localizeSpotifyPlaybackClock = (
+  playback: SpotifyPlayback,
+): SpotifyPlayback => {
+  const timestamp = localizeSpotifyTimestamp(
+    playback.timestamp,
+    estimateCompanionClockOffset(companionClockSamples),
+  );
+  return timestamp === null ? playback : { ...playback, timestamp };
+};
+
 const clearPhoneSpotifyAuthority = () => {
   phoneSpotifySnapshot = null;
   deferredSpotifyState = null;
@@ -1209,6 +1257,18 @@ const takeDeferredSpotifyState = (
     deferred.playback,
     phoneSpotifySnapshot,
   );
+};
+
+export const PHONE_VOLUME_STEP_PERCENT = 6.25;
+
+export const estimatePhoneVolumeStep = (
+  currentPercent: number | null,
+  direction: 1 | -1,
+): number | null => {
+  if (currentPercent === null || !Number.isFinite(currentPercent)) return null;
+  const nextStep =
+    Math.round(currentPercent / PHONE_VOLUME_STEP_PERCENT) + direction;
+  return Math.max(0, Math.min(100, nextStep * PHONE_VOLUME_STEP_PERCENT));
 };
 
 export const subscribeToPhoneVolume = (listener: PhoneVolumeListener) => {
@@ -1734,7 +1794,9 @@ export function useSpotifyPlayerState() {
           lastCompleteDealerStateTimestamp <= warmupStartedAt &&
           playback
         ) {
-          const admitted = admitSpotifyState(playback);
+          const admitted = admitSpotifyState(
+            localizeSpotifyPlaybackClock(playback),
+          );
           if (admitted) processPlaybackState(admitted);
         }
       })
@@ -1792,6 +1854,19 @@ export function useSpotifyPlayerState() {
           data.topic === "spotify.player.volume_changed")
       ) {
         markPlayerEvent();
+        const eventBody =
+          data.data && typeof data.data === "object"
+            ? (data.data as Record<string, unknown>)
+            : {};
+        companionClockSamples = recordCompanionClockSample(
+          companionClockSamples,
+          eventBody.phone_timestamp_ms,
+          Date.now(),
+          performance.now(),
+        );
+        const clockOffsetMs = estimateCompanionClockOffset(
+          companionClockSamples,
+        );
         const normalizedCluster = normalizeDealerCluster(data.data);
         const payloads = normalizedCluster
           ? [{ cluster: normalizedCluster }]
@@ -1840,9 +1915,14 @@ export function useSpotifyPlayerState() {
           const transformedState = {
             is_playing: playerState.is_paused === false,
             timestamp:
-              parseInt(playerState.timestamp) ||
-              finiteNumber(data.phone_timestamp_ms) ||
-              finiteNumber(data.server_timestamp_ms) ||
+              localizeSpotifyTimestamp(
+                parseInt(playerState.timestamp),
+                clockOffsetMs,
+              ) ??
+              localizeSpotifyTimestamp(
+                eventBody.phone_timestamp_ms,
+                clockOffsetMs,
+              ) ??
               Date.now(),
             progress_ms: parseInt(playerState.position_as_of_timestamp) || 0,
 
@@ -2731,7 +2811,7 @@ export function useSpotifyPlayerState() {
             ) {
               const admitted = admitSpotifyState(
                 reconcilePolledPlaybackTiming(
-                  playerData,
+                  localizeSpotifyPlaybackClock(playerData),
                   currentPlaybackRef.current,
                 ),
               );
@@ -2800,7 +2880,10 @@ export function useSpotifyPlayerState() {
           }
         } else {
           const admitted = admitSpotifyState(
-            reconcilePolledPlaybackTiming(data, currentPlaybackRef.current),
+            reconcilePolledPlaybackTiming(
+              localizeSpotifyPlaybackClock(data),
+              currentPlaybackRef.current,
+            ),
           );
           if (admitted) processPlaybackState(admitted);
         }

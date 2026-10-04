@@ -16,6 +16,7 @@ import {
   addGlobalWsListener,
 } from "../../../hooks/useNocturned";
 import {
+  estimatePhoneVolumeStep,
   subscribeToPhoneVolume,
   getActiveDeviceType,
   isCurrentMediaArtwork,
@@ -153,6 +154,7 @@ export function useCarThingSpotifyIntegration(
   const volumeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const acceptedPhoneVolumeRef = useRef<number | null>(null);
   const phoneVolumeInteractionUntilRef = useRef(0);
+  const pendingPhoneVolumeReportRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!carThingStores || !currentPlayback?.item) {
@@ -679,6 +681,23 @@ export function useCarThingSpotifyIntegration(
           activeDeviceType === "SMARTPHONE"
         ) {
           phoneVolumeInteractionUntilRef.current = Date.now() + 2000;
+          const estimatedVolume = estimatePhoneVolumeStep(
+            acceptedPhoneVolumeRef.current,
+            delta > 0 ? 1 : -1,
+          );
+          if (estimatedVolume !== null) {
+            acceptedPhoneVolumeRef.current = estimatedVolume;
+            volumeRef.current = estimatedVolume;
+          }
+          runInAction(() => {
+            if (estimatedVolume !== null) {
+              const pct = estimatedVolume / 100;
+              npvStore.volumeUiState.displayVolume = pct;
+              npvStore.volumeUiState.volume = pct;
+              npvStore.volumeUiState.isVolumeAbove0 = estimatedVolume > 0;
+            }
+            npvStore.volumeUiState.resetShowVolumeTimer();
+          });
           if (delta > 0) {
             phoneMediaVolumeUp?.();
           } else {
@@ -809,6 +828,7 @@ export function useCarThingSpotifyIntegration(
 
     if (!isPhoneMedia && !isSmartphoneDevice) {
       acceptedPhoneVolumeRef.current = null;
+      pendingPhoneVolumeReportRef.current = null;
       phoneVolumeInteractionUntilRef.current = 0;
     }
   }, [currentPlayback?.device?.type, currentPlayback?.item?.is_phone_media]);
@@ -883,6 +903,27 @@ export function useCarThingSpotifyIntegration(
       });
     };
 
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    const settlePhoneVolumeAfterInteraction = () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      const remainingMs = phoneVolumeInteractionUntilRef.current - Date.now();
+      settleTimer = setTimeout(
+        () => {
+          settleTimer = null;
+          if (Date.now() < phoneVolumeInteractionUntilRef.current) {
+            settlePhoneVolumeAfterInteraction();
+            return;
+          }
+          const reportedVolume = pendingPhoneVolumeReportRef.current;
+          pendingPhoneVolumeReportRef.current = null;
+          if (reportedVolume === null) return;
+          acceptedPhoneVolumeRef.current = reportedVolume;
+          applyPhoneVolume(reportedVolume, false);
+        },
+        Math.max(0, remainingMs) + 50,
+      );
+    };
+
     /** @param {PhoneVolumeUpdateEvent["volumePercent"]} volumePercent */
     const unsubscribe = subscribeToPhoneVolume((volumePercent) => {
       const now = Date.now();
@@ -890,6 +931,16 @@ export function useCarThingSpotifyIntegration(
       const isLocalPhoneVolumeInteraction =
         now < phoneVolumeInteractionUntilRef.current;
 
+      if (isLocalPhoneVolumeInteraction && previousPhoneVolume !== null) {
+        pendingPhoneVolumeReportRef.current = volumePercent;
+        runInAction(() => {
+          npvStore.volumeUiState.resetShowVolumeTimer();
+        });
+        settlePhoneVolumeAfterInteraction();
+        return;
+      }
+
+      pendingPhoneVolumeReportRef.current = null;
       acceptedPhoneVolumeRef.current = volumePercent;
 
       if (previousPhoneVolume === null) {
@@ -907,6 +958,7 @@ export function useCarThingSpotifyIntegration(
 
     return () => {
       unsubscribe();
+      if (settleTimer) clearTimeout(settleTimer);
     };
   }, [carThingStores]);
 

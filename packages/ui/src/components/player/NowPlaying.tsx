@@ -18,7 +18,10 @@ import React, {
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { useSpotifyPlayerControls } from "../../hooks/useSpotifyPlayerControls";
 import { useSpotifyWebSocket } from "../../hooks/useSpotifyWebSocket";
-import { subscribeToPhoneVolume } from "../../hooks/useSpotifyPlayerState";
+import {
+  estimatePhoneVolumeStep,
+  subscribeToPhoneVolume,
+} from "../../hooks/useSpotifyPlayerState";
 import { useNavigation } from "../../hooks/useNavigation";
 import { useLyrics } from "../../hooks/useLyrics";
 import { useGestureControls } from "../../hooks/useGestureControls";
@@ -316,6 +319,12 @@ function NowPlaying({
         const previousPhoneVolume = acceptedPhoneVolumeRef.current;
 
         latestPhoneVolumeRef.current = volumePercent;
+
+        if (isLocalPhoneVolumeInteraction && previousPhoneVolume !== null) {
+          showVolumeOverlay();
+          return;
+        }
+
         acceptedPhoneVolumeRef.current = volumePercent;
 
         if (previousPhoneVolume === null) {
@@ -707,6 +716,17 @@ function NowPlaying({
         if (isPhoneMedia || isSmartphoneDevice) {
           manualVolumeChangeRef.current = true;
           phoneVolumeInteractionUntilRef.current = Date.now() + 2000;
+
+          const estimatedVolume = estimatePhoneVolumeStep(
+            acceptedPhoneVolumeRef.current,
+            direction,
+          );
+          if (estimatedVolume !== null) {
+            acceptedPhoneVolumeRef.current = estimatedVolume;
+            latestPhoneVolumeRef.current = estimatedVolume;
+            setPhoneVolume(estimatedVolume);
+          }
+          showVolumeOverlay();
 
           if (direction > 0) {
             phoneMediaVolumeUp();

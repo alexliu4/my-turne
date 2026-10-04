@@ -7,6 +7,10 @@ import {
   createPhoneSpotifySnapshot,
   projectPhoneSpotifyPosition,
   rememberPhoneSpotifyTitle,
+  estimatePhoneVolumeStep,
+  estimateCompanionClockOffset,
+  localizeSpotifyTimestamp,
+  recordCompanionClockSample,
   shouldAwaitPhoneCatchUp,
   canUsePhonePushedArtwork,
   createMediaGenerationCorrelator,
@@ -1281,5 +1285,46 @@ describe("phone-authoritative Spotify playback", () => {
     );
     expect(next.progressMs).toBe(30_000);
     expect(next.titleChangedAt).toBe(9_000);
+  });
+});
+
+describe("companion clock offset", () => {
+  it("maps Spotify server time onto a lagging Car Thing clock", () => {
+    const samples = recordCompanionClockSample([], 1_007_240, 1_000_000, 50);
+    const offset = estimateCompanionClockOffset(samples);
+    expect(offset).toBe(7_240);
+    expect(localizeSpotifyTimestamp(2_007_240, offset)).toBe(2_000_000);
+  });
+
+  it("prefers the least delayed recent sample", () => {
+    let samples = recordCompanionClockSample([], 1_007_200, 1_000_000, 0);
+    samples = recordCompanionClockSample(samples, 1_010_000, 1_005_000, 1_000);
+    expect(estimateCompanionClockOffset(samples)).toBe(7_200);
+  });
+
+  it("forgets old samples so a clock resync takes effect", () => {
+    let samples = recordCompanionClockSample([], 1_007_200, 1_000_000, 0);
+    samples = recordCompanionClockSample(samples, 2_000_050, 2_000_000, 20_000);
+    expect(estimateCompanionClockOffset(samples)).toBe(50);
+  });
+
+  it("leaves timing untouched without a phone timestamp", () => {
+    expect(recordCompanionClockSample([], undefined, 1_000, 0)).toEqual([]);
+    expect(estimateCompanionClockOffset([])).toBe(0);
+    expect(localizeSpotifyTimestamp(undefined, 7_000)).toBeNull();
+  });
+});
+
+describe("phone volume knob estimate", () => {
+  it("steps along the 16-step phone volume grid", () => {
+    expect(estimatePhoneVolumeStep(50, 1)).toBe(56.25);
+    expect(estimatePhoneVolumeStep(56.25, -1)).toBe(50);
+    expect(estimatePhoneVolumeStep(15, 1)).toBe(18.75);
+  });
+
+  it("clamps at both ends and waits for a known starting volume", () => {
+    expect(estimatePhoneVolumeStep(0, -1)).toBe(0);
+    expect(estimatePhoneVolumeStep(100, 1)).toBe(100);
+    expect(estimatePhoneVolumeStep(null, 1)).toBeNull();
   });
 });
