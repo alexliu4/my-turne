@@ -13,6 +13,27 @@ data class AmbientLightUpdateEvent(
 )
 
 @Serializable
+data class AmbientLightUpdateEvent(
+  @SerialName("value") val value: UInt,
+  @SerialName("normalized_value") val normalizedValue: UInt,
+)
+
+@Serializable
+data class AppReadyEvent(
+  @SerialName("datetime") val datetime: String? = null,
+  @SerialName("timestamp") val timestamp: ULong? = null,
+  @SerialName("timezone") val timezone: Value? = null,
+  @SerialName("platform") val platform: String? = null,
+  @SerialName("subscribed") val subscribed: Boolean? = null,
+  @SerialName("subscription_status") val subscriptionStatus: String? = null,
+  @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+  @SerialName("is_admin") val isAdmin: Boolean? = null,
+  @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
+  @SerialName("spotify_skipped") val spotifySkipped: Boolean? = null,
+  @SerialName("spotify_installed") val spotifyInstalled: Boolean? = null,
+)
+
+@Serializable
 data class AppReadyEvent(
   @SerialName("datetime") val datetime: String? = null,
   @SerialName("timestamp") val timestamp: ULong? = null,
@@ -29,11 +50,14 @@ data class AppReadyEvent(
 
 @Serializable
 enum class Compression {
-  @SerialName("gzip")
+  @SerialName("Gzip")
   GZIP,
-  @SerialName("none")
+  @SerialName("None")
   NONE,
 }
+
+@Serializable
+object DeviceAbFailoverRequest
 
 @Serializable
 object DeviceAbFailoverRequest
@@ -45,6 +69,17 @@ data class DeviceAbFailoverResponse(
   @SerialName("slots") val slots: List<Value>,
   @SerialName("crc32") val crc32: UInt,
 )
+
+@Serializable
+data class DeviceAbFailoverResponse(
+  @SerialName("active_slot") val activeSlot: UByte,
+  @SerialName("active_slot_letter") val activeSlotLetter: String,
+  @SerialName("slots") val slots: List<Value>,
+  @SerialName("crc32") val crc32: UInt,
+)
+
+@Serializable
+object DeviceAbGetRequest
 
 @Serializable
 object DeviceAbGetRequest
@@ -60,7 +95,30 @@ data class DeviceAbGetResponse(
 )
 
 @Serializable
+data class DeviceAbGetResponse(
+  @SerialName("active_slot") val activeSlot: UByte,
+  @SerialName("active_slot_letter") val activeSlotLetter: String,
+  @SerialName("version_major") val versionMajor: UByte,
+  @SerialName("version_minor") val versionMinor: UByte,
+  @SerialName("slots") val slots: List<Value>,
+  @SerialName("crc32") val crc32: UInt,
+)
+
+@Serializable
 object DeviceAbResetRequest
+
+@Serializable
+object DeviceAbResetRequest
+
+@Serializable
+data class DeviceAbResetResponse(
+  @SerialName("active_slot") val activeSlot: UByte,
+  @SerialName("active_slot_letter") val activeSlotLetter: String,
+  @SerialName("version_major") val versionMajor: UByte,
+  @SerialName("version_minor") val versionMinor: UByte,
+  @SerialName("slots") val slots: List<Value>,
+  @SerialName("crc32") val crc32: UInt,
+)
 
 @Serializable
 data class DeviceAbResetResponse(
@@ -78,11 +136,29 @@ data class DeviceAbSetBootResultRequest(
 )
 
 @Serializable
+data class DeviceAbSetBootResultRequest(
+  @SerialName("result") val result: Long,
+)
+
+@Serializable
 data class DeviceAbSetBootResultResponse(
   @SerialName("active_slot") val activeSlot: UByte,
   @SerialName("active_slot_letter") val activeSlotLetter: String,
   @SerialName("slots") val slots: List<Value>,
   @SerialName("crc32") val crc32: UInt,
+)
+
+@Serializable
+data class DeviceAbSetBootResultResponse(
+  @SerialName("active_slot") val activeSlot: UByte,
+  @SerialName("active_slot_letter") val activeSlotLetter: String,
+  @SerialName("slots") val slots: List<Value>,
+  @SerialName("crc32") val crc32: UInt,
+)
+
+@Serializable
+data class DeviceAbSetSlotRequest(
+  @SerialName("slot") val slot: UByte,
 )
 
 @Serializable
@@ -101,8 +177,29 @@ data class DeviceAbSetSlotResponse(
 )
 
 @Serializable
+data class DeviceAbSetSlotResponse(
+  @SerialName("active_slot") val activeSlot: UByte,
+  @SerialName("active_slot_letter") val activeSlotLetter: String,
+  @SerialName("version_major") val versionMajor: UByte,
+  @SerialName("version_minor") val versionMinor: UByte,
+  @SerialName("slots") val slots: List<Value>,
+  @SerialName("crc32") val crc32: UInt,
+)
+
+@Serializable
 data class DeviceBrightnessAutoRequest(
   @SerialName("enabled") val enabled: Boolean,
+)
+
+@Serializable
+data class DeviceBrightnessAutoRequest(
+  @SerialName("enabled") val enabled: Boolean,
+)
+
+@Serializable
+data class DeviceBrightnessAutoResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
 )
 
 @Serializable
@@ -115,8 +212,22 @@ data class DeviceBrightnessAutoResponse(
 object DeviceBrightnessGetRequest
 
 @Serializable
+object DeviceBrightnessGetRequest
+
+@Serializable
 data class DeviceBrightnessGetResponse(
   @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+)
+
+@Serializable
+data class DeviceBrightnessGetResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+)
+
+@Serializable
+data class DeviceBrightnessSetRequest(
   @SerialName("brightness") val brightness: UByte,
 )
 
@@ -132,7 +243,23 @@ data class DeviceBrightnessSetResponse(
 )
 
 @Serializable
+data class DeviceBrightnessSetResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+)
+
+@Serializable
 object DeviceDisplayGetRequest
+
+@Serializable
+object DeviceDisplayGetRequest
+
+@Serializable
+data class DeviceDisplayGetResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+  @SerialName("sleeping") val sleeping: Boolean,
+)
 
 @Serializable
 data class DeviceDisplayGetResponse(
@@ -145,11 +272,24 @@ data class DeviceDisplayGetResponse(
 object DeviceDisplaySleepRequest
 
 @Serializable
+object DeviceDisplaySleepRequest
+
+@Serializable
 data class DeviceDisplaySleepResponse(
   @SerialName("auto") val auto: Boolean,
   @SerialName("brightness") val brightness: UByte,
   @SerialName("sleeping") val sleeping: Boolean,
 )
+
+@Serializable
+data class DeviceDisplaySleepResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+  @SerialName("sleeping") val sleeping: Boolean,
+)
+
+@Serializable
+object DeviceDisplayWakeRequest
 
 @Serializable
 object DeviceDisplayWakeRequest
@@ -162,20 +302,134 @@ data class DeviceDisplayWakeResponse(
 )
 
 @Serializable
-enum class DeviceEvent {
-  @SerialName("app_ready")
-  APP_READY,
-  @SerialName("subscription_updated")
-  SUBSCRIPTION_UPDATED,
-  @SerialName("network_status")
-  NETWORK_STATUS,
-  @SerialName("notification_show")
-  NOTIFICATION_SHOW,
-  @SerialName("notification_remove")
-  NOTIFICATION_REMOVE,
+data class DeviceDisplayWakeResponse(
+  @SerialName("auto") val auto: Boolean,
+  @SerialName("brightness") val brightness: UByte,
+  @SerialName("sleeping") val sleeping: Boolean,
+)
+
+@Serializable
+sealed interface DeviceEvent {
+  @Serializable
+  @SerialName("app.ready")
+  data class AppReady(
+    @SerialName("datetime") val datetime: String? = null,
+    @SerialName("timestamp") val timestamp: ULong? = null,
+    @SerialName("timezone") val timezone: Value? = null,
+    @SerialName("platform") val platform: String? = null,
+    @SerialName("subscribed") val subscribed: Boolean? = null,
+    @SerialName("subscription_status") val subscriptionStatus: String? = null,
+    @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+    @SerialName("is_admin") val isAdmin: Boolean? = null,
+    @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
+    @SerialName("spotify_skipped") val spotifySkipped: Boolean? = null,
+    @SerialName("spotify_installed") val spotifyInstalled: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("subscription.updated")
+  data class SubscriptionUpdated(
+    @SerialName("subscribed") val subscribed: Boolean? = null,
+    @SerialName("subscription_status") val subscriptionStatus: String? = null,
+    @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+    @SerialName("is_admin") val isAdmin: Boolean? = null,
+    @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("network.status")
+  data class NetworkStatus(
+    @SerialName("status") val status: String,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("notification.show")
+  data class NotificationShow(
+    @SerialName("id") val id: String? = null,
+    @SerialName("title") val title: String,
+    @SerialName("body") val body: String? = null,
+    @SerialName("subtitle") val subtitle: String? = null,
+    @SerialName("category") val category: String? = null,
+    @SerialName("days_until_expiry") val daysUntilExpiry: Long? = null,
+    @SerialName("timestamp") val timestamp: ULong? = null,
+    @SerialName("app_bundle_id") val appBundleId: String? = null,
+    @SerialName("app_name") val appName: String? = null,
+    @SerialName("silent") val silent: Boolean? = null,
+    @SerialName("important") val important: Boolean? = null,
+    @SerialName("pre_existing") val preExisting: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("notification.remove")
+  data class NotificationRemove(
+    @SerialName("id") val id: String,
+  ) : DeviceEvent
+  @Serializable
   @SerialName("ambient_light_update")
-  AMBIENT_LIGHT_UPDATE,
+  data class AmbientLightUpdate(
+    @SerialName("value") val value: UInt,
+    @SerialName("normalized_value") val normalizedValue: UInt,
+  ) : DeviceEvent
 }
+
+@Serializable
+sealed interface DeviceEvent {
+  @Serializable
+  @SerialName("app.ready")
+  data class AppReady(
+    @SerialName("datetime") val datetime: String? = null,
+    @SerialName("timestamp") val timestamp: ULong? = null,
+    @SerialName("timezone") val timezone: Value? = null,
+    @SerialName("platform") val platform: String? = null,
+    @SerialName("subscribed") val subscribed: Boolean? = null,
+    @SerialName("subscription_status") val subscriptionStatus: String? = null,
+    @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+    @SerialName("is_admin") val isAdmin: Boolean? = null,
+    @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
+    @SerialName("spotify_skipped") val spotifySkipped: Boolean? = null,
+    @SerialName("spotify_installed") val spotifyInstalled: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("subscription.updated")
+  data class SubscriptionUpdated(
+    @SerialName("subscribed") val subscribed: Boolean? = null,
+    @SerialName("subscription_status") val subscriptionStatus: String? = null,
+    @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+    @SerialName("is_admin") val isAdmin: Boolean? = null,
+    @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("network.status")
+  data class NetworkStatus(
+    @SerialName("status") val status: String,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("notification.show")
+  data class NotificationShow(
+    @SerialName("id") val id: String? = null,
+    @SerialName("title") val title: String,
+    @SerialName("body") val body: String? = null,
+    @SerialName("subtitle") val subtitle: String? = null,
+    @SerialName("category") val category: String? = null,
+    @SerialName("days_until_expiry") val daysUntilExpiry: Long? = null,
+    @SerialName("timestamp") val timestamp: ULong? = null,
+    @SerialName("app_bundle_id") val appBundleId: String? = null,
+    @SerialName("app_name") val appName: String? = null,
+    @SerialName("silent") val silent: Boolean? = null,
+    @SerialName("important") val important: Boolean? = null,
+    @SerialName("pre_existing") val preExisting: Boolean? = null,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("notification.remove")
+  data class NotificationRemove(
+    @SerialName("id") val id: String,
+  ) : DeviceEvent
+  @Serializable
+  @SerialName("ambient_light_update")
+  data class AmbientLightUpdate(
+    @SerialName("value") val value: UInt,
+    @SerialName("normalized_value") val normalizedValue: UInt,
+  ) : DeviceEvent
+}
+
+@Serializable
+object DeviceFactoryResetRequest
 
 @Serializable
 object DeviceFactoryResetRequest
@@ -187,7 +441,28 @@ data class DeviceFactoryResetResponse(
 )
 
 @Serializable
+data class DeviceFactoryResetResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
 object DeviceInfoRequest
+
+@Serializable
+object DeviceInfoRequest
+
+@Serializable
+data class DeviceInfoResponse(
+  @SerialName("device") val device: String,
+  @SerialName("version") val version: String,
+  @SerialName("full_version") val fullVersion: String? = null,
+  @SerialName("image_version") val imageVersion: String? = null,
+  @SerialName("bandaid_version") val bandaidVersion: String? = null,
+  @SerialName("build_date") val buildDate: String? = null,
+  @SerialName("git_hash") val gitHash: String? = null,
+  @SerialName("serial_number") val serialNumber: String? = null,
+)
 
 @Serializable
 data class DeviceInfoResponse(
@@ -207,57 +482,218 @@ data class DeviceLaunchAppRequest(
 )
 
 @Serializable
+data class DeviceLaunchAppRequest(
+  @SerialName("bundle_id") val bundleId: String? = null,
+)
+
+@Serializable
 data class DeviceLaunchAppResponse(
   @SerialName("status") val status: String,
 )
 
 @Serializable
-enum class DeviceMethod {
-  @SerialName("device_version")
-  DEVICE_VERSION,
-  @SerialName("device_info")
-  DEVICE_INFO,
-  @SerialName("device_launch_app")
-  DEVICE_LAUNCH_APP,
-  @SerialName("device_timezone_get")
-  DEVICE_TIMEZONE_GET,
-  @SerialName("device_time_get")
-  DEVICE_TIME_GET,
-  @SerialName("device_power_reboot")
-  DEVICE_POWER_REBOOT,
-  @SerialName("device_power_shutdown")
-  DEVICE_POWER_SHUTDOWN,
-  @SerialName("device_power_off")
-  DEVICE_POWER_OFF,
-  @SerialName("device_factory_reset")
-  DEVICE_FACTORY_RESET,
+data class DeviceLaunchAppResponse(
+  @SerialName("status") val status: String,
+)
+
+@Serializable
+sealed interface DeviceMethod {
+  @Serializable
+  @SerialName("device.version")
+  data class DeviceVersion(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.info")
+  data class DeviceInfo(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.launch_app")
+  data class DeviceLaunchApp(
+    @SerialName("bundle_id") val bundleId: String? = null,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.timezone.get")
+  data class DeviceTimezoneGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.time.get")
+  data class DeviceTimeGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.reboot")
+  data class DevicePowerReboot(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.shutdown")
+  data class DevicePowerShutdown(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.off")
+  data class DevicePowerOff(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.factory_reset")
+  data class DeviceFactoryReset(
+  ) : DeviceMethod
+  @Serializable
   @SerialName("reset_boot_counter")
-  RESET_BOOT_COUNTER,
-  @SerialName("device_brightness_get")
-  DEVICE_BRIGHTNESS_GET,
-  @SerialName("device_brightness_set")
-  DEVICE_BRIGHTNESS_SET,
-  @SerialName("device_brightness_auto")
-  DEVICE_BRIGHTNESS_AUTO,
-  @SerialName("device_display_get")
-  DEVICE_DISPLAY_GET,
-  @SerialName("device_display_sleep")
-  DEVICE_DISPLAY_SLEEP,
-  @SerialName("device_display_wake")
-  DEVICE_DISPLAY_WAKE,
-  @SerialName("device_ab_get")
-  DEVICE_AB_GET,
-  @SerialName("device_ab_reset")
-  DEVICE_AB_RESET,
-  @SerialName("device_ab_set_slot")
-  DEVICE_AB_SET_SLOT,
-  @SerialName("device_ab_set_boot_result")
-  DEVICE_AB_SET_BOOT_RESULT,
-  @SerialName("device_ab_failover")
-  DEVICE_AB_FAILOVER,
-  @SerialName("onboarding_set_state")
-  ONBOARDING_SET_STATE,
+  data class ResetBootCounter(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.get")
+  data class DeviceBrightnessGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.set")
+  data class DeviceBrightnessSet(
+    @SerialName("brightness") val brightness: UByte,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.auto")
+  data class DeviceBrightnessAuto(
+    @SerialName("enabled") val enabled: Boolean,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.get")
+  data class DeviceDisplayGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.sleep")
+  data class DeviceDisplaySleep(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.wake")
+  data class DeviceDisplayWake(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.get")
+  data class DeviceAbGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.reset")
+  data class DeviceAbReset(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.set_slot")
+  data class DeviceAbSetSlot(
+    @SerialName("slot") val slot: UByte,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.set_boot_result")
+  data class DeviceAbSetBootResult(
+    @SerialName("result") val result: Long,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.failover")
+  data class DeviceAbFailover(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("onboarding.set_state")
+  data class OnboardingSetState(
+    @SerialName("state") val state: String,
+  ) : DeviceMethod
 }
+
+@Serializable
+sealed interface DeviceMethod {
+  @Serializable
+  @SerialName("device.version")
+  data class DeviceVersion(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.info")
+  data class DeviceInfo(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.launch_app")
+  data class DeviceLaunchApp(
+    @SerialName("bundle_id") val bundleId: String? = null,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.timezone.get")
+  data class DeviceTimezoneGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.time.get")
+  data class DeviceTimeGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.reboot")
+  data class DevicePowerReboot(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.shutdown")
+  data class DevicePowerShutdown(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.power.off")
+  data class DevicePowerOff(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.factory_reset")
+  data class DeviceFactoryReset(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("reset_boot_counter")
+  data class ResetBootCounter(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.get")
+  data class DeviceBrightnessGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.set")
+  data class DeviceBrightnessSet(
+    @SerialName("brightness") val brightness: UByte,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.brightness.auto")
+  data class DeviceBrightnessAuto(
+    @SerialName("enabled") val enabled: Boolean,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.get")
+  data class DeviceDisplayGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.sleep")
+  data class DeviceDisplaySleep(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.display.wake")
+  data class DeviceDisplayWake(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.get")
+  data class DeviceAbGet(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.reset")
+  data class DeviceAbReset(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.set_slot")
+  data class DeviceAbSetSlot(
+    @SerialName("slot") val slot: UByte,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.set_boot_result")
+  data class DeviceAbSetBootResult(
+    @SerialName("result") val result: Long,
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("device.ab.failover")
+  data class DeviceAbFailover(
+  ) : DeviceMethod
+  @Serializable
+  @SerialName("onboarding.set_state")
+  data class OnboardingSetState(
+    @SerialName("state") val state: String,
+  ) : DeviceMethod
+}
+
+@Serializable
+object DevicePowerOffRequest
 
 @Serializable
 object DevicePowerOffRequest
@@ -269,7 +705,22 @@ data class DevicePowerOffResponse(
 )
 
 @Serializable
+data class DevicePowerOffResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
 object DevicePowerRebootRequest
+
+@Serializable
+object DevicePowerRebootRequest
+
+@Serializable
+data class DevicePowerRebootResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
 
 @Serializable
 data class DevicePowerRebootResponse(
@@ -281,10 +732,22 @@ data class DevicePowerRebootResponse(
 object DevicePowerShutdownRequest
 
 @Serializable
+object DevicePowerShutdownRequest
+
+@Serializable
 data class DevicePowerShutdownResponse(
   @SerialName("success") val success: Boolean,
   @SerialName("error") val error: String? = null,
 )
+
+@Serializable
+data class DevicePowerShutdownResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
+object DeviceTimeGetRequest
 
 @Serializable
 object DeviceTimeGetRequest
@@ -297,12 +760,30 @@ data class DeviceTimeGetResponse(
 )
 
 @Serializable
+data class DeviceTimeGetResponse(
+  @SerialName("datetime") val datetime: String,
+  @SerialName("time") val time: String? = null,
+  @SerialName("timestamp_ms") val timestampMs: ULong? = null,
+)
+
+@Serializable
+object DeviceTimezoneGetRequest
+
+@Serializable
 object DeviceTimezoneGetRequest
 
 @Serializable
 data class DeviceTimezoneGetResponse(
   @SerialName("timezone") val timezone: Value,
 )
+
+@Serializable
+data class DeviceTimezoneGetResponse(
+  @SerialName("timezone") val timezone: Value,
+)
+
+@Serializable
+object DeviceVersionRequest
 
 @Serializable
 object DeviceVersionRequest
@@ -321,12 +802,40 @@ data class DeviceVersionResponse(
 )
 
 @Serializable
+data class DeviceVersionResponse(
+  @SerialName("version") val version: String? = null,
+  @SerialName("short_version") val shortVersion: String? = null,
+  @SerialName("image_version") val imageVersion: String? = null,
+  @SerialName("bandaid_version") val bandaidVersion: String? = null,
+  @SerialName("image_restart_pending") val imageRestartPending: Boolean? = null,
+  @SerialName("component_activation_pending") val componentActivationPending: Boolean? = null,
+  @SerialName("git_hash") val gitHash: String? = null,
+  @SerialName("build_date") val buildDate: String? = null,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
 enum class Encoding {
-  @SerialName("msgpack")
+  @SerialName("Msgpack")
   MSGPACK,
-  @SerialName("json")
+  @SerialName("Json")
   JSON,
 }
+
+@Serializable
+data class HostAction(
+  @SerialName("requestId") val requestId: String,
+  @SerialName("action") val action: String,
+  @SerialName("payload") val payload: Value? = null,
+)
+
+@Serializable
+data class HostActionResult(
+  @SerialName("requestId") val requestId: String,
+  @SerialName("success") val success: Boolean,
+  @SerialName("payload") val payload: Value? = null,
+  @SerialName("error") val error: String? = null,
+)
 
 @Serializable
 enum class HostCapability {
@@ -336,43 +845,91 @@ enum class HostCapability {
   VOLUME,
   @SerialName("discord")
   DISCORD,
-  @SerialName("system_stats")
+  @SerialName("systemStats")
   SYSTEM_STATS,
   @SerialName("macros")
   MACROS,
-  @SerialName("app_launch")
+  @SerialName("appLaunch")
   APP_LAUNCH,
 }
 
 @Serializable
-enum class HostMessage {
-  @SerialName("hello")
-  HELLO,
-  @SerialName("status")
-  STATUS,
-  @SerialName("action")
-  ACTION,
-  @SerialName("action_result")
-  ACTION_RESULT,
-  @SerialName("unknown")
-  UNKNOWN,
+data class HostHello(
+  @SerialName("protocolVersion") val protocolVersion: UInt,
+  @SerialName("hostName") val hostName: String,
+  @SerialName("capabilities") val capabilities: List<HostCapability>,
+)
+
+@Serializable
+sealed interface HostMessage {
+  @Serializable
+  @SerialName("host.hello")
+  data class Hello(
+    @SerialName("protocolVersion") val protocolVersion: UInt,
+    @SerialName("hostName") val hostName: String,
+    @SerialName("capabilities") val capabilities: List<HostCapability>,
+  ) : HostMessage
+  @Serializable
+  @SerialName("host.status")
+  data class Status(
+    @SerialName("connected") val connected: Boolean,
+  ) : HostMessage
+  @Serializable
+  @SerialName("host.action")
+  data class Action(
+    @SerialName("requestId") val requestId: String,
+    @SerialName("action") val action: String,
+    @SerialName("payload") val payload: Value? = null,
+  ) : HostMessage
+  @Serializable
+  @SerialName("host.actionResult")
+  data class ActionResult(
+    @SerialName("requestId") val requestId: String,
+    @SerialName("success") val success: Boolean,
+    @SerialName("payload") val payload: Value? = null,
+    @SerialName("error") val error: String? = null,
+  ) : HostMessage
+  @Serializable
+  @SerialName("Unknown")
+  object Unknown : HostMessage
 }
 
 @Serializable
-enum class MsgMeta {
+data class HostStatus(
+  @SerialName("connected") val connected: Boolean,
+)
+
+@Serializable
+sealed interface MsgMeta {
+  @Serializable
   @SerialName("command")
-  COMMAND,
+  object Command : MsgMeta
+  @Serializable
   @SerialName("event")
-  EVENT,
+  object Event : MsgMeta
+  @Serializable
   @SerialName("request")
-  REQUEST,
+  object Request : MsgMeta
+  @Serializable
   @SerialName("response")
-  RESPONSE,
+  data class Response(
+    @SerialName("requestId") val requestId: Uuid,
+  ) : MsgMeta
 }
 
 @Serializable
 data class NetworkStatusEvent(
   @SerialName("status") val status: String,
+)
+
+@Serializable
+data class NetworkStatusEvent(
+  @SerialName("status") val status: String,
+)
+
+@Serializable
+data class NotificationRemoveEvent(
+  @SerialName("id") val id: String,
 )
 
 @Serializable
@@ -397,9 +954,33 @@ data class NotificationShowEvent(
 )
 
 @Serializable
+data class NotificationShowEvent(
+  @SerialName("id") val id: String? = null,
+  @SerialName("title") val title: String,
+  @SerialName("body") val body: String? = null,
+  @SerialName("subtitle") val subtitle: String? = null,
+  @SerialName("category") val category: String? = null,
+  @SerialName("days_until_expiry") val daysUntilExpiry: Long? = null,
+  @SerialName("timestamp") val timestamp: ULong? = null,
+  @SerialName("app_bundle_id") val appBundleId: String? = null,
+  @SerialName("app_name") val appName: String? = null,
+  @SerialName("silent") val silent: Boolean? = null,
+  @SerialName("important") val important: Boolean? = null,
+  @SerialName("pre_existing") val preExisting: Boolean? = null,
+)
+
+@Serializable
 data class OnboardingSetStateRequest(
   @SerialName("state") val state: String,
 )
+
+@Serializable
+data class OnboardingSetStateRequest(
+  @SerialName("state") val state: String,
+)
+
+@Serializable
+object OnboardingSetStateResponse
 
 @Serializable
 object OnboardingSetStateResponse
@@ -416,9 +997,32 @@ enum class Priority {
 object ResetBootCounterRequest
 
 @Serializable
+object ResetBootCounterRequest
+
+@Serializable
 data class ResetBootCounterResponse(
   @SerialName("success") val success: Boolean,
   @SerialName("error") val error: String? = null,
+)
+
+@Serializable
+data class ResetBootCounterResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
+data class ResponseMeta(
+  @SerialName("requestId") val requestId: Uuid,
+)
+
+@Serializable
+data class SubscriptionUpdatedEvent(
+  @SerialName("subscribed") val subscribed: Boolean? = null,
+  @SerialName("subscription_status") val subscriptionStatus: String? = null,
+  @SerialName("has_lifetime") val hasLifetime: Boolean? = null,
+  @SerialName("is_admin") val isAdmin: Boolean? = null,
+  @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
 )
 
 @Serializable
@@ -438,7 +1042,7 @@ enum class WireError {
   UNIMPLEMENTED,
   @SerialName("malformed")
   MALFORMED,
-  @SerialName("handler_failed")
+  @SerialName("handlerFailed")
   HANDLER_FAILED,
 }
 

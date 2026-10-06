@@ -148,6 +148,28 @@ public struct DeviceVolumeUpdateResponse: Codable, Sendable {
   }
 }
 
+public struct GatewayToNocturneMsg: Codable, Sendable {
+  public let id: Uuid
+  public let meta: MsgMeta
+  public let data: GatewayToNocturneMsgData
+
+  public init(
+    id: Uuid,
+    meta: MsgMeta,
+    data: GatewayToNocturneMsgData
+  ) {
+    self.id = id
+    self.meta = meta
+    self.data = data
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id = "id"
+    case meta = "meta"
+    case data = "data"
+  }
+}
+
 public enum GatewayToNocturneMsgData: Codable, Sendable {
   case system(GatewayToNocturneSystemMsg)
   case error(WireError)
@@ -175,6 +197,28 @@ public struct KeepaliveEvent: Codable, Sendable {
 
   private enum CodingKeys: String, CodingKey {
     case timestamp = "timestamp"
+  }
+}
+
+public struct NocturneToGatewayMsg: Codable, Sendable {
+  public let id: Uuid
+  public let meta: MsgMeta
+  public let data: NocturneToGatewayMsgData
+
+  public init(
+    id: Uuid,
+    meta: MsgMeta,
+    data: NocturneToGatewayMsgData
+  ) {
+    self.id = id
+    self.meta = meta
+    self.data = data
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id = "id"
+    case meta = "meta"
+    case data = "data"
   }
 }
 

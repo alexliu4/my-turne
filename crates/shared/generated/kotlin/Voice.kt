@@ -15,9 +15,36 @@ data class AiResponseEvent(
 )
 
 @Serializable
+data class AiResponseEvent(
+  @SerialName("message") val message: String? = null,
+  @SerialName("text") val text: String? = null,
+  @SerialName("is_final") val isFinal: Boolean? = null,
+  @SerialName("session_id") val sessionId: String? = null,
+)
+
+@Serializable
 data class AiStateEvent(
   @SerialName("state") val state: String,
   @SerialName("message") val message: String? = null,
+  @SerialName("session_id") val sessionId: String? = null,
+)
+
+@Serializable
+data class AiStateEvent(
+  @SerialName("state") val state: String,
+  @SerialName("message") val message: String? = null,
+  @SerialName("session_id") val sessionId: String? = null,
+)
+
+@Serializable
+data class AiToolExecutedEvent(
+  @SerialName("tool_name") val toolName: String? = null,
+  @SerialName("tool") val tool: String? = null,
+  @SerialName("call_id") val callId: String? = null,
+  @SerialName("status") val status: String? = null,
+  @SerialName("tool_arguments") val toolArguments: Value? = null,
+  @SerialName("result") val result: Value? = null,
+  @SerialName("error") val error: String? = null,
   @SerialName("session_id") val sessionId: String? = null,
 )
 
@@ -40,7 +67,19 @@ data class TtsSpeakRequest(
 )
 
 @Serializable
+data class TtsSpeakRequest(
+  @SerialName("text") val text: String,
+  @SerialName("voice") val voice: String? = null,
+)
+
+@Serializable
 object TtsSpeakResponse
+
+@Serializable
+object TtsSpeakResponse
+
+@Serializable
+object TtsStopRequest
 
 @Serializable
 object TtsStopRequest
@@ -49,40 +88,176 @@ object TtsStopRequest
 object TtsStopResponse
 
 @Serializable
+object TtsStopResponse
+
+@Serializable
+object VoiceCancelRequest
+
+@Serializable
 object VoiceCancelRequest
 
 @Serializable
 object VoiceCancelResponse
 
 @Serializable
-enum class VoiceEvent {
-  @SerialName("voice_wakeword")
-  VOICE_WAKEWORD,
-  @SerialName("voice_wakeword_state")
-  VOICE_WAKEWORD_STATE,
-  @SerialName("voice_transcription")
-  VOICE_TRANSCRIPTION,
-  @SerialName("ai_state")
-  AI_STATE,
-  @SerialName("ai_response")
-  AI_RESPONSE,
-  @SerialName("ai_tool_executed")
-  AI_TOOL_EXECUTED,
+object VoiceCancelResponse
+
+@Serializable
+sealed interface VoiceEvent {
+  @Serializable
+  @SerialName("voice.wakeword")
+  data class VoiceWakeword(
+    @SerialName("keyword") val keyword: String,
+    @SerialName("confidence") val confidence: Double,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("voice.wakeword.state")
+  data class VoiceWakewordState(
+    @SerialName("muted") val muted: Boolean,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("voice.transcription")
+  data class VoiceTranscription(
+    @SerialName("transcript") val transcript: String,
+    @SerialName("is_final") val isFinal: Boolean,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.state")
+  data class AiState(
+    @SerialName("state") val state: String,
+    @SerialName("message") val message: String? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.response")
+  data class AiResponse(
+    @SerialName("message") val message: String? = null,
+    @SerialName("text") val text: String? = null,
+    @SerialName("is_final") val isFinal: Boolean? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.tool_executed")
+  data class AiToolExecuted(
+    @SerialName("tool_name") val toolName: String? = null,
+    @SerialName("tool") val tool: String? = null,
+    @SerialName("call_id") val callId: String? = null,
+    @SerialName("status") val status: String? = null,
+    @SerialName("tool_arguments") val toolArguments: Value? = null,
+    @SerialName("result") val result: Value? = null,
+    @SerialName("error") val error: String? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
 }
 
 @Serializable
-enum class VoiceMethod {
-  @SerialName("wakeword_pause")
-  WAKEWORD_PAUSE,
-  @SerialName("wakeword_resume")
-  WAKEWORD_RESUME,
-  @SerialName("tts_speak")
-  TTS_SPEAK,
-  @SerialName("tts_stop")
-  TTS_STOP,
-  @SerialName("voice_cancel")
-  VOICE_CANCEL,
+sealed interface VoiceEvent {
+  @Serializable
+  @SerialName("voice.wakeword")
+  data class VoiceWakeword(
+    @SerialName("keyword") val keyword: String,
+    @SerialName("confidence") val confidence: Double,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("voice.wakeword.state")
+  data class VoiceWakewordState(
+    @SerialName("muted") val muted: Boolean,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("voice.transcription")
+  data class VoiceTranscription(
+    @SerialName("transcript") val transcript: String,
+    @SerialName("is_final") val isFinal: Boolean,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.state")
+  data class AiState(
+    @SerialName("state") val state: String,
+    @SerialName("message") val message: String? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.response")
+  data class AiResponse(
+    @SerialName("message") val message: String? = null,
+    @SerialName("text") val text: String? = null,
+    @SerialName("is_final") val isFinal: Boolean? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
+  @Serializable
+  @SerialName("ai.tool_executed")
+  data class AiToolExecuted(
+    @SerialName("tool_name") val toolName: String? = null,
+    @SerialName("tool") val tool: String? = null,
+    @SerialName("call_id") val callId: String? = null,
+    @SerialName("status") val status: String? = null,
+    @SerialName("tool_arguments") val toolArguments: Value? = null,
+    @SerialName("result") val result: Value? = null,
+    @SerialName("error") val error: String? = null,
+    @SerialName("session_id") val sessionId: String? = null,
+  ) : VoiceEvent
 }
+
+@Serializable
+sealed interface VoiceMethod {
+  @Serializable
+  @SerialName("wakeword.pause")
+  data class WakewordPause(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("wakeword.resume")
+  data class WakewordResume(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("tts.speak")
+  data class TtsSpeak(
+    @SerialName("text") val text: String,
+    @SerialName("voice") val voice: String? = null,
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("tts.stop")
+  data class TtsStop(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("voice.cancel")
+  data class VoiceCancel(
+  ) : VoiceMethod
+}
+
+@Serializable
+sealed interface VoiceMethod {
+  @Serializable
+  @SerialName("wakeword.pause")
+  data class WakewordPause(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("wakeword.resume")
+  data class WakewordResume(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("tts.speak")
+  data class TtsSpeak(
+    @SerialName("text") val text: String,
+    @SerialName("voice") val voice: String? = null,
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("tts.stop")
+  data class TtsStop(
+  ) : VoiceMethod
+  @Serializable
+  @SerialName("voice.cancel")
+  data class VoiceCancel(
+  ) : VoiceMethod
+}
+
+@Serializable
+data class VoiceTranscriptionEvent(
+  @SerialName("transcript") val transcript: String,
+  @SerialName("is_final") val isFinal: Boolean,
+  @SerialName("session_id") val sessionId: String? = null,
+)
 
 @Serializable
 data class VoiceTranscriptionEvent(
@@ -98,9 +273,23 @@ data class VoiceWakewordEvent(
 )
 
 @Serializable
+data class VoiceWakewordEvent(
+  @SerialName("keyword") val keyword: String,
+  @SerialName("confidence") val confidence: Double,
+)
+
+@Serializable
 data class VoiceWakewordStateEvent(
   @SerialName("muted") val muted: Boolean,
 )
+
+@Serializable
+data class VoiceWakewordStateEvent(
+  @SerialName("muted") val muted: Boolean,
+)
+
+@Serializable
+object WakewordPauseRequest
 
 @Serializable
 object WakewordPauseRequest
@@ -111,7 +300,20 @@ data class WakewordPauseResponse(
 )
 
 @Serializable
+data class WakewordPauseResponse(
+  @SerialName("status") val status: String,
+)
+
+@Serializable
 object WakewordResumeRequest
+
+@Serializable
+object WakewordResumeRequest
+
+@Serializable
+data class WakewordResumeResponse(
+  @SerialName("status") val status: String,
+)
 
 @Serializable
 data class WakewordResumeResponse(

@@ -7,6 +7,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class OtaAbandon(
+  @SerialName("updateId") val updateId: String,
+)
+
+@Serializable
+object OtaActivateRequest
+
+@Serializable
 object OtaActivateRequest
 
 @Serializable
@@ -16,20 +24,99 @@ data class OtaActivateResponse(
 )
 
 @Serializable
+data class OtaActivateResponse(
+  @SerialName("success") val success: Boolean,
+  @SerialName("error") val error: String? = null,
+)
+
+@Serializable
+data class OtaAssetRange(
+  @SerialName("updateId") val updateId: String,
+  @SerialName("asset") val asset: String,
+  @SerialName("ranges") val ranges: List<RangeSpec>,
+)
+
+@Serializable
+data class OtaAssetRangeAbandon(
+  @SerialName("requestId") val requestId: Uuid,
+)
+
+@Serializable
+data class OtaAssetRangeChunk(
+  @SerialName("requestId") val requestId: Uuid,
+  @SerialName("partIndex") val partIndex: UInt,
+  @SerialName("offset") val offset: UInt,
+  @SerialName("bytes") val bytes: ByteArray,
+  @SerialName("last") val last: Boolean,
+)
+
+@Serializable
+data class OtaAssetRangeRejected(
+  @SerialName("requestId") val requestId: Uuid,
+  @SerialName("reason") val reason: String,
+)
+
+@Serializable
+data class OtaAssetRangeReply(
+  @SerialName("requestId") val requestId: Uuid,
+  @SerialName("totalSize") val totalSize: UInt,
+  @SerialName("parts") val parts: List<RangePart>,
+)
+
+@Serializable
+data class OtaBegin(
+  @SerialName("kind") val kind: OtaKind,
+  @SerialName("updateId") val updateId: String,
+  @SerialName("updateUrlBase") val updateUrlBase: String? = null,
+  @SerialName("expectedSha256") val expectedSha256: String,
+  @SerialName("expectedSize") val expectedSize: UInt,
+)
+
+@Serializable
+data class OtaBeginAck(
+  @SerialName("resumeFromOffset") val resumeFromOffset: UInt,
+)
+
+@Serializable
+data class OtaBeginRejected(
+  @SerialName("reason") val reason: String,
+)
+
+@Serializable
+data class OtaChunk(
+  @SerialName("updateId") val updateId: String,
+  @SerialName("offset") val offset: UInt,
+  @SerialName("bytes") val bytes: ByteArray,
+  @SerialName("last") val last: Boolean,
+)
+
+@Serializable
+data class OtaDownloadProgress(
+  @SerialName("updateId") val updateId: String,
+  @SerialName("percent") val percent: UByte,
+)
+
+@Serializable
+data class OtaError(
+  @SerialName("code") val code: OtaErrorCode,
+  @SerialName("msg") val msg: String,
+)
+
+@Serializable
 enum class OtaErrorCode {
-  @SerialName("unknown_update")
+  @SerialName("unknownUpdate")
   UNKNOWN_UPDATE,
-  @SerialName("offset_mismatch")
+  @SerialName("offsetMismatch")
   OFFSET_MISMATCH,
-  @SerialName("hash_mismatch")
+  @SerialName("hashMismatch")
   HASH_MISMATCH,
-  @SerialName("size_mismatch")
+  @SerialName("sizeMismatch")
   SIZE_MISMATCH,
   @SerialName("cancelled")
   CANCELLED,
-  @SerialName("write_failed")
+  @SerialName("writeFailed")
   WRITE_FAILED,
-  @SerialName("confirm_failed")
+  @SerialName("confirmFailed")
   CONFIRM_FAILED,
   @SerialName("internal")
   INTERNAL,
@@ -41,17 +128,39 @@ enum class OtaKind {
   IMAGE,
   @SerialName("daemon")
   DAEMON,
-  @SerialName("builtin_webapp")
+  @SerialName("builtinWebapp")
   BUILTIN_WEBAPP,
   @SerialName("bandaid")
   BANDAID,
 }
 
 @Serializable
-enum class OtaMethod {
-  @SerialName("ota_activate")
-  OTA_ACTIVATE,
+sealed interface OtaMethod {
+  @Serializable
+  @SerialName("ota.activate")
+  data class OtaActivate(
+  ) : OtaMethod
 }
+
+@Serializable
+sealed interface OtaMethod {
+  @Serializable
+  @SerialName("ota.activate")
+  data class OtaActivate(
+  ) : OtaMethod
+}
+
+@Serializable
+data class OtaPackageReady(
+  @SerialName("updateId") val updateId: String,
+  @SerialName("version") val version: String,
+  @SerialName("size") val size: UInt,
+  @SerialName("expectedSha256") val expectedSha256: String,
+  @SerialName("resumeFromOffset") val resumeFromOffset: UInt,
+  @SerialName("maxTransferChunkSize") val maxTransferChunkSize: UInt? = null,
+  @SerialName("supportsChunkedTransferResponse") val supportsChunkedTransferResponse: Boolean? = null,
+  @SerialName("transferDataEncoding") val transferDataEncoding: String? = null,
+)
 
 @Serializable
 enum class OtaPhase {
@@ -69,3 +178,24 @@ enum class OtaPhase {
   REBOOT,
 }
 
+@Serializable
+data class OtaProgress(
+  @SerialName("phase") val phase: OtaPhase,
+  @SerialName("percent") val percent: UByte,
+  @SerialName("etaMs") val etaMs: UInt? = null,
+  @SerialName("asset") val asset: String? = null,
+  @SerialName("transferredBytes") val transferredBytes: UInt? = null,
+  @SerialName("totalBytes") val totalBytes: UInt? = null,
+)
+
+@Serializable
+data class RangePart(
+  @SerialName("start") val start: UInt,
+  @SerialName("length") val length: UInt,
+)
+
+@Serializable
+data class RangeSpec(
+  @SerialName("start") val start: UInt,
+  @SerialName("length") val length: UInt,
+)

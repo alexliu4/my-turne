@@ -31,6 +31,7 @@ fn device_inventory() -> Inventory {
     Inventory {
         wire_enums: HashMap::new(),
         enums: HashMap::new(),
+        structs: HashMap::new(),
         markers: HashMap::new(),
         typed_requests: Vec::new(),
         methods: Box::leak(methods.into_boxed_slice()),

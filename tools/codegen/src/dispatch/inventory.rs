@@ -23,7 +23,7 @@ use syn::{
     Variant,
 };
 
-use super::casing::snake_to_camel;
+use super::{casing::snake_to_camel, rust::RustFieldType};
 
 pub const BRIDGE_TO_GATEWAY: &str = "BridgeToGatewayMsgData";
 pub const GATEWAY_TO_BRIDGE: &str = "GatewayToBridgeMsgData";
@@ -447,6 +447,7 @@ pub enum MarkerKind {
 #[derive(Debug, Clone)]
 pub struct WireVariant {
     pub name: String,
+    pub wire_value: Option<String>,
     /// Single-field tuple-variant payload. `None` for unit variants AND
     /// for struct-shaped variants - the latter are exposed only at the
     /// parent enum level because per-language type-paths to them differ
@@ -462,6 +463,22 @@ pub struct WireVariant {
     /// `meta.kind` per variant inside an inner enum that mixes events
     /// with commands. `None` for outer wire enums (no per-variant tag).
     pub tag: Option<VariantTag>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<StructFieldDef>,
+    pub rename_all: Option<String>,
+    pub skip_serializing_none: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructFieldDef {
+    pub name: String,
+    pub wire_name: String,
+    pub ty: RustFieldType,
+    pub optional: bool,
 }
 
 /// Per-variant tag inferred from `#[bridge_event]` / `#[bridge_command]`
@@ -551,6 +568,7 @@ impl MarkerSet {
 pub struct Inventory {
     pub wire_enums: HashMap<String, EnumDef>,
     pub enums: HashMap<String, EnumDef>,
+    pub structs: HashMap<String, StructDef>,
     pub markers: HashMap<String, MarkerSet>,
     pub typed_requests: Vec<TypedRequest>,
     pub methods: &'static [Method],
@@ -3520,6 +3538,7 @@ pub const CSM_INVENTORY: &[Csm] = &[
 pub fn inventory(lib_src: &str) -> Result<Inventory> {
     let mut wire_enums = HashMap::new();
     let mut enums = HashMap::new();
+    let mut structs = HashMap::new();
     let mut markers: HashMap<String, MarkerSet> = HashMap::new();
     let mut typed_requests: Vec<TypedRequest> = Vec::new();
     let mut uuid_field_names: BTreeSet<String> = BTreeSet::new();
@@ -3527,6 +3546,9 @@ pub fn inventory(lib_src: &str) -> Result<Inventory> {
     for entry in walkdir::WalkDir::new(lib_src) {
         let entry = entry.context("walk lib_src")?;
         let path = entry.path();
+        if path.components().any(|c| c.as_os_str() == "generated") {
+            continue;
+        }
         if !entry.file_type().is_file() {
             continue;
         }
@@ -3549,6 +3571,7 @@ pub fn inventory(lib_src: &str) -> Result<Inventory> {
             &parsed.items,
             &mut wire_enums,
             &mut enums,
+            &mut structs,
             &mut markers,
             &mut typed_requests,
             &mut uuid_field_names,
@@ -3558,6 +3581,7 @@ pub fn inventory(lib_src: &str) -> Result<Inventory> {
     Ok(Inventory {
         wire_enums,
         enums,
+        structs,
         markers,
         typed_requests,
         methods: METHOD_INVENTORY,
@@ -3571,6 +3595,7 @@ fn walk_items(
     items: &[Item],
     wire_enums: &mut HashMap<String, EnumDef>,
     enums: &mut HashMap<String, EnumDef>,
+    structs: &mut HashMap<String, StructDef>,
     markers: &mut HashMap<String, MarkerSet>,
     typed_requests: &mut Vec<TypedRequest>,
     uuid_field_names: &mut BTreeSet<String>,
@@ -3622,6 +3647,13 @@ fn walk_items(
             }
             Item::Struct(s) => {
                 let name = s.ident.to_string();
+                if has_derive(&s.attrs, "Serialize")
+                    || has_derive(&s.attrs, "Deserialize")
+                    || has_attr(&s.attrs, "typeshare")
+                {
+                    let def = collect_struct(s);
+                    structs.insert(name.clone(), def);
+                }
                 for (kind, dir) in standalone_markers(&s.attrs) {
                     markers
                         .entry(name.clone())
@@ -3642,6 +3674,7 @@ fn walk_items(
                         sub_items,
                         wire_enums,
                         enums,
+                        structs,
                         markers,
                         typed_requests,
                         uuid_field_names,
@@ -3818,14 +3851,26 @@ fn parse_wire_request_attr(s: &ItemStruct) -> Option<TypedRequest> {
 }
 
 fn collect_enum(en: &ItemEnum) -> EnumDef {
+    let rename_all = serde_rename_all(&en.attrs);
     let variants = en
         .variants
         .iter()
-        .map(|v| WireVariant {
-            name: v.ident.to_string(),
-            payload: variant_single_payload(&v.fields),
-            is_struct: matches!(v.fields, Fields::Named(_)),
-            tag: variant_tag(&v.attrs),
+        .map(|v| {
+            let variant_rename = serde_rename(&v.attrs);
+            let wire_value = variant_rename.unwrap_or_else(|| {
+                if rename_all.as_deref() == Some("camelCase") {
+                    lower_first(&v.ident.to_string())
+                } else {
+                    v.ident.to_string()
+                }
+            });
+            WireVariant {
+                name: v.ident.to_string(),
+                wire_value: Some(wire_value),
+                payload: variant_single_payload(&v.fields),
+                is_struct: matches!(v.fields, Fields::Named(_)),
+                tag: variant_tag(&v.attrs),
+            }
         })
         .collect();
     let tag_field = serde_tag_field(&en.attrs).unwrap_or_else(|| "type".to_string());
@@ -3833,6 +3878,140 @@ fn collect_enum(en: &ItemEnum) -> EnumDef {
         name: en.ident.to_string(),
         variants,
         tag_field,
+    }
+}
+
+fn collect_struct(s: &ItemStruct) -> StructDef {
+    let rename_all = serde_rename_all(&s.attrs);
+    let skip_serializing_none = has_attr(&s.attrs, "skip_serializing_none");
+    let mut fields = Vec::new();
+    if let Fields::Named(named) = &s.fields {
+        for f in &named.named {
+            let Some(ident) = &f.ident else { continue };
+            let name = ident.to_string();
+            let field_rename = serde_rename(&f.attrs);
+            let wire_name = field_rename.unwrap_or_else(|| {
+                if rename_all.as_deref() == Some("camelCase") {
+                    snake_to_camel(&name)
+                } else {
+                    name.clone()
+                }
+            });
+            let (ty, optional) = parse_rust_field_type(&f.ty);
+            fields.push(StructFieldDef {
+                name,
+                wire_name,
+                ty,
+                optional,
+            });
+        }
+    }
+    StructDef {
+        name: s.ident.to_string(),
+        fields,
+        rename_all,
+        skip_serializing_none,
+    }
+}
+
+fn parse_rust_field_type(ty: &Type) -> (RustFieldType, bool) {
+    if let Type::Path(p) = ty
+        && let Some(seg) = p.path.segments.last()
+    {
+        if seg.ident == "Option"
+            && let PathArguments::AngleBracketed(args) = &seg.arguments
+            && let Some(GenericArgument::Type(inner)) = args.args.first()
+        {
+            let (inner_ty, _) = parse_rust_field_type(inner);
+            return (inner_ty, true);
+        }
+        if seg.ident == "Vec"
+            && let PathArguments::AngleBracketed(args) = &seg.arguments
+            && let Some(GenericArgument::Type(inner)) = args.args.first()
+        {
+            let (inner_ty, _) = parse_rust_field_type(inner);
+            if matches!(inner_ty, RustFieldType::U8) {
+                return (RustFieldType::Bytes, false);
+            }
+            return (RustFieldType::Vec(Box::new(inner_ty)), false);
+        }
+        let name = seg.ident.to_string();
+        let field_ty = match name.as_str() {
+            "bool" => RustFieldType::Bool,
+            "u8" => RustFieldType::U8,
+            "i8" => RustFieldType::I8,
+            "u16" => RustFieldType::U16,
+            "i16" => RustFieldType::I16,
+            "u32" => RustFieldType::U32,
+            "i32" => RustFieldType::I32,
+            "u64" => RustFieldType::U64,
+            "i64" => RustFieldType::I64,
+            "f32" => RustFieldType::F32,
+            "f64" => RustFieldType::F64,
+            "String" => RustFieldType::String,
+            "Value" => RustFieldType::JsonValue,
+            _ => RustFieldType::Named(name),
+        };
+        return (field_ty, false);
+    }
+    (RustFieldType::Named("Value".to_string()), false)
+}
+
+fn has_attr(attrs: &[Attribute], name: &str) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident(name))
+}
+
+fn serde_rename_all(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let Ok(nested) = attr.parse_args_with(
+            syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
+        ) else {
+            continue;
+        };
+        for meta in nested {
+            if let Meta::NameValue(nv) = meta
+                && nv.path.is_ident("rename_all")
+                && let syn::Expr::Lit(lit) = nv.value
+                && let syn::Lit::Str(s) = lit.lit
+            {
+                return Some(s.value());
+            }
+        }
+    }
+    None
+}
+
+fn serde_rename(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let Ok(nested) = attr.parse_args_with(
+            syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
+        ) else {
+            continue;
+        };
+        for meta in nested {
+            if let Meta::NameValue(nv) = meta
+                && nv.path.is_ident("rename")
+                && let syn::Expr::Lit(lit) = nv.value
+                && let syn::Lit::Str(s) = lit.lit
+            {
+                return Some(s.value());
+            }
+        }
+    }
+    None
+}
+
+fn lower_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(f) => f.to_lowercase().collect::<String>() + chars.as_str(),
     }
 }
 

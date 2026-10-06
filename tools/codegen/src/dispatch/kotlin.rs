@@ -52,7 +52,7 @@ pub fn write_schema_to_dir(schema: &RustSchema, out_dir: impl AsRef<Path>) -> Re
 
     for module in complete_modules(schema) {
         let path = out_dir.join(format!("{}.kt", family_type_name(module.family)));
-        std::fs::write(&path, render_family_module(&module))
+        std::fs::write(&path, render_family_module(&module, schema))
             .with_context(|| format!("write {}", path.display()))?;
     }
 
@@ -108,7 +108,7 @@ fn render_aggregate_file() -> String {
     out
 }
 
-fn render_family_module(module: &RustModule) -> String {
+fn render_family_module(module: &RustModule, schema: &RustSchema) -> String {
     let mut out = generated_header();
     out.push_str(&format!("package {KOTLIN_PACKAGE}\n\n"));
     if module.family == Family::Iap2 {
@@ -121,7 +121,7 @@ fn render_family_module(module: &RustModule) -> String {
     for item in &module.items {
         match item {
             RustItem::Struct(item) => render_struct(&mut out, item),
-            RustItem::Enum(item) => render_enum(&mut out, item),
+            RustItem::Enum(item) => render_enum(&mut out, item, schema),
         }
         out.push('\n');
     }
@@ -148,17 +148,69 @@ fn render_struct(out: &mut String, item: &RustStruct) {
     out.push_str(")\n");
 }
 
-fn render_enum(out: &mut String, item: &RustEnum) {
-    out.push_str("@Serializable\n");
-    out.push_str(&format!("enum class {} {{\n", item.name));
-    for variant in &item.variants {
-        let serial_name = pascal_to_snake(&variant.name);
-        out.push_str(&format!(
-            "  @SerialName({serial_name:?})\n  {},\n",
-            enum_case_name(&serial_name)
-        ));
+fn render_enum(out: &mut String, item: &RustEnum, schema: &RustSchema) {
+    let is_simple_enum = item.variants.iter().all(|v| v.payload.is_none());
+    if is_simple_enum {
+        out.push_str("@Serializable\n");
+        out.push_str(&format!("enum class {} {{\n", item.name));
+        for variant in &item.variants {
+            let serial_name = variant.wire_value.as_deref().unwrap_or(&variant.name);
+            let case_name = enum_case_name(&pascal_to_snake(&variant.name));
+            out.push_str(&format!(
+                "  @SerialName({serial_name:?})\n  {case_name},\n"
+            ));
+        }
+        out.push_str("}\n");
+    } else {
+        out.push_str("@Serializable\n");
+        out.push_str(&format!("sealed interface {} {{\n", item.name));
+        for variant in &item.variants {
+            let serial_name = variant.wire_value.as_deref().unwrap_or(&variant.name);
+            let class_name = &variant.name;
+            if let Some(payload_ty) = &variant.payload {
+                out.push_str("  @Serializable\n");
+                out.push_str(&format!("  @SerialName({serial_name:?})\n"));
+                if let RustFieldType::Named(struct_name) = payload_ty
+                    && let Some(struct_item) = find_struct(schema, struct_name)
+                {
+                    out.push_str(&format!("  data class {class_name}(\n"));
+                    for field in &struct_item.fields {
+                        let field_name = snake_to_camel(&field.name);
+                        out.push_str(&format!(
+                            "    @SerialName({:?}) val {field_name}: {},\n",
+                            field.name,
+                            field.ty.kotlin()
+                        ));
+                    }
+                    out.push_str(&format!("  ) : {}\n", item.name));
+                } else {
+                    out.push_str(&format!(
+                        "  data class {class_name}(val payload: {}): {}\n",
+                        payload_ty.kotlin(),
+                        item.name
+                    ));
+                }
+            } else {
+                out.push_str("  @Serializable\n");
+                out.push_str(&format!("  @SerialName({serial_name:?})\n"));
+                out.push_str(&format!("  object {class_name} : {}\n", item.name));
+            }
+        }
+        out.push_str("}\n");
     }
-    out.push_str("}\n");
+}
+
+fn find_struct<'a>(schema: &'a RustSchema, name: &str) -> Option<&'a RustStruct> {
+    for module in &schema.modules {
+        for item in &module.items {
+            if let RustItem::Struct(s) = item
+                && s.name == name
+            {
+                return Some(s);
+            }
+        }
+    }
+    None
 }
 
 impl KotlinFieldType for RustFieldType {
@@ -318,17 +370,17 @@ mod tests {
             .find(|module| module.family == Family::Device)
             .expect("device module emitted");
 
-        let out = render_family_module(module);
+        let out = render_family_module(module, &schema);
 
         assert!(out.contains("package dev.nocturne.schema"));
         assert!(out.contains("import kotlinx.serialization.SerialName"));
         assert!(out.contains("@Serializable\ndata class SetVolumeRequest("));
         assert!(out.contains("@SerialName(\"volume_percent\") val volumePercent: UByte,"));
         assert!(out.contains("@SerialName(\"is_charging\") val isCharging: Boolean,"));
-        assert!(out.contains("@Serializable\nenum class DeviceMethod"));
-        assert!(out.contains("@SerialName(\"set_volume\")\n  SET_VOLUME,"));
-        assert!(out.contains("@Serializable\nenum class DeviceEvent"));
-        assert!(out.contains("@SerialName(\"battery_changed\")\n  BATTERY_CHANGED,"));
+        assert!(out.contains("@Serializable\nsealed interface DeviceMethod"));
+        assert!(out.contains("@SerialName(\"set_volume\")\n  data class SetVolume("));
+        assert!(out.contains("@Serializable\nsealed interface DeviceEvent"));
+        assert!(out.contains("@SerialName(\"battery_changed\")\n  data class BatteryChanged("));
     }
 
     #[test]
@@ -340,7 +392,7 @@ mod tests {
             .find(|module| module.family == Family::Device)
             .expect("device module emitted");
 
-        let out = render_family_module(module);
+        let out = render_family_module(module, &schema);
 
         assert!(out.contains("@Serializable\nobject EmptyRequestRequest"));
         assert!(out.contains("@Serializable\ndata class EmptyRequestResponse("));
@@ -357,6 +409,7 @@ mod tests {
                 tag_field: "type".to_string(),
                 variants: vec![WireVariant {
                     name: "Ready".to_string(),
+                    wire_value: Some("ready".to_string()),
                     payload: None,
                     is_struct: false,
                     tag: None,
@@ -366,6 +419,7 @@ mod tests {
         let inventory = Inventory {
             wire_enums: HashMap::new(),
             enums,
+            structs: HashMap::new(),
             markers: HashMap::new(),
             typed_requests: Vec::new(),
             methods: Box::leak(vec![SET_VOLUME_METHOD].into_boxed_slice()),
@@ -380,15 +434,15 @@ mod tests {
             .find(|module| module.family == Family::Device)
             .expect("device module emitted");
 
-        let out = render_family_module(module);
+        let out = render_family_module(module, &schema);
 
         assert!(out.contains("@Serializable\nenum class DeviceMode"));
         assert!(out.contains("@SerialName(\"ready\")\n  READY,"));
         assert!(out.contains("@Serializable\ndata class SetVolumeRequest("));
         assert!(out.contains("@Serializable\ndata class SetVolumeResponse("));
         assert!(out.contains("@Serializable\ndata class BatteryChangedEvent("));
-        assert!(out.contains("@SerialName(\"set_volume\")\n  SET_VOLUME,"));
-        assert!(out.contains("@SerialName(\"battery_changed\")\n  BATTERY_CHANGED,"));
+        assert!(out.contains("@SerialName(\"set_volume\")\n  data class SetVolume("));
+        assert!(out.contains("@SerialName(\"battery_changed\")\n  data class BatteryChanged("));
     }
 
     #[test]

@@ -119,6 +119,30 @@ pub fn write_schema_to_dir(schema: &SwiftSchema, out_dir: impl AsRef<Path>) -> R
 
 pub fn schema_from_inventory(inventory: &Inventory) -> SwiftSchema {
     let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
+
+    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    structs.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for def in structs {
+        let family = infer_family(&def.name);
+        push_item(
+            &mut schema,
+            family,
+            SwiftItem::Struct(SwiftStruct {
+                name: def.name.clone(),
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|f| SwiftField {
+                        name: snake_to_camel(&f.name),
+                        wire_name: f.wire_name.clone(),
+                        ty: swift_type_from_rust_field(&f.ty, f.optional),
+                    })
+                    .collect(),
+            }),
+        );
+    }
+
     let mut enums: Vec<&EnumDef> = Vec::new();
     enums.extend(inventory.wire_enums.values());
     enums.extend(inventory.enums.values());
@@ -256,10 +280,39 @@ fn enum_from_inventory(def: &EnumDef) -> SwiftEnum {
             .iter()
             .map(|variant| SwiftEnumCase {
                 name: lower_first(&variant.name),
-                wire_value: lower_first(&variant.name),
+                wire_value: variant
+                    .wire_value
+                    .clone()
+                    .unwrap_or_else(|| lower_first(&variant.name)),
                 payload: variant.payload.as_ref().map(type_from_payload),
             })
             .collect(),
+    }
+}
+
+fn swift_type_from_rust_field(ty: &crate::dispatch::rust::RustFieldType, optional: bool) -> SwiftFieldType {
+    use crate::dispatch::rust::RustFieldType;
+    let swift_ty = match ty {
+        RustFieldType::Bool => SwiftFieldType::Bool,
+        RustFieldType::U8 | RustFieldType::I8 => SwiftFieldType::UInt8,
+        RustFieldType::U16 | RustFieldType::I16 => SwiftFieldType::UInt16,
+        RustFieldType::U32 | RustFieldType::I32 => SwiftFieldType::UInt32,
+        RustFieldType::U64 => SwiftFieldType::UInt64,
+        RustFieldType::I64 => SwiftFieldType::Int64,
+        RustFieldType::F32 | RustFieldType::F64 => SwiftFieldType::Double,
+        RustFieldType::String => SwiftFieldType::String,
+        RustFieldType::Bytes => SwiftFieldType::Data,
+        RustFieldType::JsonValue => SwiftFieldType::Value,
+        RustFieldType::Named(name) => SwiftFieldType::Named(name.clone()),
+        RustFieldType::Vec(inner) => {
+            SwiftFieldType::Array(Box::new(swift_type_from_rust_field(inner, false)))
+        }
+        RustFieldType::Option(inner) => swift_type_from_rust_field(inner, true),
+    };
+    if optional {
+        SwiftFieldType::Optional(Box::new(swift_ty))
+    } else {
+        swift_ty
     }
 }
 
@@ -332,7 +385,9 @@ fn push_item(schema: &mut SwiftSchema, family: Family, item: SwiftItem) {
         .iter_mut()
         .find(|module| module.family == family)
         .expect("all families initialized");
-    module.items.push(item);
+    if !module.items.iter().any(|existing| existing.name() == item.name()) {
+        module.items.push(item);
+    }
 }
 
 fn sort_schema(schema: &mut SwiftSchema) {
@@ -703,6 +758,7 @@ mod tests {
                 tag_field: "type".to_string(),
                 variants: vec![WireVariant {
                     name: "Ready".to_string(),
+                    wire_value: Some("ready".to_string()),
                     payload: None,
                     is_struct: false,
                     tag: None,
@@ -712,6 +768,7 @@ mod tests {
         let inventory = Inventory {
             wire_enums: HashMap::new(),
             enums,
+            structs: HashMap::new(),
             markers: HashMap::new(),
             typed_requests: Vec::new(),
             methods: Box::leak(vec![SET_VOLUME_METHOD].into_boxed_slice()),

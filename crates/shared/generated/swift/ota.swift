@@ -3,6 +3,20 @@
 
 import Foundation
 
+public struct OtaAbandon: Codable, Sendable {
+  public let updateId: String
+
+  public init(
+    updateId: String
+  ) {
+    self.updateId = updateId
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case updateId = "updateId"
+  }
+}
+
 public struct OtaActivateRequest: Codable, Sendable {
   public init() {}
 }
@@ -22,6 +36,232 @@ public struct OtaActivateResponse: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case success = "success"
     case error = "error"
+  }
+}
+
+public struct OtaAssetRange: Codable, Sendable {
+  public let updateId: String
+  public let asset: String
+  public let ranges: [RangeSpec]
+
+  public init(
+    updateId: String,
+    asset: String,
+    ranges: [RangeSpec]
+  ) {
+    self.updateId = updateId
+    self.asset = asset
+    self.ranges = ranges
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case updateId = "updateId"
+    case asset = "asset"
+    case ranges = "ranges"
+  }
+}
+
+public struct OtaAssetRangeAbandon: Codable, Sendable {
+  public let requestId: Uuid
+
+  public init(
+    requestId: Uuid
+  ) {
+    self.requestId = requestId
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+  }
+}
+
+public struct OtaAssetRangeChunk: Codable, Sendable {
+  public let requestId: Uuid
+  public let partIndex: UInt32
+  public let offset: UInt32
+  public let bytes: Data
+  public let last: Bool
+
+  public init(
+    requestId: Uuid,
+    partIndex: UInt32,
+    offset: UInt32,
+    bytes: Data,
+    last: Bool
+  ) {
+    self.requestId = requestId
+    self.partIndex = partIndex
+    self.offset = offset
+    self.bytes = bytes
+    self.last = last
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+    case partIndex = "partIndex"
+    case offset = "offset"
+    case bytes = "bytes"
+    case last = "last"
+  }
+}
+
+public struct OtaAssetRangeRejected: Codable, Sendable {
+  public let requestId: Uuid
+  public let reason: String
+
+  public init(
+    requestId: Uuid,
+    reason: String
+  ) {
+    self.requestId = requestId
+    self.reason = reason
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+    case reason = "reason"
+  }
+}
+
+public struct OtaAssetRangeReply: Codable, Sendable {
+  public let requestId: Uuid
+  public let totalSize: UInt32
+  public let parts: [RangePart]
+
+  public init(
+    requestId: Uuid,
+    totalSize: UInt32,
+    parts: [RangePart]
+  ) {
+    self.requestId = requestId
+    self.totalSize = totalSize
+    self.parts = parts
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+    case totalSize = "totalSize"
+    case parts = "parts"
+  }
+}
+
+public struct OtaBegin: Codable, Sendable {
+  public let kind: OtaKind
+  public let updateId: String
+  public let updateUrlBase: String?
+  public let expectedSha256: String
+  public let expectedSize: UInt32
+
+  public init(
+    kind: OtaKind,
+    updateId: String,
+    updateUrlBase: String?,
+    expectedSha256: String,
+    expectedSize: UInt32
+  ) {
+    self.kind = kind
+    self.updateId = updateId
+    self.updateUrlBase = updateUrlBase
+    self.expectedSha256 = expectedSha256
+    self.expectedSize = expectedSize
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case kind = "kind"
+    case updateId = "updateId"
+    case updateUrlBase = "updateUrlBase"
+    case expectedSha256 = "expectedSha256"
+    case expectedSize = "expectedSize"
+  }
+}
+
+public struct OtaBeginAck: Codable, Sendable {
+  public let resumeFromOffset: UInt32
+
+  public init(
+    resumeFromOffset: UInt32
+  ) {
+    self.resumeFromOffset = resumeFromOffset
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case resumeFromOffset = "resumeFromOffset"
+  }
+}
+
+public struct OtaBeginRejected: Codable, Sendable {
+  public let reason: String
+
+  public init(
+    reason: String
+  ) {
+    self.reason = reason
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case reason = "reason"
+  }
+}
+
+public struct OtaChunk: Codable, Sendable {
+  public let updateId: String
+  public let offset: UInt32
+  public let bytes: Data
+  public let last: Bool
+
+  public init(
+    updateId: String,
+    offset: UInt32,
+    bytes: Data,
+    last: Bool
+  ) {
+    self.updateId = updateId
+    self.offset = offset
+    self.bytes = bytes
+    self.last = last
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case updateId = "updateId"
+    case offset = "offset"
+    case bytes = "bytes"
+    case last = "last"
+  }
+}
+
+public struct OtaDownloadProgress: Codable, Sendable {
+  public let updateId: String
+  public let percent: UInt8
+
+  public init(
+    updateId: String,
+    percent: UInt8
+  ) {
+    self.updateId = updateId
+    self.percent = percent
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case updateId = "updateId"
+    case percent = "percent"
+  }
+}
+
+public struct OtaError: Codable, Sendable {
+  public let code: OtaErrorCode
+  public let msg: String
+
+  public init(
+    code: OtaErrorCode,
+    msg: String
+  ) {
+    self.code = code
+    self.msg = msg
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case code = "code"
+    case msg = "msg"
   }
 }
 
@@ -47,6 +287,48 @@ public enum OtaMethod: Codable, Sendable {
   case otaActivate(OtaActivateRequest)
 }
 
+public struct OtaPackageReady: Codable, Sendable {
+  public let updateId: String
+  public let version: String
+  public let size: UInt32
+  public let expectedSha256: String
+  public let resumeFromOffset: UInt32
+  public let maxTransferChunkSize: UInt32?
+  public let supportsChunkedTransferResponse: Bool?
+  public let transferDataEncoding: String?
+
+  public init(
+    updateId: String,
+    version: String,
+    size: UInt32,
+    expectedSha256: String,
+    resumeFromOffset: UInt32,
+    maxTransferChunkSize: UInt32?,
+    supportsChunkedTransferResponse: Bool?,
+    transferDataEncoding: String?
+  ) {
+    self.updateId = updateId
+    self.version = version
+    self.size = size
+    self.expectedSha256 = expectedSha256
+    self.resumeFromOffset = resumeFromOffset
+    self.maxTransferChunkSize = maxTransferChunkSize
+    self.supportsChunkedTransferResponse = supportsChunkedTransferResponse
+    self.transferDataEncoding = transferDataEncoding
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case updateId = "updateId"
+    case version = "version"
+    case size = "size"
+    case expectedSha256 = "expectedSha256"
+    case resumeFromOffset = "resumeFromOffset"
+    case maxTransferChunkSize = "maxTransferChunkSize"
+    case supportsChunkedTransferResponse = "supportsChunkedTransferResponse"
+    case transferDataEncoding = "transferDataEncoding"
+  }
+}
+
 public enum OtaPhase: String, Codable, Sendable {
   case downloading = "downloading"
   case streaming = "streaming"
@@ -56,3 +338,72 @@ public enum OtaPhase: String, Codable, Sendable {
   case reboot = "reboot"
 }
 
+public struct OtaProgress: Codable, Sendable {
+  public let phase: OtaPhase
+  public let percent: UInt8
+  public let etaMs: UInt32?
+  public let asset: String?
+  public let transferredBytes: UInt32?
+  public let totalBytes: UInt32?
+
+  public init(
+    phase: OtaPhase,
+    percent: UInt8,
+    etaMs: UInt32?,
+    asset: String?,
+    transferredBytes: UInt32?,
+    totalBytes: UInt32?
+  ) {
+    self.phase = phase
+    self.percent = percent
+    self.etaMs = etaMs
+    self.asset = asset
+    self.transferredBytes = transferredBytes
+    self.totalBytes = totalBytes
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case phase = "phase"
+    case percent = "percent"
+    case etaMs = "etaMs"
+    case asset = "asset"
+    case transferredBytes = "transferredBytes"
+    case totalBytes = "totalBytes"
+  }
+}
+
+public struct RangePart: Codable, Sendable {
+  public let start: UInt32
+  public let length: UInt32
+
+  public init(
+    start: UInt32,
+    length: UInt32
+  ) {
+    self.start = start
+    self.length = length
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case start = "start"
+    case length = "length"
+  }
+}
+
+public struct RangeSpec: Codable, Sendable {
+  public let start: UInt32
+  public let length: UInt32
+
+  public init(
+    start: UInt32,
+    length: UInt32
+  ) {
+    self.start = start
+    self.length = length
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case start = "start"
+    case length = "length"
+  }
+}

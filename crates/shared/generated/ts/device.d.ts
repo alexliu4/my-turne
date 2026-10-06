@@ -111,6 +111,14 @@ export interface AppReadyEventTimezone {
 }
 
 /**
+ * Generated enum `Compression`.
+ */
+export type Compression =
+  | "Gzip"
+  | "None"
+;
+
+/**
  * Request envelope for `device.ab.failover` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `device.ab.failover`.
  */
@@ -1460,6 +1468,115 @@ export interface DeviceVersionResponse {
 }
 
 /**
+ * Generated enum `Encoding`.
+ */
+export type Encoding =
+  | "Msgpack"
+  | "Json"
+;
+
+/**
+ * Generated struct `HostAction`.
+ */
+export interface HostAction {
+  /**
+   * Inventory field `request_id`.
+   */
+  requestId: string;
+  /**
+   * Inventory field `action`.
+   */
+  action: string;
+  /**
+   * Inventory field `payload`.
+   */
+  payload?: unknown;
+}
+
+/**
+ * Generated struct `HostActionResult`.
+ */
+export interface HostActionResult {
+  /**
+   * Inventory field `request_id`.
+   */
+  requestId: string;
+  /**
+   * Inventory field `success`.
+   */
+  success: boolean;
+  /**
+   * Inventory field `payload`.
+   */
+  payload?: unknown;
+  /**
+   * Inventory field `error`.
+   */
+  error?: string;
+}
+
+/**
+ * Generated enum `HostCapability`.
+ */
+export type HostCapability =
+  | "media"
+  | "volume"
+  | "discord"
+  | "systemStats"
+  | "macros"
+  | "appLaunch"
+;
+
+/**
+ * Generated struct `HostHello`.
+ */
+export interface HostHello {
+  /**
+   * Inventory field `protocol_version`.
+   */
+  protocolVersion: number;
+  /**
+   * Inventory field `host_name`.
+   */
+  hostName: string;
+  /**
+   * Inventory field `capabilities`.
+   */
+  capabilities: HostCapability[];
+}
+
+/**
+ * Generated enum `HostMessage`.
+ */
+export type HostMessage =
+  | ({ type: "host.hello" } & HostHello)
+  | ({ type: "host.status" } & HostStatus)
+  | ({ type: "host.action" } & HostAction)
+  | ({ type: "host.actionResult" } & HostActionResult)
+  | { type: "Unknown" }
+;
+
+/**
+ * Generated struct `HostStatus`.
+ */
+export interface HostStatus {
+  /**
+   * Inventory field `connected`.
+   */
+  connected: boolean;
+}
+
+/**
+ * Generated enum `MsgMeta`.
+ */
+export type MsgMeta =
+  | { type: "command" }
+  | { type: "event" }
+  | { type: "request" }
+  | ({ type: "response" } & ResponseMeta)
+;
+
+/**
  * Event payload for `network.status`.
  * Network connectivity event.
  * Inventory: `EVENT_INVENTORY` entry `network.status` payload.
@@ -1635,6 +1752,14 @@ export interface OnboardingSetStateResponse {
 }
 
 /**
+ * Generated enum `Priority`.
+ */
+export type Priority =
+  | "normal"
+  | "bulk"
+;
+
+/**
  * Request envelope for `reset_boot_counter` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `reset_boot_counter`.
  */
@@ -1689,6 +1814,16 @@ export interface ResetBootCounterResponse {
 }
 
 /**
+ * Generated struct `ResponseMeta`.
+ */
+export interface ResponseMeta {
+  /**
+   * Inventory field `request_id`.
+   */
+  requestId: Uuid;
+}
+
+/**
  * Event payload for `subscription.updated`.
  * Subscription update event.
  * Inventory: `EVENT_INVENTORY` entry `subscription.updated` payload.
@@ -1731,3 +1866,12 @@ export interface SubscriptionUpdatedEventMessage {
   data: SubscriptionUpdatedEvent;
 }
 
+/**
+ * Generated enum `WireError`.
+ */
+export type WireError =
+  | { type: "unsupported" }
+  | { type: "unimplemented" }
+  | { type: "malformed" }
+  | { type: "handlerFailed" }
+;

@@ -23,6 +23,32 @@ data class BluetoothAgentEvent(
 )
 
 @Serializable
+data class BluetoothAgentEvent(
+  @SerialName("event") val event: String? = null,
+  @SerialName("device") val device: String? = null,
+  @SerialName("address") val address: String? = null,
+  @SerialName("name") val name: String? = null,
+  @SerialName("pin") val pin: String? = null,
+  @SerialName("pincode") val pincode: String? = null,
+  @SerialName("type") val type: String? = null,
+  @SerialName("passkey") val passkey: UInt? = null,
+  @SerialName("entered") val entered: UShort? = null,
+  @SerialName("uuid") val uuid: String? = null,
+  @SerialName("accepted") val accepted: Boolean? = null,
+  @SerialName("request_id") val requestId: String? = null,
+)
+
+@Serializable
+data class BluetoothConnectionEvent(
+  @SerialName("event") val event: String,
+  @SerialName("device") val device: String,
+  @SerialName("connection_type") val connectionType: String? = null,
+  @SerialName("device_type") val deviceType: String? = null,
+  @SerialName("channel") val channel: UByte? = null,
+  @SerialName("initiated_by") val initiatedBy: String? = null,
+)
+
+@Serializable
 data class BluetoothConnectionEvent(
   @SerialName("event") val event: String,
   @SerialName("device") val device: String,
@@ -40,6 +66,19 @@ data class BluetoothDeviceConnectRequest(
 )
 
 @Serializable
+data class BluetoothDeviceConnectRequest(
+  @SerialName("address") val address: String,
+  @SerialName("channel") val channel: UByte? = null,
+  @SerialName("device_type") val deviceType: String? = null,
+)
+
+@Serializable
+data class BluetoothDeviceConnectResponse(
+  @SerialName("status") val status: String,
+  @SerialName("device") val device: String,
+)
+
+@Serializable
 data class BluetoothDeviceConnectResponse(
   @SerialName("status") val status: String,
   @SerialName("device") val device: String,
@@ -48,6 +87,17 @@ data class BluetoothDeviceConnectResponse(
 @Serializable
 data class BluetoothDeviceDisconnectRequest(
   @SerialName("address") val address: String,
+)
+
+@Serializable
+data class BluetoothDeviceDisconnectRequest(
+  @SerialName("address") val address: String,
+)
+
+@Serializable
+data class BluetoothDeviceDisconnectResponse(
+  @SerialName("status") val status: String,
+  @SerialName("device") val device: String,
 )
 
 @Serializable
@@ -63,8 +113,25 @@ data class BluetoothDeviceEvent(
 )
 
 @Serializable
+data class BluetoothDeviceEvent(
+  @SerialName("event") val event: String,
+  @SerialName("device") val device: String,
+)
+
+@Serializable
 data class BluetoothDeviceUnpairRequest(
   @SerialName("address") val address: String,
+)
+
+@Serializable
+data class BluetoothDeviceUnpairRequest(
+  @SerialName("address") val address: String,
+)
+
+@Serializable
+data class BluetoothDeviceUnpairResponse(
+  @SerialName("status") val status: String,
+  @SerialName("device") val device: String,
 )
 
 @Serializable
@@ -77,6 +144,15 @@ data class BluetoothDeviceUnpairResponse(
 object BluetoothDevicesListRequest
 
 @Serializable
+object BluetoothDevicesListRequest
+
+@Serializable
+data class BluetoothDevicesListResponse(
+  @SerialName("payload") val payload: List<Value>,
+  @SerialName("type") val type: String,
+)
+
+@Serializable
 data class BluetoothDevicesListResponse(
   @SerialName("payload") val payload: List<Value>,
   @SerialName("type") val type: String,
@@ -84,6 +160,16 @@ data class BluetoothDevicesListResponse(
 
 @Serializable
 data class BluetoothDiscoverableEvent(
+  @SerialName("discoverable") val discoverable: Boolean,
+)
+
+@Serializable
+data class BluetoothDiscoverableEvent(
+  @SerialName("discoverable") val discoverable: Boolean,
+)
+
+@Serializable
+data class BluetoothDiscoverableRequest(
   @SerialName("discoverable") val discoverable: Boolean,
 )
 
@@ -99,36 +185,195 @@ data class BluetoothDiscoverableResponse(
 )
 
 @Serializable
-enum class BluetoothEvent {
-  @SerialName("bluetooth_agent")
-  BLUETOOTH_AGENT,
-  @SerialName("bluetooth_pairing")
-  BLUETOOTH_PAIRING,
-  @SerialName("bluetooth_connection")
-  BLUETOOTH_CONNECTION,
-  @SerialName("bluetooth_device")
-  BLUETOOTH_DEVICE,
-  @SerialName("bluetooth_discoverable")
-  BLUETOOTH_DISCOVERABLE,
-  @SerialName("bluetooth_mfi")
-  BLUETOOTH_MFI,
+data class BluetoothDiscoverableResponse(
+  @SerialName("discoverable") val discoverable: Boolean,
+  @SerialName("status") val status: String,
+)
+
+@Serializable
+sealed interface BluetoothEvent {
+  @Serializable
+  @SerialName("bluetooth.agent")
+  data class BluetoothAgent(
+    @SerialName("event") val event: String? = null,
+    @SerialName("device") val device: String? = null,
+    @SerialName("address") val address: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("pin") val pin: String? = null,
+    @SerialName("pincode") val pincode: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("passkey") val passkey: UInt? = null,
+    @SerialName("entered") val entered: UShort? = null,
+    @SerialName("uuid") val uuid: String? = null,
+    @SerialName("accepted") val accepted: Boolean? = null,
+    @SerialName("request_id") val requestId: String? = null,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.pairing")
+  data class BluetoothPairing(
+    @SerialName("event") val event: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("device") val device: String,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.connection")
+  data class BluetoothConnection(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+    @SerialName("connection_type") val connectionType: String? = null,
+    @SerialName("device_type") val deviceType: String? = null,
+    @SerialName("channel") val channel: UByte? = null,
+    @SerialName("initiated_by") val initiatedBy: String? = null,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.device")
+  data class BluetoothDevice(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.discoverable")
+  data class BluetoothDiscoverable(
+    @SerialName("discoverable") val discoverable: Boolean,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.mfi")
+  data class BluetoothMfi(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+    @SerialName("reason") val reason: String? = null,
+  ) : BluetoothEvent
 }
 
 @Serializable
-enum class BluetoothMethod {
-  @SerialName("bluetooth_devices_list")
-  BLUETOOTH_DEVICES_LIST,
-  @SerialName("bluetooth_device_connect")
-  BLUETOOTH_DEVICE_CONNECT,
-  @SerialName("bluetooth_device_disconnect")
-  BLUETOOTH_DEVICE_DISCONNECT,
-  @SerialName("bluetooth_device_unpair")
-  BLUETOOTH_DEVICE_UNPAIR,
-  @SerialName("bluetooth_pairing_pending")
-  BLUETOOTH_PAIRING_PENDING,
-  @SerialName("bluetooth_discoverable")
-  BLUETOOTH_DISCOVERABLE,
+sealed interface BluetoothEvent {
+  @Serializable
+  @SerialName("bluetooth.agent")
+  data class BluetoothAgent(
+    @SerialName("event") val event: String? = null,
+    @SerialName("device") val device: String? = null,
+    @SerialName("address") val address: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("pin") val pin: String? = null,
+    @SerialName("pincode") val pincode: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("passkey") val passkey: UInt? = null,
+    @SerialName("entered") val entered: UShort? = null,
+    @SerialName("uuid") val uuid: String? = null,
+    @SerialName("accepted") val accepted: Boolean? = null,
+    @SerialName("request_id") val requestId: String? = null,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.pairing")
+  data class BluetoothPairing(
+    @SerialName("event") val event: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("device") val device: String,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.connection")
+  data class BluetoothConnection(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+    @SerialName("connection_type") val connectionType: String? = null,
+    @SerialName("device_type") val deviceType: String? = null,
+    @SerialName("channel") val channel: UByte? = null,
+    @SerialName("initiated_by") val initiatedBy: String? = null,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.device")
+  data class BluetoothDevice(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.discoverable")
+  data class BluetoothDiscoverable(
+    @SerialName("discoverable") val discoverable: Boolean,
+  ) : BluetoothEvent
+  @Serializable
+  @SerialName("bluetooth.mfi")
+  data class BluetoothMfi(
+    @SerialName("event") val event: String,
+    @SerialName("device") val device: String,
+    @SerialName("reason") val reason: String? = null,
+  ) : BluetoothEvent
 }
+
+@Serializable
+sealed interface BluetoothMethod {
+  @Serializable
+  @SerialName("bluetooth.devices.list")
+  data class BluetoothDevicesList(
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.connect")
+  data class BluetoothDeviceConnect(
+    @SerialName("address") val address: String,
+    @SerialName("channel") val channel: UByte? = null,
+    @SerialName("device_type") val deviceType: String? = null,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.disconnect")
+  data class BluetoothDeviceDisconnect(
+    @SerialName("address") val address: String,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.unpair")
+  data class BluetoothDeviceUnpair(
+    @SerialName("address") val address: String,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.pairing.pending")
+  data class BluetoothPairingPending(
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.discoverable")
+  data class BluetoothDiscoverable(
+    @SerialName("discoverable") val discoverable: Boolean,
+  ) : BluetoothMethod
+}
+
+@Serializable
+sealed interface BluetoothMethod {
+  @Serializable
+  @SerialName("bluetooth.devices.list")
+  data class BluetoothDevicesList(
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.connect")
+  data class BluetoothDeviceConnect(
+    @SerialName("address") val address: String,
+    @SerialName("channel") val channel: UByte? = null,
+    @SerialName("device_type") val deviceType: String? = null,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.disconnect")
+  data class BluetoothDeviceDisconnect(
+    @SerialName("address") val address: String,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.device.unpair")
+  data class BluetoothDeviceUnpair(
+    @SerialName("address") val address: String,
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.pairing.pending")
+  data class BluetoothPairingPending(
+  ) : BluetoothMethod
+  @Serializable
+  @SerialName("bluetooth.discoverable")
+  data class BluetoothDiscoverable(
+    @SerialName("discoverable") val discoverable: Boolean,
+  ) : BluetoothMethod
+}
+
+@Serializable
+data class BluetoothMfiEvent(
+  @SerialName("event") val event: String,
+  @SerialName("device") val device: String,
+  @SerialName("reason") val reason: String? = null,
+)
 
 @Serializable
 data class BluetoothMfiEvent(
@@ -145,7 +390,22 @@ data class BluetoothPairingEvent(
 )
 
 @Serializable
+data class BluetoothPairingEvent(
+  @SerialName("event") val event: String? = null,
+  @SerialName("type") val type: String? = null,
+  @SerialName("device") val device: String,
+)
+
+@Serializable
 object BluetoothPairingPendingRequest
+
+@Serializable
+object BluetoothPairingPendingRequest
+
+@Serializable
+data class BluetoothPairingPendingResponse(
+  @SerialName("request") val request: Value? = null,
+)
 
 @Serializable
 data class BluetoothPairingPendingResponse(

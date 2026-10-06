@@ -137,3 +137,97 @@ fn test_malformed_host_message_handling() {
     let result: Result<HostMessage, _> = serde_json::from_value(malformed_hello);
     assert!(result.is_err());
 }
+
+#[test]
+fn test_host_hello_missing_protocol_version_fails() {
+    let missing_pv = json!({
+        "type": "host.hello",
+        "hostName": "DESKTOP-TEST",
+        "capabilities": ["media"]
+    });
+    let result: Result<HostMessage, _> = serde_json::from_value(missing_pv);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_host_action_without_payload() {
+    let action = HostAction {
+        request_id: "req-456".to_string(),
+        action: "system.mute".to_string(),
+        payload: None,
+    };
+    let msg = HostMessage::Action(action);
+    let serialized = serde_json::to_value(&msg).unwrap();
+
+    assert_eq!(serialized["type"], "host.action");
+    assert_eq!(serialized["requestId"], "req-456");
+    assert_eq!(serialized["action"], "system.mute");
+    assert!(serialized.get("payload").is_none());
+
+    let deserialized: HostMessage = serde_json::from_value(serialized).unwrap();
+    match deserialized {
+        HostMessage::Action(a) => {
+            assert_eq!(a.request_id, "req-456");
+            assert_eq!(a.action, "system.mute");
+            assert_eq!(a.payload, None);
+        }
+        _ => panic!("expected HostMessage::Action"),
+    }
+}
+
+#[test]
+fn test_host_action_result_without_payload_or_error() {
+    let result = HostActionResult {
+        request_id: "req-789".to_string(),
+        success: true,
+        payload: None,
+        error: None,
+    };
+    let msg = HostMessage::ActionResult(result);
+    let serialized = serde_json::to_value(&msg).unwrap();
+
+    assert_eq!(serialized["type"], "host.actionResult");
+    assert_eq!(serialized["requestId"], "req-789");
+    assert_eq!(serialized["success"], true);
+    assert!(serialized.get("payload").is_none());
+    assert!(serialized.get("error").is_none());
+
+    let deserialized: HostMessage = serde_json::from_value(serialized).unwrap();
+    match deserialized {
+        HostMessage::ActionResult(r) => {
+            assert_eq!(r.request_id, "req-789");
+            assert!(r.success);
+            assert_eq!(r.payload, None);
+            assert_eq!(r.error, None);
+        }
+        _ => panic!("expected HostMessage::ActionResult"),
+    }
+}
+
+#[test]
+fn test_capability_wire_names() {
+    assert_eq!(
+        serde_json::to_value(HostCapability::SystemStats).unwrap(),
+        json!("systemStats")
+    );
+    assert_eq!(
+        serde_json::to_value(HostCapability::AppLaunch).unwrap(),
+        json!("appLaunch")
+    );
+    assert_eq!(
+        serde_json::to_value(HostCapability::Media).unwrap(),
+        json!("media")
+    );
+    assert_eq!(
+        serde_json::to_value(HostCapability::Volume).unwrap(),
+        json!("volume")
+    );
+    assert_eq!(
+        serde_json::to_value(HostCapability::Discord).unwrap(),
+        json!("discord")
+    );
+    assert_eq!(
+        serde_json::to_value(HostCapability::Macros).unwrap(),
+        json!("macros")
+    );
+}

@@ -105,7 +105,99 @@ pub fn write_schema_to_dir(schema: &TypeScriptSchema, out_dir: impl AsRef<Path>)
 }
 
 pub fn schema_from_inventory(inventory: &Inventory) -> TypeScriptSchema {
-    schema_from_methods_events(inventory.methods, inventory.events)
+    let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
+
+    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    structs.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for def in structs {
+        let family = infer_family(&def.name);
+        push_item(
+            &mut schema,
+            family,
+            TypeScriptItem::Interface(interface_from_struct_def(def)),
+        );
+    }
+
+    let mut enums: Vec<&EnumDef> = Vec::new();
+    enums.extend(inventory.wire_enums.values());
+    enums.extend(inventory.enums.values());
+    enums.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for def in enums {
+        let family = infer_family(&def.name);
+        push_item(
+            &mut schema,
+            family,
+            TypeScriptItem::Union(union_from_enum_def(def)),
+        );
+    }
+
+    sort_schema(&mut schema);
+    schema
+}
+
+fn interface_from_struct_def(def: &StructDef) -> TypeScriptInterface {
+    TypeScriptInterface {
+        name: def.name.clone(),
+        doc: vec![format!("Generated struct `{}`.", def.name)],
+        fields: def
+            .fields
+            .iter()
+            .map(|f| TypeScriptField {
+                name: f.wire_name.clone(),
+                ty: ts_type_from_rust_field(&f.ty),
+                optional: f.optional,
+                doc: format!("Inventory field `{}`.", f.name),
+            })
+            .collect(),
+        index_signature: None,
+    }
+}
+
+fn union_from_enum_def(def: &EnumDef) -> TypeScriptUnion {
+    let raw_string_enum = def.variants.iter().all(|v| v.payload.is_none() && !v.is_struct);
+    let variants = def
+        .variants
+        .iter()
+        .map(|v| {
+            let wire_val = v.wire_value.as_deref().unwrap_or(&v.name);
+            if raw_string_enum {
+                format!("{:?}", wire_val)
+            } else if let Some(payload) = &v.payload {
+                format!("({{ type: {:?} }} & {})", wire_val, payload.ts())
+            } else {
+                format!("{{ type: {:?} }}", wire_val)
+            }
+        })
+        .collect();
+    TypeScriptUnion {
+        name: def.name.clone(),
+        doc: vec![format!("Generated enum `{}`.", def.name)],
+        variants,
+    }
+}
+
+fn ts_type_from_rust_field(ty: &crate::dispatch::rust::RustFieldType) -> String {
+    use crate::dispatch::rust::RustFieldType;
+    match ty {
+        RustFieldType::Bool => "boolean".to_string(),
+        RustFieldType::U8
+        | RustFieldType::I8
+        | RustFieldType::U16
+        | RustFieldType::I16
+        | RustFieldType::U32
+        | RustFieldType::I32
+        | RustFieldType::U64
+        | RustFieldType::I64
+        | RustFieldType::F32
+        | RustFieldType::F64 => "number".to_string(),
+        RustFieldType::String | RustFieldType::Bytes => "string".to_string(),
+        RustFieldType::JsonValue => "unknown".to_string(),
+        RustFieldType::Named(name) => name.clone(),
+        RustFieldType::Vec(inner) => format!("{}[]", ts_type_from_rust_field(inner)),
+        RustFieldType::Option(inner) => ts_type_from_rust_field(inner),
+    }
 }
 
 pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> TypeScriptSchema {
@@ -448,7 +540,9 @@ fn push_item(schema: &mut TypeScriptSchema, family: Family, item: TypeScriptItem
         .iter_mut()
         .find(|module| module.family == family)
         .expect("all families initialized");
-    module.items.push(item);
+    if !module.items.iter().any(|existing| existing.name() == item.name()) {
+        module.items.push(item);
+    }
 }
 
 fn sort_schema(schema: &mut TypeScriptSchema) {
@@ -629,6 +723,30 @@ fn family_type_name(family: Family) -> &'static str {
         Family::BtOnly => "BtOnly",
         Family::Ota => "Ota",
         Family::Iap2 => "Iap2",
+    }
+}
+
+fn infer_family(name: &str) -> Family {
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("bluetooth") {
+        Family::Bluetooth
+    } else if lower.contains("spotify") {
+        Family::Spotify
+    } else if lower.contains("audio") {
+        Family::Audio
+    } else if lower.contains("voice")
+        || lower.contains("wakeword")
+        || lower.contains("transcription")
+    {
+        Family::Voice
+    } else if lower.contains("media") || lower.contains("playback") {
+        Family::MediaControl
+    } else if lower.contains("ota") || lower.contains("chunk") || lower.contains("range") {
+        Family::Ota
+    } else if lower.contains("gateway") || lower.contains("bridge") || lower.contains("daemon") {
+        Family::BtOnly
+    } else {
+        Family::Device
     }
 }
 

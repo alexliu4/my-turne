@@ -9,6 +9,7 @@ pub struct AmbientLightUpdateEvent {
     pub normalized_value: u32,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AppReadyEvent {
     pub datetime: Option<String>,
@@ -326,6 +327,7 @@ pub struct ResetBootCounterResponse {
     pub error: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SubscriptionUpdatedEvent {
     pub subscribed: Option<bool>,

@@ -12,7 +12,22 @@ data class SpotifyAlbumGetRequest(
 )
 
 @Serializable
+data class SpotifyAlbumGetRequest(
+  @SerialName("content_id") val contentId: String,
+)
+
+@Serializable
 object SpotifyAlbumGetResponse
+
+@Serializable
+object SpotifyAlbumGetResponse
+
+@Serializable
+data class SpotifyAlbumTracksRequest(
+  @SerialName("content_id") val contentId: String,
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+)
 
 @Serializable
 data class SpotifyAlbumTracksRequest(
@@ -25,9 +40,20 @@ data class SpotifyAlbumTracksRequest(
 object SpotifyAlbumTracksResponse
 
 @Serializable
+object SpotifyAlbumTracksResponse
+
+@Serializable
 data class SpotifyArtistGetRequest(
   @SerialName("content_id") val contentId: String,
 )
+
+@Serializable
+data class SpotifyArtistGetRequest(
+  @SerialName("content_id") val contentId: String,
+)
+
+@Serializable
+object SpotifyArtistGetResponse
 
 @Serializable
 object SpotifyArtistGetResponse
@@ -39,6 +65,15 @@ data class SpotifyArtistTopTracksRequest(
 )
 
 @Serializable
+data class SpotifyArtistTopTracksRequest(
+  @SerialName("content_id") val contentId: String,
+  @SerialName("mockingbird") val mockingbird: Boolean? = null,
+)
+
+@Serializable
+object SpotifyArtistTopTracksResponse
+
+@Serializable
 object SpotifyArtistTopTracksResponse
 
 @Serializable
@@ -48,7 +83,22 @@ data class SpotifyAuthCompletedEvent(
 )
 
 @Serializable
+data class SpotifyAuthCompletedEvent(
+  @SerialName("authenticated") val authenticated: Boolean,
+  @SerialName("skipped") val skipped: Boolean? = null,
+)
+
+@Serializable
 object SpotifyAuthGetStatusRequest
+
+@Serializable
+object SpotifyAuthGetStatusRequest
+
+@Serializable
+data class SpotifyAuthGetStatusResponse(
+  @SerialName("authenticated") val authenticated: Boolean? = null,
+  @SerialName("skipped") val skipped: Boolean? = null,
+)
 
 @Serializable
 data class SpotifyAuthGetStatusResponse(
@@ -63,7 +113,19 @@ data class SpotifyAuthStatusEvent(
 )
 
 @Serializable
+data class SpotifyAuthStatusEvent(
+  @SerialName("authenticated") val authenticated: Boolean,
+  @SerialName("skipped") val skipped: Boolean? = null,
+)
+
+@Serializable
 object SpotifyDevicesRequest
+
+@Serializable
+object SpotifyDevicesRequest
+
+@Serializable
+object SpotifyDevicesResponse
 
 @Serializable
 object SpotifyDevicesResponse
@@ -75,7 +137,19 @@ data class SpotifyDjSignalRequest(
 )
 
 @Serializable
+data class SpotifyDjSignalRequest(
+  @SerialName("signal") val signal: String,
+  @SerialName("payload") val payload: Value? = null,
+)
+
+@Serializable
 object SpotifyDjSignalResponse
+
+@Serializable
+object SpotifyDjSignalResponse
+
+@Serializable
+object SpotifyDjStartRequest
 
 @Serializable
 object SpotifyDjStartRequest
@@ -84,16 +158,55 @@ object SpotifyDjStartRequest
 object SpotifyDjStartResponse
 
 @Serializable
-enum class SpotifyEvent {
-  @SerialName("spotify_auth_status")
-  SPOTIFY_AUTH_STATUS,
-  @SerialName("spotify_auth_completed")
-  SPOTIFY_AUTH_COMPLETED,
+object SpotifyDjStartResponse
+
+@Serializable
+sealed interface SpotifyEvent {
+  @Serializable
+  @SerialName("spotify.auth.status")
+  data class SpotifyAuthStatus(
+    @SerialName("authenticated") val authenticated: Boolean,
+    @SerialName("skipped") val skipped: Boolean? = null,
+  ) : SpotifyEvent
+  @Serializable
+  @SerialName("spotify.auth.completed")
+  data class SpotifyAuthCompleted(
+    @SerialName("authenticated") val authenticated: Boolean,
+    @SerialName("skipped") val skipped: Boolean? = null,
+  ) : SpotifyEvent
+}
+
+@Serializable
+sealed interface SpotifyEvent {
+  @Serializable
+  @SerialName("spotify.auth.status")
+  data class SpotifyAuthStatus(
+    @SerialName("authenticated") val authenticated: Boolean,
+    @SerialName("skipped") val skipped: Boolean? = null,
+  ) : SpotifyEvent
+  @Serializable
+  @SerialName("spotify.auth.completed")
+  data class SpotifyAuthCompleted(
+    @SerialName("authenticated") val authenticated: Boolean,
+    @SerialName("skipped") val skipped: Boolean? = null,
+  ) : SpotifyEvent
 }
 
 @Serializable
 data class SpotifyImageFetchRequest(
   @SerialName("url") val url: String,
+)
+
+@Serializable
+data class SpotifyImageFetchRequest(
+  @SerialName("url") val url: String,
+)
+
+@Serializable
+data class SpotifyImageFetchResponse(
+  @SerialName("url") val url: String,
+  @SerialName("data") val data: String,
+  @SerialName("content_type") val contentType: String,
 )
 
 @Serializable
@@ -110,10 +223,25 @@ data class SpotifyMePlaylistsRequest(
 )
 
 @Serializable
+data class SpotifyMePlaylistsRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+)
+
+@Serializable
+object SpotifyMePlaylistsResponse
+
+@Serializable
 object SpotifyMePlaylistsResponse
 
 @Serializable
 object SpotifyMeProfileRequest
+
+@Serializable
+object SpotifyMeProfileRequest
+
+@Serializable
+object SpotifyMeProfileResponse
 
 @Serializable
 object SpotifyMeProfileResponse
@@ -126,7 +254,22 @@ data class SpotifyMeRecentlyPlayedRequest(
 )
 
 @Serializable
+data class SpotifyMeRecentlyPlayedRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("after") val after: ULong? = null,
+  @SerialName("before") val before: ULong? = null,
+)
+
+@Serializable
 object SpotifyMeRecentlyPlayedResponse
+
+@Serializable
+object SpotifyMeRecentlyPlayedResponse
+
+@Serializable
+data class SpotifyMeShowsContainsRequest(
+  @SerialName("ids") val ids: List<String>,
+)
 
 @Serializable
 data class SpotifyMeShowsContainsRequest(
@@ -137,9 +280,20 @@ data class SpotifyMeShowsContainsRequest(
 object SpotifyMeShowsContainsResponse
 
 @Serializable
+object SpotifyMeShowsContainsResponse
+
+@Serializable
 data class SpotifyMeShowsRemoveRequest(
   @SerialName("ids") val ids: List<String>,
 )
+
+@Serializable
+data class SpotifyMeShowsRemoveRequest(
+  @SerialName("ids") val ids: List<String>,
+)
+
+@Serializable
+object SpotifyMeShowsRemoveResponse
 
 @Serializable
 object SpotifyMeShowsRemoveResponse
@@ -151,12 +305,29 @@ data class SpotifyMeShowsRequest(
 )
 
 @Serializable
+data class SpotifyMeShowsRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+)
+
+@Serializable
+object SpotifyMeShowsResponse
+
+@Serializable
 object SpotifyMeShowsResponse
 
 @Serializable
 data class SpotifyMeShowsSaveRequest(
   @SerialName("ids") val ids: List<String>,
 )
+
+@Serializable
+data class SpotifyMeShowsSaveRequest(
+  @SerialName("ids") val ids: List<String>,
+)
+
+@Serializable
+object SpotifyMeShowsSaveResponse
 
 @Serializable
 object SpotifyMeShowsSaveResponse
@@ -169,7 +340,24 @@ data class SpotifyMeTopArtistsRequest(
 )
 
 @Serializable
+data class SpotifyMeTopArtistsRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+  @SerialName("time_range") val timeRange: String? = null,
+)
+
+@Serializable
 object SpotifyMeTopArtistsResponse
+
+@Serializable
+object SpotifyMeTopArtistsResponse
+
+@Serializable
+data class SpotifyMeTopTracksRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+  @SerialName("time_range") val timeRange: String? = null,
+)
 
 @Serializable
 data class SpotifyMeTopTracksRequest(
@@ -182,6 +370,14 @@ data class SpotifyMeTopTracksRequest(
 object SpotifyMeTopTracksResponse
 
 @Serializable
+object SpotifyMeTopTracksResponse
+
+@Serializable
+data class SpotifyMeTracksContainsRequest(
+  @SerialName("ids") val ids: List<String>,
+)
+
+@Serializable
 data class SpotifyMeTracksContainsRequest(
   @SerialName("ids") val ids: List<String>,
 )
@@ -190,9 +386,20 @@ data class SpotifyMeTracksContainsRequest(
 object SpotifyMeTracksContainsResponse
 
 @Serializable
+object SpotifyMeTracksContainsResponse
+
+@Serializable
 data class SpotifyMeTracksRemoveRequest(
   @SerialName("ids") val ids: List<String>,
 )
+
+@Serializable
+data class SpotifyMeTracksRemoveRequest(
+  @SerialName("ids") val ids: List<String>,
+)
+
+@Serializable
+object SpotifyMeTracksRemoveResponse
 
 @Serializable
 object SpotifyMeTracksRemoveResponse
@@ -204,7 +411,21 @@ data class SpotifyMeTracksRequest(
 )
 
 @Serializable
+data class SpotifyMeTracksRequest(
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+)
+
+@Serializable
 object SpotifyMeTracksResponse
+
+@Serializable
+object SpotifyMeTracksResponse
+
+@Serializable
+data class SpotifyMeTracksSaveRequest(
+  @SerialName("ids") val ids: List<String>,
+)
 
 @Serializable
 data class SpotifyMeTracksSaveRequest(
@@ -215,96 +436,490 @@ data class SpotifyMeTracksSaveRequest(
 object SpotifyMeTracksSaveResponse
 
 @Serializable
-enum class SpotifyMethod {
-  @SerialName("spotify_player_state")
-  SPOTIFY_PLAYER_STATE,
-  @SerialName("spotify_player_play")
-  SPOTIFY_PLAYER_PLAY,
-  @SerialName("spotify_player_pause")
-  SPOTIFY_PLAYER_PAUSE,
-  @SerialName("spotify_player_next")
-  SPOTIFY_PLAYER_NEXT,
-  @SerialName("spotify_player_previous")
-  SPOTIFY_PLAYER_PREVIOUS,
-  @SerialName("spotify_player_seek")
-  SPOTIFY_PLAYER_SEEK,
-  @SerialName("spotify_player_volume")
-  SPOTIFY_PLAYER_VOLUME,
-  @SerialName("spotify_player_shuffle")
-  SPOTIFY_PLAYER_SHUFFLE,
-  @SerialName("spotify_player_repeat")
-  SPOTIFY_PLAYER_REPEAT,
-  @SerialName("spotify_player_transfer")
-  SPOTIFY_PLAYER_TRANSFER,
-  @SerialName("spotify_player_speed")
-  SPOTIFY_PLAYER_SPEED,
-  @SerialName("spotify_player_queue")
-  SPOTIFY_PLAYER_QUEUE,
-  @SerialName("spotify_player_queue_add")
-  SPOTIFY_PLAYER_QUEUE_ADD,
-  @SerialName("spotify_artist_get")
-  SPOTIFY_ARTIST_GET,
-  @SerialName("spotify_artist_top_tracks")
-  SPOTIFY_ARTIST_TOP_TRACKS,
-  @SerialName("spotify_album_get")
-  SPOTIFY_ALBUM_GET,
-  @SerialName("spotify_album_tracks")
-  SPOTIFY_ALBUM_TRACKS,
-  @SerialName("spotify_playlist_get")
-  SPOTIFY_PLAYLIST_GET,
-  @SerialName("spotify_playlist_tracks")
-  SPOTIFY_PLAYLIST_TRACKS,
-  @SerialName("spotify_show_get")
-  SPOTIFY_SHOW_GET,
-  @SerialName("spotify_show_episodes")
-  SPOTIFY_SHOW_EPISODES,
-  @SerialName("spotify_me_profile")
-  SPOTIFY_ME_PROFILE,
-  @SerialName("spotify_me_tracks")
-  SPOTIFY_ME_TRACKS,
-  @SerialName("spotify_me_tracks_contains")
-  SPOTIFY_ME_TRACKS_CONTAINS,
-  @SerialName("spotify_me_tracks_save")
-  SPOTIFY_ME_TRACKS_SAVE,
-  @SerialName("spotify_me_tracks_remove")
-  SPOTIFY_ME_TRACKS_REMOVE,
-  @SerialName("spotify_me_playlists")
-  SPOTIFY_ME_PLAYLISTS,
-  @SerialName("spotify_me_shows")
-  SPOTIFY_ME_SHOWS,
-  @SerialName("spotify_me_shows_save")
-  SPOTIFY_ME_SHOWS_SAVE,
-  @SerialName("spotify_me_shows_remove")
-  SPOTIFY_ME_SHOWS_REMOVE,
-  @SerialName("spotify_me_shows_contains")
-  SPOTIFY_ME_SHOWS_CONTAINS,
-  @SerialName("spotify_me_top_artists")
-  SPOTIFY_ME_TOP_ARTISTS,
-  @SerialName("spotify_me_top_tracks")
-  SPOTIFY_ME_TOP_TRACKS,
-  @SerialName("spotify_me_recently_played")
-  SPOTIFY_ME_RECENTLY_PLAYED,
-  @SerialName("spotify_devices")
-  SPOTIFY_DEVICES,
-  @SerialName("spotify_radio_mixes")
-  SPOTIFY_RADIO_MIXES,
-  @SerialName("spotify_radio_playlist")
-  SPOTIFY_RADIO_PLAYLIST,
-  @SerialName("spotify_radio_top_mix")
-  SPOTIFY_RADIO_TOP_MIX,
-  @SerialName("spotify_radio_discoveries")
-  SPOTIFY_RADIO_DISCOVERIES,
-  @SerialName("spotify_track_lyrics")
-  SPOTIFY_TRACK_LYRICS,
-  @SerialName("spotify_dj_start")
-  SPOTIFY_DJ_START,
-  @SerialName("spotify_dj_signal")
-  SPOTIFY_DJ_SIGNAL,
-  @SerialName("spotify_auth_get_status")
-  SPOTIFY_AUTH_GET_STATUS,
-  @SerialName("spotify_image_fetch")
-  SPOTIFY_IMAGE_FETCH,
+object SpotifyMeTracksSaveResponse
+
+@Serializable
+sealed interface SpotifyMethod {
+  @Serializable
+  @SerialName("spotify.player.state")
+  data class SpotifyPlayerState(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.play")
+  data class SpotifyPlayerPlay(
+    @SerialName("context_uri") val contextUri: String? = null,
+    @SerialName("uris") val uris: List<String>? = null,
+    @SerialName("offset") val offset: Value? = null,
+    @SerialName("device_id") val deviceId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.pause")
+  data class SpotifyPlayerPause(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.next")
+  data class SpotifyPlayerNext(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.previous")
+  data class SpotifyPlayerPrevious(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.seek")
+  data class SpotifyPlayerSeek(
+    @SerialName("position_ms") val positionMs: ULong,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.volume")
+  data class SpotifyPlayerVolume(
+    @SerialName("volume_percent") val volumePercent: UByte,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.shuffle")
+  data class SpotifyPlayerShuffle(
+    @SerialName("state") val state: Boolean,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.repeat")
+  data class SpotifyPlayerRepeat(
+    @SerialName("state") val state: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.transfer")
+  data class SpotifyPlayerTransfer(
+    @SerialName("device_ids") val deviceIds: List<String>,
+    @SerialName("play") val play: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.speed")
+  data class SpotifyPlayerSpeed(
+    @SerialName("speed") val speed: Double,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.queue")
+  data class SpotifyPlayerQueue(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.queue.add")
+  data class SpotifyPlayerQueueAdd(
+    @SerialName("uri") val uri: String,
+    @SerialName("device_id") val deviceId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.artist.get")
+  data class SpotifyArtistGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.artist.top_tracks")
+  data class SpotifyArtistTopTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("mockingbird") val mockingbird: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.album.get")
+  data class SpotifyAlbumGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.album.tracks")
+  data class SpotifyAlbumTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.playlist.get")
+  data class SpotifyPlaylistGet(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("fields") val fields: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.playlist.tracks")
+  data class SpotifyPlaylistTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("mockingbird") val mockingbird: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.show.get")
+  data class SpotifyShowGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.show.episodes")
+  data class SpotifyShowEpisodes(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.profile")
+  data class SpotifyMeProfile(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks")
+  data class SpotifyMeTracks(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.contains")
+  data class SpotifyMeTracksContains(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.save")
+  data class SpotifyMeTracksSave(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.remove")
+  data class SpotifyMeTracksRemove(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.playlists")
+  data class SpotifyMePlaylists(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows")
+  data class SpotifyMeShows(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.save")
+  data class SpotifyMeShowsSave(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.remove")
+  data class SpotifyMeShowsRemove(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.contains")
+  data class SpotifyMeShowsContains(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.top_artists")
+  data class SpotifyMeTopArtists(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("time_range") val timeRange: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.top_tracks")
+  data class SpotifyMeTopTracks(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("time_range") val timeRange: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.recently_played")
+  data class SpotifyMeRecentlyPlayed(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("after") val after: ULong? = null,
+    @SerialName("before") val before: ULong? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.devices")
+  data class SpotifyDevices(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.mixes")
+  data class SpotifyRadioMixes(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.playlist")
+  data class SpotifyRadioPlaylist(
+    @SerialName("content_id") val contentId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.top_mix")
+  data class SpotifyRadioTopMix(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.discoveries")
+  data class SpotifyRadioDiscoveries(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.track.lyrics")
+  data class SpotifyTrackLyrics(
+    @SerialName("content_id") val contentId: String? = null,
+    @SerialName("track_name") val trackName: String? = null,
+    @SerialName("artist_name") val artistName: String? = null,
+    @SerialName("album_name") val albumName: String? = null,
+    @SerialName("duration_ms") val durationMs: ULong? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.dj.start")
+  data class SpotifyDjStart(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.dj.signal")
+  data class SpotifyDjSignal(
+    @SerialName("signal") val signal: String,
+    @SerialName("payload") val payload: Value? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.auth.get_status")
+  data class SpotifyAuthGetStatus(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.image.fetch")
+  data class SpotifyImageFetch(
+    @SerialName("url") val url: String,
+  ) : SpotifyMethod
 }
+
+@Serializable
+sealed interface SpotifyMethod {
+  @Serializable
+  @SerialName("spotify.player.state")
+  data class SpotifyPlayerState(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.play")
+  data class SpotifyPlayerPlay(
+    @SerialName("context_uri") val contextUri: String? = null,
+    @SerialName("uris") val uris: List<String>? = null,
+    @SerialName("offset") val offset: Value? = null,
+    @SerialName("device_id") val deviceId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.pause")
+  data class SpotifyPlayerPause(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.next")
+  data class SpotifyPlayerNext(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.previous")
+  data class SpotifyPlayerPrevious(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.seek")
+  data class SpotifyPlayerSeek(
+    @SerialName("position_ms") val positionMs: ULong,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.volume")
+  data class SpotifyPlayerVolume(
+    @SerialName("volume_percent") val volumePercent: UByte,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.shuffle")
+  data class SpotifyPlayerShuffle(
+    @SerialName("state") val state: Boolean,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.repeat")
+  data class SpotifyPlayerRepeat(
+    @SerialName("state") val state: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.transfer")
+  data class SpotifyPlayerTransfer(
+    @SerialName("device_ids") val deviceIds: List<String>,
+    @SerialName("play") val play: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.speed")
+  data class SpotifyPlayerSpeed(
+    @SerialName("speed") val speed: Double,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.queue")
+  data class SpotifyPlayerQueue(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.player.queue.add")
+  data class SpotifyPlayerQueueAdd(
+    @SerialName("uri") val uri: String,
+    @SerialName("device_id") val deviceId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.artist.get")
+  data class SpotifyArtistGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.artist.top_tracks")
+  data class SpotifyArtistTopTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("mockingbird") val mockingbird: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.album.get")
+  data class SpotifyAlbumGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.album.tracks")
+  data class SpotifyAlbumTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.playlist.get")
+  data class SpotifyPlaylistGet(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("fields") val fields: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.playlist.tracks")
+  data class SpotifyPlaylistTracks(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("mockingbird") val mockingbird: Boolean? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.show.get")
+  data class SpotifyShowGet(
+    @SerialName("content_id") val contentId: String,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.show.episodes")
+  data class SpotifyShowEpisodes(
+    @SerialName("content_id") val contentId: String,
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.profile")
+  data class SpotifyMeProfile(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks")
+  data class SpotifyMeTracks(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.contains")
+  data class SpotifyMeTracksContains(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.save")
+  data class SpotifyMeTracksSave(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.tracks.remove")
+  data class SpotifyMeTracksRemove(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.playlists")
+  data class SpotifyMePlaylists(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows")
+  data class SpotifyMeShows(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.save")
+  data class SpotifyMeShowsSave(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.remove")
+  data class SpotifyMeShowsRemove(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.shows.contains")
+  data class SpotifyMeShowsContains(
+    @SerialName("ids") val ids: List<String>,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.top_artists")
+  data class SpotifyMeTopArtists(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("time_range") val timeRange: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.top_tracks")
+  data class SpotifyMeTopTracks(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("offset") val offset: UInt? = null,
+    @SerialName("time_range") val timeRange: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.me.recently_played")
+  data class SpotifyMeRecentlyPlayed(
+    @SerialName("limit") val limit: UInt? = null,
+    @SerialName("after") val after: ULong? = null,
+    @SerialName("before") val before: ULong? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.devices")
+  data class SpotifyDevices(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.mixes")
+  data class SpotifyRadioMixes(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.playlist")
+  data class SpotifyRadioPlaylist(
+    @SerialName("content_id") val contentId: String? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.top_mix")
+  data class SpotifyRadioTopMix(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.radio.discoveries")
+  data class SpotifyRadioDiscoveries(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.track.lyrics")
+  data class SpotifyTrackLyrics(
+    @SerialName("content_id") val contentId: String? = null,
+    @SerialName("track_name") val trackName: String? = null,
+    @SerialName("artist_name") val artistName: String? = null,
+    @SerialName("album_name") val albumName: String? = null,
+    @SerialName("duration_ms") val durationMs: ULong? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.dj.start")
+  data class SpotifyDjStart(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.dj.signal")
+  data class SpotifyDjSignal(
+    @SerialName("signal") val signal: String,
+    @SerialName("payload") val payload: Value? = null,
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.auth.get_status")
+  data class SpotifyAuthGetStatus(
+  ) : SpotifyMethod
+  @Serializable
+  @SerialName("spotify.image.fetch")
+  data class SpotifyImageFetch(
+    @SerialName("url") val url: String,
+  ) : SpotifyMethod
+}
+
+@Serializable
+object SpotifyPlayerNextRequest
 
 @Serializable
 object SpotifyPlayerNextRequest
@@ -313,7 +928,16 @@ object SpotifyPlayerNextRequest
 object SpotifyPlayerNextResponse
 
 @Serializable
+object SpotifyPlayerNextResponse
+
+@Serializable
 object SpotifyPlayerPauseRequest
+
+@Serializable
+object SpotifyPlayerPauseRequest
+
+@Serializable
+object SpotifyPlayerPauseResponse
 
 @Serializable
 object SpotifyPlayerPauseResponse
@@ -327,10 +951,27 @@ data class SpotifyPlayerPlayRequest(
 )
 
 @Serializable
+data class SpotifyPlayerPlayRequest(
+  @SerialName("context_uri") val contextUri: String? = null,
+  @SerialName("uris") val uris: List<String>? = null,
+  @SerialName("offset") val offset: Value? = null,
+  @SerialName("device_id") val deviceId: String? = null,
+)
+
+@Serializable
+object SpotifyPlayerPlayResponse
+
+@Serializable
 object SpotifyPlayerPlayResponse
 
 @Serializable
 object SpotifyPlayerPreviousRequest
+
+@Serializable
+object SpotifyPlayerPreviousRequest
+
+@Serializable
+object SpotifyPlayerPreviousResponse
 
 @Serializable
 object SpotifyPlayerPreviousResponse
@@ -342,10 +983,25 @@ data class SpotifyPlayerQueueAddRequest(
 )
 
 @Serializable
+data class SpotifyPlayerQueueAddRequest(
+  @SerialName("uri") val uri: String,
+  @SerialName("device_id") val deviceId: String? = null,
+)
+
+@Serializable
+object SpotifyPlayerQueueAddResponse
+
+@Serializable
 object SpotifyPlayerQueueAddResponse
 
 @Serializable
 object SpotifyPlayerQueueRequest
+
+@Serializable
+object SpotifyPlayerQueueRequest
+
+@Serializable
+object SpotifyPlayerQueueResponse
 
 @Serializable
 object SpotifyPlayerQueueResponse
@@ -356,7 +1012,20 @@ data class SpotifyPlayerRepeatRequest(
 )
 
 @Serializable
+data class SpotifyPlayerRepeatRequest(
+  @SerialName("state") val state: String,
+)
+
+@Serializable
 object SpotifyPlayerRepeatResponse
+
+@Serializable
+object SpotifyPlayerRepeatResponse
+
+@Serializable
+data class SpotifyPlayerSeekRequest(
+  @SerialName("position_ms") val positionMs: ULong,
+)
 
 @Serializable
 data class SpotifyPlayerSeekRequest(
@@ -367,9 +1036,20 @@ data class SpotifyPlayerSeekRequest(
 object SpotifyPlayerSeekResponse
 
 @Serializable
+object SpotifyPlayerSeekResponse
+
+@Serializable
 data class SpotifyPlayerShuffleRequest(
   @SerialName("state") val state: Boolean,
 )
+
+@Serializable
+data class SpotifyPlayerShuffleRequest(
+  @SerialName("state") val state: Boolean,
+)
+
+@Serializable
+object SpotifyPlayerShuffleResponse
 
 @Serializable
 object SpotifyPlayerShuffleResponse
@@ -380,10 +1060,24 @@ data class SpotifyPlayerSpeedRequest(
 )
 
 @Serializable
+data class SpotifyPlayerSpeedRequest(
+  @SerialName("speed") val speed: Double,
+)
+
+@Serializable
+object SpotifyPlayerSpeedResponse
+
+@Serializable
 object SpotifyPlayerSpeedResponse
 
 @Serializable
 object SpotifyPlayerStateRequest
+
+@Serializable
+object SpotifyPlayerStateRequest
+
+@Serializable
+object SpotifyPlayerStateResponse
 
 @Serializable
 object SpotifyPlayerStateResponse
@@ -395,7 +1089,21 @@ data class SpotifyPlayerTransferRequest(
 )
 
 @Serializable
+data class SpotifyPlayerTransferRequest(
+  @SerialName("device_ids") val deviceIds: List<String>,
+  @SerialName("play") val play: Boolean? = null,
+)
+
+@Serializable
 object SpotifyPlayerTransferResponse
+
+@Serializable
+object SpotifyPlayerTransferResponse
+
+@Serializable
+data class SpotifyPlayerVolumeRequest(
+  @SerialName("volume_percent") val volumePercent: UByte,
+)
 
 @Serializable
 data class SpotifyPlayerVolumeRequest(
@@ -406,10 +1114,22 @@ data class SpotifyPlayerVolumeRequest(
 object SpotifyPlayerVolumeResponse
 
 @Serializable
+object SpotifyPlayerVolumeResponse
+
+@Serializable
 data class SpotifyPlaylistGetRequest(
   @SerialName("content_id") val contentId: String,
   @SerialName("fields") val fields: String? = null,
 )
+
+@Serializable
+data class SpotifyPlaylistGetRequest(
+  @SerialName("content_id") val contentId: String,
+  @SerialName("fields") val fields: String? = null,
+)
+
+@Serializable
+object SpotifyPlaylistGetResponse
 
 @Serializable
 object SpotifyPlaylistGetResponse
@@ -423,7 +1143,21 @@ data class SpotifyPlaylistTracksRequest(
 )
 
 @Serializable
+data class SpotifyPlaylistTracksRequest(
+  @SerialName("content_id") val contentId: String,
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+  @SerialName("mockingbird") val mockingbird: Boolean? = null,
+)
+
+@Serializable
 object SpotifyPlaylistTracksResponse
+
+@Serializable
+object SpotifyPlaylistTracksResponse
+
+@Serializable
+object SpotifyRadioDiscoveriesRequest
 
 @Serializable
 object SpotifyRadioDiscoveriesRequest
@@ -432,7 +1166,16 @@ object SpotifyRadioDiscoveriesRequest
 object SpotifyRadioDiscoveriesResponse
 
 @Serializable
+object SpotifyRadioDiscoveriesResponse
+
+@Serializable
 object SpotifyRadioMixesRequest
+
+@Serializable
+object SpotifyRadioMixesRequest
+
+@Serializable
+object SpotifyRadioMixesResponse
 
 @Serializable
 object SpotifyRadioMixesResponse
@@ -443,10 +1186,24 @@ data class SpotifyRadioPlaylistRequest(
 )
 
 @Serializable
+data class SpotifyRadioPlaylistRequest(
+  @SerialName("content_id") val contentId: String? = null,
+)
+
+@Serializable
+object SpotifyRadioPlaylistResponse
+
+@Serializable
 object SpotifyRadioPlaylistResponse
 
 @Serializable
 object SpotifyRadioTopMixRequest
+
+@Serializable
+object SpotifyRadioTopMixRequest
+
+@Serializable
+object SpotifyRadioTopMixResponse
 
 @Serializable
 object SpotifyRadioTopMixResponse
@@ -459,12 +1216,30 @@ data class SpotifyShowEpisodesRequest(
 )
 
 @Serializable
+data class SpotifyShowEpisodesRequest(
+  @SerialName("content_id") val contentId: String,
+  @SerialName("limit") val limit: UInt? = null,
+  @SerialName("offset") val offset: UInt? = null,
+)
+
+@Serializable
+object SpotifyShowEpisodesResponse
+
+@Serializable
 object SpotifyShowEpisodesResponse
 
 @Serializable
 data class SpotifyShowGetRequest(
   @SerialName("content_id") val contentId: String,
 )
+
+@Serializable
+data class SpotifyShowGetRequest(
+  @SerialName("content_id") val contentId: String,
+)
+
+@Serializable
+object SpotifyShowGetResponse
 
 @Serializable
 object SpotifyShowGetResponse
@@ -477,6 +1252,18 @@ data class SpotifyTrackLyricsRequest(
   @SerialName("album_name") val albumName: String? = null,
   @SerialName("duration_ms") val durationMs: ULong? = null,
 )
+
+@Serializable
+data class SpotifyTrackLyricsRequest(
+  @SerialName("content_id") val contentId: String? = null,
+  @SerialName("track_name") val trackName: String? = null,
+  @SerialName("artist_name") val artistName: String? = null,
+  @SerialName("album_name") val albumName: String? = null,
+  @SerialName("duration_ms") val durationMs: ULong? = null,
+)
+
+@Serializable
+object SpotifyTrackLyricsResponse
 
 @Serializable
 object SpotifyTrackLyricsResponse

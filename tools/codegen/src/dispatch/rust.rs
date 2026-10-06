@@ -34,6 +34,7 @@ pub struct RustStruct {
     pub name: String,
     pub fields: Vec<RustField>,
     pub iap2_csm: Option<String>,
+    pub skip_serializing_none: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +53,7 @@ pub struct RustEnum {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustEnumVariant {
     pub name: String,
+    pub wire_value: Option<String>,
     pub payload: Option<RustFieldType>,
 }
 
@@ -134,7 +136,35 @@ pub fn write_schema_to_dir(schema: &RustSchema, out_dir: impl AsRef<Path>) -> Re
 }
 
 pub fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
-    let mut schema = empty_schema();
+    let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
+
+    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    structs.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for def in structs {
+        let family = infer_family(&def.name);
+        push_item(
+            &mut schema,
+            family,
+            RustItem::Struct(RustStruct {
+                name: def.name.clone(),
+                iap2_csm: None,
+                skip_serializing_none: def.skip_serializing_none,
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|f| RustField {
+                        name: f.wire_name.clone(),
+                        ty: if f.optional {
+                            RustFieldType::Option(Box::new(f.ty.clone()))
+                        } else {
+                            f.ty.clone()
+                        },
+                    })
+                    .collect(),
+            }),
+        );
+    }
 
     let mut enums: Vec<&EnumDef> = Vec::new();
     enums.extend(inventory.wire_enums.values());
@@ -197,6 +227,7 @@ pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> RustS
         );
         variants_for(&mut method_variants, method.family).push(RustEnumVariant {
             name: base,
+            wire_value: Some(method.name.to_string()),
             payload: Some(RustFieldType::Named(request_name)),
         });
     }
@@ -216,6 +247,7 @@ pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> RustS
         );
         variants_for(&mut event_variants, event.family).push(RustEnumVariant {
             name: base,
+            wire_value: Some(event.name.to_string()),
             payload: Some(RustFieldType::Named(payload_name)),
         });
     }
@@ -334,6 +366,7 @@ fn enum_from_inventory(def: &EnumDef) -> RustEnum {
             .iter()
             .map(|variant| RustEnumVariant {
                 name: variant.name.clone(),
+                wire_value: variant.wire_value.clone(),
                 payload: variant.payload.as_ref().map(type_from_payload),
             })
             .collect(),
@@ -357,6 +390,7 @@ fn struct_from_payload(
     RustStruct {
         name,
         iap2_csm: iap2_csm.map(ToOwned::to_owned),
+        skip_serializing_none: false,
         fields: payload
             .fields
             .iter()
@@ -372,6 +406,7 @@ fn struct_from_csm(csm: &Csm) -> RustStruct {
     RustStruct {
         name: csm.name.to_string(),
         iap2_csm: Some(csm.name.to_string()),
+        skip_serializing_none: false,
         fields: csm
             .params
             .iter()
@@ -446,7 +481,9 @@ fn push_item(schema: &mut RustSchema, family: Family, item: RustItem) {
         .iter_mut()
         .find(|module| module.family == family)
         .expect("all families initialized");
-    module.items.push(item);
+    if !module.items.iter().any(|existing| existing.name() == item.name()) {
+        module.items.push(item);
+    }
 }
 
 fn sort_schema(schema: &mut RustSchema) {
@@ -526,6 +563,9 @@ fn render_family_module(module: &RustModule) -> String {
 }
 
 fn render_struct(out: &mut String, item: &RustStruct) {
+    if item.skip_serializing_none || item.name == "AppReadyEvent" || item.name == "SubscriptionUpdatedEvent" {
+        out.push_str("#[serde_with::skip_serializing_none]\n");
+    }
     out.push_str(&format!("#[derive({DERIVE_ATTR})]\n"));
     if item.fields.is_empty() {
         out.push_str(&format!("pub struct {};\n", item.name));

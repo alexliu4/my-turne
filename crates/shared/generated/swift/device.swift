@@ -76,8 +76,8 @@ public struct AppReadyEvent: Codable, Sendable {
 }
 
 public enum Compression: String, Codable, Sendable {
-  case gzip = "gzip"
-  case none = "none"
+  case gzip = "Gzip"
+  case none = "None"
 }
 
 public struct DeviceAbFailoverRequest: Codable, Sendable {
@@ -729,8 +729,56 @@ public struct DeviceVersionResponse: Codable, Sendable {
 }
 
 public enum Encoding: String, Codable, Sendable {
-  case msgpack = "msgpack"
-  case json = "json"
+  case msgpack = "Msgpack"
+  case json = "Json"
+}
+
+public struct HostAction: Codable, Sendable {
+  public let requestId: String
+  public let action: String
+  public let payload: Value?
+
+  public init(
+    requestId: String,
+    action: String,
+    payload: Value?
+  ) {
+    self.requestId = requestId
+    self.action = action
+    self.payload = payload
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+    case action = "action"
+    case payload = "payload"
+  }
+}
+
+public struct HostActionResult: Codable, Sendable {
+  public let requestId: String
+  public let success: Bool
+  public let payload: Value?
+  public let error: String?
+
+  public init(
+    requestId: String,
+    success: Bool,
+    payload: Value?,
+    error: String?
+  ) {
+    self.requestId = requestId
+    self.success = success
+    self.payload = payload
+    self.error = error
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
+    case success = "success"
+    case payload = "payload"
+    case error = "error"
+  }
 }
 
 public enum HostCapability: String, Codable, Sendable {
@@ -742,12 +790,48 @@ public enum HostCapability: String, Codable, Sendable {
   case appLaunch = "appLaunch"
 }
 
+public struct HostHello: Codable, Sendable {
+  public let protocolVersion: UInt32
+  public let hostName: String
+  public let capabilities: [HostCapability]
+
+  public init(
+    protocolVersion: UInt32,
+    hostName: String,
+    capabilities: [HostCapability]
+  ) {
+    self.protocolVersion = protocolVersion
+    self.hostName = hostName
+    self.capabilities = capabilities
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case protocolVersion = "protocolVersion"
+    case hostName = "hostName"
+    case capabilities = "capabilities"
+  }
+}
+
 public enum HostMessage: Codable, Sendable {
   case hello(HostHello)
   case status(HostStatus)
   case action(HostAction)
   case actionResult(HostActionResult)
   case unknown
+}
+
+public struct HostStatus: Codable, Sendable {
+  public let connected: Bool
+
+  public init(
+    connected: Bool
+  ) {
+    self.connected = connected
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case connected = "connected"
+  }
 }
 
 public enum MsgMeta: Codable, Sendable {
@@ -885,6 +969,20 @@ public struct ResetBootCounterResponse: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case success = "success"
     case error = "error"
+  }
+}
+
+public struct ResponseMeta: Codable, Sendable {
+  public let requestId: Uuid
+
+  public init(
+    requestId: Uuid
+  ) {
+    self.requestId = requestId
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case requestId = "requestId"
   }
 }
 
