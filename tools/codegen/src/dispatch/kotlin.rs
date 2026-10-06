@@ -72,13 +72,17 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
 }
 
 fn merge_schema(target: &mut RustSchema, source: RustSchema) {
-    for mut source_module in source.modules {
+    for source_module in source.modules {
         let target_module = target
             .modules
             .iter_mut()
             .find(|module| module.family == source_module.family)
             .expect("all families initialized");
-        target_module.items.append(&mut source_module.items);
+        for item in source_module.items {
+            if !target_module.items.iter().any(|existing| existing.name() == item.name()) {
+                target_module.items.push(item);
+            }
+        }
     }
 }
 
@@ -149,13 +153,19 @@ fn render_struct(out: &mut String, item: &RustStruct) {
 }
 
 fn render_enum(out: &mut String, item: &RustEnum, schema: &RustSchema) {
-    let is_simple_enum = item.variants.iter().all(|v| v.payload.is_none());
-    if is_simple_enum {
+    let is_method_or_event_enum = item.name.ends_with("Method") || item.name.ends_with("Event");
+    let has_payload_variants = item.variants.iter().any(|v| v.payload.is_some());
+    if is_method_or_event_enum || !has_payload_variants {
         out.push_str("@Serializable\n");
         out.push_str(&format!("enum class {} {{\n", item.name));
         for variant in &item.variants {
-            let serial_name = variant.wire_value.as_deref().unwrap_or(&variant.name);
-            let case_name = enum_case_name(&pascal_to_snake(&variant.name));
+            let snake = pascal_to_snake(&variant.name);
+            let serial_name = if is_method_or_event_enum {
+                &snake
+            } else {
+                variant.wire_value.as_deref().unwrap_or(&snake)
+            };
+            let case_name = enum_case_name(&snake);
             out.push_str(&format!(
                 "  @SerialName({serial_name:?})\n  {case_name},\n"
             ));
@@ -377,10 +387,10 @@ mod tests {
         assert!(out.contains("@Serializable\ndata class SetVolumeRequest("));
         assert!(out.contains("@SerialName(\"volume_percent\") val volumePercent: UByte,"));
         assert!(out.contains("@SerialName(\"is_charging\") val isCharging: Boolean,"));
-        assert!(out.contains("@Serializable\nsealed interface DeviceMethod"));
-        assert!(out.contains("@SerialName(\"set_volume\")\n  data class SetVolume("));
-        assert!(out.contains("@Serializable\nsealed interface DeviceEvent"));
-        assert!(out.contains("@SerialName(\"battery_changed\")\n  data class BatteryChanged("));
+        assert!(out.contains("@Serializable\nenum class DeviceMethod"));
+        assert!(out.contains("@SerialName(\"set_volume\")\n  SET_VOLUME,"));
+        assert!(out.contains("@Serializable\nenum class DeviceEvent"));
+        assert!(out.contains("@SerialName(\"battery_changed\")\n  BATTERY_CHANGED,"));
     }
 
     #[test]
@@ -403,9 +413,9 @@ mod tests {
     fn inventory_schema_keeps_common_enums_and_method_event_payloads() {
         let mut enums = HashMap::new();
         enums.insert(
-            "DeviceMode".to_string(),
+            "HostDeviceMode".to_string(),
             EnumDef {
-                name: "DeviceMode".to_string(),
+                name: "HostDeviceMode".to_string(),
                 tag_field: "type".to_string(),
                 variants: vec![WireVariant {
                     name: "Ready".to_string(),
@@ -436,13 +446,13 @@ mod tests {
 
         let out = render_family_module(module, &schema);
 
-        assert!(out.contains("@Serializable\nenum class DeviceMode"));
+        assert!(out.contains("@Serializable\nenum class HostDeviceMode"));
         assert!(out.contains("@SerialName(\"ready\")\n  READY,"));
         assert!(out.contains("@Serializable\ndata class SetVolumeRequest("));
         assert!(out.contains("@Serializable\ndata class SetVolumeResponse("));
         assert!(out.contains("@Serializable\ndata class BatteryChangedEvent("));
-        assert!(out.contains("@SerialName(\"set_volume\")\n  data class SetVolume("));
-        assert!(out.contains("@SerialName(\"battery_changed\")\n  data class BatteryChanged("));
+        assert!(out.contains("@SerialName(\"set_volume\")\n  SET_VOLUME,"));
+        assert!(out.contains("@SerialName(\"battery_changed\")\n  BATTERY_CHANGED,"));
     }
 
     #[test]

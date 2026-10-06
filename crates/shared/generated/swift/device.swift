@@ -75,11 +75,6 @@ public struct AppReadyEvent: Codable, Sendable {
   }
 }
 
-public enum Compression: String, Codable, Sendable {
-  case gzip = "Gzip"
-  case none = "None"
-}
-
 public struct DeviceAbFailoverRequest: Codable, Sendable {
   public init() {}
 }
@@ -728,11 +723,6 @@ public struct DeviceVersionResponse: Codable, Sendable {
   }
 }
 
-public enum Encoding: String, Codable, Sendable {
-  case msgpack = "Msgpack"
-  case json = "Json"
-}
-
 public struct HostAction: Codable, Sendable {
   public let requestId: String
   public let action: String
@@ -832,13 +822,6 @@ public struct HostStatus: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case connected = "connected"
   }
-}
-
-public enum MsgMeta: Codable, Sendable {
-  case command
-  case event
-  case request
-  case response(ResponseMeta)
 }
 
 public struct NetworkStatusEvent: Codable, Sendable {
@@ -945,11 +928,6 @@ public struct OnboardingSetStateResponse: Codable, Sendable {
   public init() {}
 }
 
-public enum Priority: String, Codable, Sendable {
-  case normal = "normal"
-  case bulk = "bulk"
-}
-
 public struct ResetBootCounterRequest: Codable, Sendable {
   public init() {}
 }
@@ -969,20 +947,6 @@ public struct ResetBootCounterResponse: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case success = "success"
     case error = "error"
-  }
-}
-
-public struct ResponseMeta: Codable, Sendable {
-  public let requestId: Uuid
-
-  public init(
-    requestId: Uuid
-  ) {
-    self.requestId = requestId
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case requestId = "requestId"
   }
 }
 
@@ -1014,12 +978,5 @@ public struct SubscriptionUpdatedEvent: Codable, Sendable {
     case isAdmin = "is_admin"
     case entitlementsVerified = "entitlements_verified"
   }
-}
-
-public enum WireError: Codable, Sendable {
-  case unsupported
-  case unimplemented
-  case malformed
-  case handlerFailed
 }
 

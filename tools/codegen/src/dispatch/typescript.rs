@@ -107,7 +107,11 @@ pub fn write_schema_to_dir(schema: &TypeScriptSchema, out_dir: impl AsRef<Path>)
 pub fn schema_from_inventory(inventory: &Inventory) -> TypeScriptSchema {
     let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
 
-    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    let mut structs: Vec<&StructDef> = inventory
+        .structs
+        .values()
+        .filter(|s| s.name.starts_with("Host"))
+        .collect();
     structs.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in structs {
@@ -119,9 +123,11 @@ pub fn schema_from_inventory(inventory: &Inventory) -> TypeScriptSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = Vec::new();
-    enums.extend(inventory.wire_enums.values());
-    enums.extend(inventory.enums.values());
+    let mut enums: Vec<&EnumDef> = inventory
+        .enums
+        .values()
+        .filter(|e| e.name.starts_with("Host"))
+        .collect();
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {

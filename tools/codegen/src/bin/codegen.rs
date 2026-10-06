@@ -237,7 +237,6 @@ fn emit_lang(
     lang: Lang,
     out_dir: &Path,
 ) -> Result<()> {
-    clean_generated_files(out_dir, lang.generated_extension())?;
     match lang {
         Lang::Rust => {
             emit_rust_inventory_to_dir(inv, out_dir)?;
@@ -294,6 +293,7 @@ fn recreate_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("create {}", path.display()))
 }
 
+#[allow(dead_code)]
 fn clean_generated_files(dir: &Path, extension: &str) -> Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     for entry in fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))? {

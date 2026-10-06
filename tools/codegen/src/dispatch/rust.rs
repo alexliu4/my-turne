@@ -138,7 +138,11 @@ pub fn write_schema_to_dir(schema: &RustSchema, out_dir: impl AsRef<Path>) -> Re
 pub fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
     let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
 
-    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    let mut structs: Vec<&StructDef> = inventory
+        .structs
+        .values()
+        .filter(|s| s.name.starts_with("Host"))
+        .collect();
     structs.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in structs {
@@ -166,9 +170,11 @@ pub fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = Vec::new();
-    enums.extend(inventory.wire_enums.values());
-    enums.extend(inventory.enums.values());
+    let mut enums: Vec<&EnumDef> = inventory
+        .enums
+        .values()
+        .filter(|e| e.name.starts_with("Host"))
+        .collect();
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {
@@ -288,7 +294,7 @@ pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> RustS
 }
 
 impl RustItem {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
             RustItem::Struct(item) => &item.name,
             RustItem::Enum(item) => &item.name,

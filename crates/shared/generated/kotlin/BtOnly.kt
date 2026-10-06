@@ -14,21 +14,6 @@ data class AudioDataEvent(
 )
 
 @Serializable
-data class AudioDataEvent(
-  @SerialName("seq") val seq: ULong,
-  @SerialName("opus") val opus: String,
-  @SerialName("ts") val ts: ULong,
-)
-
-@Serializable
-data class AudioRecordingStartedEvent(
-  @SerialName("sample_rate") val sampleRate: UInt,
-  @SerialName("channels") val channels: UByte,
-  @SerialName("frame_ms") val frameMs: UShort,
-  @SerialName("noise_suppressed") val noiseSuppressed: Boolean? = null,
-)
-
-@Serializable
 data class AudioRecordingStartedEvent(
   @SerialName("sample_rate") val sampleRate: UInt,
   @SerialName("channels") val channels: UByte,
@@ -43,132 +28,30 @@ data class AudioRecordingStoppedEvent(
 )
 
 @Serializable
-data class AudioRecordingStoppedEvent(
-  @SerialName("reason") val reason: String,
-  @SerialName("total_frames") val totalFrames: ULong,
-)
-
-@Serializable
-sealed interface BtOnlyEvent {
-  @Serializable
-  @SerialName("daemon.ready")
-  data class DaemonReady(
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("daemon.heartbeat")
-  data class DaemonHeartbeat(
-    @SerialName("timestamp") val timestamp: ULong,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("chunk.retransmit_request")
-  data class ChunkRetransmitRequest(
-    @SerialName("message_id") val messageId: String,
-    @SerialName("chunk_idx") val chunkIdx: UShort,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.recording.started")
-  data class AudioRecordingStarted(
-    @SerialName("sample_rate") val sampleRate: UInt,
-    @SerialName("channels") val channels: UByte,
-    @SerialName("frame_ms") val frameMs: UShort,
-    @SerialName("noise_suppressed") val noiseSuppressed: Boolean? = null,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.data")
-  data class AudioData(
-    @SerialName("seq") val seq: ULong,
-    @SerialName("opus") val opus: String,
-    @SerialName("ts") val ts: ULong,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.recording.stopped")
-  data class AudioRecordingStopped(
-    @SerialName("reason") val reason: String,
-    @SerialName("total_frames") val totalFrames: ULong,
-  ) : BtOnlyEvent
-  @Serializable
+enum class BtOnlyEvent {
+  @SerialName("daemon_ready")
+  DAEMON_READY,
+  @SerialName("daemon_heartbeat")
+  DAEMON_HEARTBEAT,
+  @SerialName("chunk_retransmit_request")
+  CHUNK_RETRANSMIT_REQUEST,
+  @SerialName("audio_recording_started")
+  AUDIO_RECORDING_STARTED,
+  @SerialName("audio_data")
+  AUDIO_DATA,
+  @SerialName("audio_recording_stopped")
+  AUDIO_RECORDING_STOPPED,
   @SerialName("keepalive")
-  data class Keepalive(
-    @SerialName("timestamp") val timestamp: Double,
-  ) : BtOnlyEvent
+  KEEPALIVE,
 }
 
 @Serializable
-sealed interface BtOnlyEvent {
-  @Serializable
-  @SerialName("daemon.ready")
-  data class DaemonReady(
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("daemon.heartbeat")
-  data class DaemonHeartbeat(
-    @SerialName("timestamp") val timestamp: ULong,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("chunk.retransmit_request")
-  data class ChunkRetransmitRequest(
-    @SerialName("message_id") val messageId: String,
-    @SerialName("chunk_idx") val chunkIdx: UShort,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.recording.started")
-  data class AudioRecordingStarted(
-    @SerialName("sample_rate") val sampleRate: UInt,
-    @SerialName("channels") val channels: UByte,
-    @SerialName("frame_ms") val frameMs: UShort,
-    @SerialName("noise_suppressed") val noiseSuppressed: Boolean? = null,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.data")
-  data class AudioData(
-    @SerialName("seq") val seq: ULong,
-    @SerialName("opus") val opus: String,
-    @SerialName("ts") val ts: ULong,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("audio.recording.stopped")
-  data class AudioRecordingStopped(
-    @SerialName("reason") val reason: String,
-    @SerialName("total_frames") val totalFrames: ULong,
-  ) : BtOnlyEvent
-  @Serializable
-  @SerialName("keepalive")
-  data class Keepalive(
-    @SerialName("timestamp") val timestamp: Double,
-  ) : BtOnlyEvent
-}
-
-@Serializable
-sealed interface BtOnlyMethod {
-  @Serializable
+enum class BtOnlyMethod {
   @SerialName("ping")
-  data class Ping(
-  ) : BtOnlyMethod
-  @Serializable
-  @SerialName("device.volume.update")
-  data class DeviceVolumeUpdate(
-    @SerialName("volume_percent") val volumePercent: UByte,
-  ) : BtOnlyMethod
+  PING,
+  @SerialName("device_volume_update")
+  DEVICE_VOLUME_UPDATE,
 }
-
-@Serializable
-sealed interface BtOnlyMethod {
-  @Serializable
-  @SerialName("ping")
-  data class Ping(
-  ) : BtOnlyMethod
-  @Serializable
-  @SerialName("device.volume.update")
-  data class DeviceVolumeUpdate(
-    @SerialName("volume_percent") val volumePercent: UByte,
-  ) : BtOnlyMethod
-}
-
-@Serializable
-data class ChunkRetransmitRequestEvent(
-  @SerialName("message_id") val messageId: String,
-  @SerialName("chunk_idx") val chunkIdx: UShort,
-)
 
 @Serializable
 data class ChunkRetransmitRequestEvent(
@@ -182,20 +65,7 @@ data class DaemonHeartbeatEvent(
 )
 
 @Serializable
-data class DaemonHeartbeatEvent(
-  @SerialName("timestamp") val timestamp: ULong,
-)
-
-@Serializable
 object DaemonReadyEvent
-
-@Serializable
-object DaemonReadyEvent
-
-@Serializable
-data class DeviceVolumeUpdateRequest(
-  @SerialName("volume_percent") val volumePercent: UByte,
-)
 
 @Serializable
 data class DeviceVolumeUpdateRequest(
@@ -208,178 +78,12 @@ data class DeviceVolumeUpdateResponse(
 )
 
 @Serializable
-data class DeviceVolumeUpdateResponse(
-  @SerialName("success") val success: Boolean,
-)
-
-@Serializable
-data class GatewayToNocturneMsg(
-  @SerialName("id") val id: Uuid,
-  @SerialName("meta") val meta: MsgMeta,
-  @SerialName("data") val data: GatewayToNocturneMsgData,
-)
-
-@Serializable
-sealed interface GatewayToNocturneMsgData {
-  @Serializable
-  @SerialName("system")
-  data class System(val payload: GatewayToNocturneSystemMsg): GatewayToNocturneMsgData
-  @Serializable
-  @SerialName("error")
-  data class Error(val payload: WireError): GatewayToNocturneMsgData
-}
-
-@Serializable
-sealed interface GatewayToNocturneSystemMsg {
-  @Serializable
-  @SerialName("otaBegin")
-  data class OtaBegin(
-    @SerialName("kind") val kind: OtaKind,
-    @SerialName("updateId") val updateId: String,
-    @SerialName("updateUrlBase") val updateUrlBase: String? = null,
-    @SerialName("expectedSha256") val expectedSha256: String,
-    @SerialName("expectedSize") val expectedSize: UInt,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaChunk")
-  data class OtaChunk(
-    @SerialName("updateId") val updateId: String,
-    @SerialName("offset") val offset: UInt,
-    @SerialName("bytes") val bytes: ByteArray,
-    @SerialName("last") val last: Boolean,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaAbandon")
-  data class OtaAbandon(
-    @SerialName("updateId") val updateId: String,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaDownloadProgress")
-  data class OtaDownloadProgress(
-    @SerialName("updateId") val updateId: String,
-    @SerialName("percent") val percent: UByte,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaPackageReady")
-  data class OtaPackageReady(
-    @SerialName("updateId") val updateId: String,
-    @SerialName("version") val version: String,
-    @SerialName("size") val size: UInt,
-    @SerialName("expectedSha256") val expectedSha256: String,
-    @SerialName("resumeFromOffset") val resumeFromOffset: UInt,
-    @SerialName("maxTransferChunkSize") val maxTransferChunkSize: UInt? = null,
-    @SerialName("supportsChunkedTransferResponse") val supportsChunkedTransferResponse: Boolean? = null,
-    @SerialName("transferDataEncoding") val transferDataEncoding: String? = null,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaAssetRangeReply")
-  data class OtaAssetRangeReply(
-    @SerialName("requestId") val requestId: Uuid,
-    @SerialName("totalSize") val totalSize: UInt,
-    @SerialName("parts") val parts: List<RangePart>,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaAssetRangeRejected")
-  data class OtaAssetRangeRejected(
-    @SerialName("requestId") val requestId: Uuid,
-    @SerialName("reason") val reason: String,
-  ) : GatewayToNocturneSystemMsg
-  @Serializable
-  @SerialName("otaAssetRangeChunk")
-  data class OtaAssetRangeChunk(
-    @SerialName("requestId") val requestId: Uuid,
-    @SerialName("partIndex") val partIndex: UInt,
-    @SerialName("offset") val offset: UInt,
-    @SerialName("bytes") val bytes: ByteArray,
-    @SerialName("last") val last: Boolean,
-  ) : GatewayToNocturneSystemMsg
-}
-
-@Serializable
 data class KeepaliveEvent(
   @SerialName("timestamp") val timestamp: Double,
 )
 
 @Serializable
-data class KeepaliveEvent(
-  @SerialName("timestamp") val timestamp: Double,
-)
-
-@Serializable
-data class NocturneToGatewayMsg(
-  @SerialName("id") val id: Uuid,
-  @SerialName("meta") val meta: MsgMeta,
-  @SerialName("data") val data: NocturneToGatewayMsgData,
-)
-
-@Serializable
-sealed interface NocturneToGatewayMsgData {
-  @Serializable
-  @SerialName("system")
-  data class System(val payload: NocturneToGatewaySystemMsg): NocturneToGatewayMsgData
-  @Serializable
-  @SerialName("error")
-  data class Error(val payload: WireError): NocturneToGatewayMsgData
-  @Serializable
-  @SerialName("ack")
-  object Ack : NocturneToGatewayMsgData
-  @Serializable
-  @SerialName("done")
-  object Done : NocturneToGatewayMsgData
-}
-
-@Serializable
-sealed interface NocturneToGatewaySystemMsg {
-  @Serializable
-  @SerialName("otaProgress")
-  data class OtaProgress(
-    @SerialName("phase") val phase: OtaPhase,
-    @SerialName("percent") val percent: UByte,
-    @SerialName("etaMs") val etaMs: UInt? = null,
-    @SerialName("asset") val asset: String? = null,
-    @SerialName("transferredBytes") val transferredBytes: UInt? = null,
-    @SerialName("totalBytes") val totalBytes: UInt? = null,
-  ) : NocturneToGatewaySystemMsg
-  @Serializable
-  @SerialName("otaError")
-  data class OtaError(
-    @SerialName("code") val code: OtaErrorCode,
-    @SerialName("msg") val msg: String,
-  ) : NocturneToGatewaySystemMsg
-  @Serializable
-  @SerialName("otaBeginAck")
-  data class OtaBeginAck(
-    @SerialName("resumeFromOffset") val resumeFromOffset: UInt,
-  ) : NocturneToGatewaySystemMsg
-  @Serializable
-  @SerialName("otaBeginRejected")
-  data class OtaBeginRejected(
-    @SerialName("reason") val reason: String,
-  ) : NocturneToGatewaySystemMsg
-  @Serializable
-  @SerialName("otaAssetRange")
-  data class OtaAssetRange(
-    @SerialName("updateId") val updateId: String,
-    @SerialName("asset") val asset: String,
-    @SerialName("ranges") val ranges: List<RangeSpec>,
-  ) : NocturneToGatewaySystemMsg
-  @Serializable
-  @SerialName("otaAssetRangeAbandon")
-  data class OtaAssetRangeAbandon(
-    @SerialName("requestId") val requestId: Uuid,
-  ) : NocturneToGatewaySystemMsg
-}
-
-@Serializable
 object PingRequest
-
-@Serializable
-object PingRequest
-
-@Serializable
-data class PingResponse(
-  @SerialName("pong") val pong: String,
-)
 
 @Serializable
 data class PingResponse(

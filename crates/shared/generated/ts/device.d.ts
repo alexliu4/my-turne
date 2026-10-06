@@ -111,14 +111,6 @@ export interface AppReadyEventTimezone {
 }
 
 /**
- * Generated enum `Compression`.
- */
-export type Compression =
-  | "Gzip"
-  | "None"
-;
-
-/**
  * Request envelope for `device.ab.failover` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `device.ab.failover`.
  */
@@ -1468,14 +1460,6 @@ export interface DeviceVersionResponse {
 }
 
 /**
- * Generated enum `Encoding`.
- */
-export type Encoding =
-  | "Msgpack"
-  | "Json"
-;
-
-/**
  * Generated struct `HostAction`.
  */
 export interface HostAction {
@@ -1565,16 +1549,6 @@ export interface HostStatus {
    */
   connected: boolean;
 }
-
-/**
- * Generated enum `MsgMeta`.
- */
-export type MsgMeta =
-  | { type: "command" }
-  | { type: "event" }
-  | { type: "request" }
-  | ({ type: "response" } & ResponseMeta)
-;
 
 /**
  * Event payload for `network.status`.
@@ -1752,14 +1726,6 @@ export interface OnboardingSetStateResponse {
 }
 
 /**
- * Generated enum `Priority`.
- */
-export type Priority =
-  | "normal"
-  | "bulk"
-;
-
-/**
  * Request envelope for `reset_boot_counter` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `reset_boot_counter`.
  */
@@ -1814,16 +1780,6 @@ export interface ResetBootCounterResponse {
 }
 
 /**
- * Generated struct `ResponseMeta`.
- */
-export interface ResponseMeta {
-  /**
-   * Inventory field `request_id`.
-   */
-  requestId: Uuid;
-}
-
-/**
  * Event payload for `subscription.updated`.
  * Subscription update event.
  * Inventory: `EVENT_INVENTORY` entry `subscription.updated` payload.
@@ -1866,12 +1822,3 @@ export interface SubscriptionUpdatedEventMessage {
   data: SubscriptionUpdatedEvent;
 }
 
-/**
- * Generated enum `WireError`.
- */
-export type WireError =
-  | { type: "unsupported" }
-  | { type: "unimplemented" }
-  | { type: "malformed" }
-  | { type: "handlerFailed" }
-;

@@ -120,7 +120,11 @@ pub fn write_schema_to_dir(schema: &SwiftSchema, out_dir: impl AsRef<Path>) -> R
 pub fn schema_from_inventory(inventory: &Inventory) -> SwiftSchema {
     let mut schema = schema_from_methods_events(inventory.methods, inventory.events);
 
-    let mut structs: Vec<&StructDef> = inventory.structs.values().collect();
+    let mut structs: Vec<&StructDef> = inventory
+        .structs
+        .values()
+        .filter(|s| s.name.starts_with("Host"))
+        .collect();
     structs.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in structs {
@@ -143,9 +147,11 @@ pub fn schema_from_inventory(inventory: &Inventory) -> SwiftSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = Vec::new();
-    enums.extend(inventory.wire_enums.values());
-    enums.extend(inventory.enums.values());
+    let mut enums: Vec<&EnumDef> = inventory
+        .enums
+        .values()
+        .filter(|e| e.name.starts_with("Host"))
+        .collect();
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {
@@ -752,9 +758,9 @@ mod tests {
     fn inventory_schema_keeps_common_enums_and_method_event_payloads() {
         let mut enums = HashMap::new();
         enums.insert(
-            "DeviceMode".to_string(),
+            "HostDeviceMode".to_string(),
             EnumDef {
-                name: "DeviceMode".to_string(),
+                name: "HostDeviceMode".to_string(),
                 tag_field: "type".to_string(),
                 variants: vec![WireVariant {
                     name: "Ready".to_string(),
@@ -785,7 +791,7 @@ mod tests {
 
         let out = render_family_module(module);
 
-        assert!(out.contains("public enum DeviceMode: String, Codable, Sendable"));
+        assert!(out.contains("public enum HostDeviceMode: String, Codable, Sendable"));
         assert!(out.contains("case ready = \"ready\""));
         assert!(out.contains("public struct SetVolumeRequest: Codable, Sendable"));
         assert!(out.contains("public struct SetVolumeResponse: Codable, Sendable"));

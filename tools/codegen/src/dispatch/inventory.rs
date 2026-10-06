@@ -3647,10 +3647,7 @@ fn walk_items(
             }
             Item::Struct(s) => {
                 let name = s.ident.to_string();
-                if has_derive(&s.attrs, "Serialize")
-                    || has_derive(&s.attrs, "Deserialize")
-                    || has_attr(&s.attrs, "typeshare")
-                {
+                if name.starts_with("Host") {
                     let def = collect_struct(s);
                     structs.insert(name.clone(), def);
                 }

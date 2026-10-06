@@ -148,44 +148,6 @@ public struct DeviceVolumeUpdateResponse: Codable, Sendable {
   }
 }
 
-public struct GatewayToNocturneMsg: Codable, Sendable {
-  public let id: Uuid
-  public let meta: MsgMeta
-  public let data: GatewayToNocturneMsgData
-
-  public init(
-    id: Uuid,
-    meta: MsgMeta,
-    data: GatewayToNocturneMsgData
-  ) {
-    self.id = id
-    self.meta = meta
-    self.data = data
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case id = "id"
-    case meta = "meta"
-    case data = "data"
-  }
-}
-
-public enum GatewayToNocturneMsgData: Codable, Sendable {
-  case system(GatewayToNocturneSystemMsg)
-  case error(WireError)
-}
-
-public enum GatewayToNocturneSystemMsg: Codable, Sendable {
-  case otaBegin(OtaBegin)
-  case otaChunk(OtaChunk)
-  case otaAbandon(OtaAbandon)
-  case otaDownloadProgress(OtaDownloadProgress)
-  case otaPackageReady(OtaPackageReady)
-  case otaAssetRangeReply(OtaAssetRangeReply)
-  case otaAssetRangeRejected(OtaAssetRangeRejected)
-  case otaAssetRangeChunk(OtaAssetRangeChunk)
-}
-
 public struct KeepaliveEvent: Codable, Sendable {
   public let timestamp: Double
 
@@ -198,44 +160,6 @@ public struct KeepaliveEvent: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case timestamp = "timestamp"
   }
-}
-
-public struct NocturneToGatewayMsg: Codable, Sendable {
-  public let id: Uuid
-  public let meta: MsgMeta
-  public let data: NocturneToGatewayMsgData
-
-  public init(
-    id: Uuid,
-    meta: MsgMeta,
-    data: NocturneToGatewayMsgData
-  ) {
-    self.id = id
-    self.meta = meta
-    self.data = data
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case id = "id"
-    case meta = "meta"
-    case data = "data"
-  }
-}
-
-public enum NocturneToGatewayMsgData: Codable, Sendable {
-  case system(NocturneToGatewaySystemMsg)
-  case error(WireError)
-  case ack
-  case done
-}
-
-public enum NocturneToGatewaySystemMsg: Codable, Sendable {
-  case otaProgress(OtaProgress)
-  case otaError(OtaError)
-  case otaBeginAck(OtaBeginAck)
-  case otaBeginRejected(OtaBeginRejected)
-  case otaAssetRange(OtaAssetRange)
-  case otaAssetRangeAbandon(OtaAssetRangeAbandon)
 }
 
 public struct PingRequest: Codable, Sendable {

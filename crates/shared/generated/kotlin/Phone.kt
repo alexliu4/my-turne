@@ -13,17 +13,6 @@ data class PhoneCallAcceptRequest(
 )
 
 @Serializable
-data class PhoneCallAcceptRequest(
-  @SerialName("call_id") val callId: String,
-  @SerialName("device") val device: String,
-)
-
-@Serializable
-data class PhoneCallAcceptResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
 data class PhoneCallAcceptResponse(
   @SerialName("status") val status: String,
 )
@@ -32,17 +21,6 @@ data class PhoneCallAcceptResponse(
 data class PhoneCallDeclineRequest(
   @SerialName("call_id") val callId: String,
   @SerialName("device") val device: String,
-)
-
-@Serializable
-data class PhoneCallDeclineRequest(
-  @SerialName("call_id") val callId: String,
-  @SerialName("device") val device: String,
-)
-
-@Serializable
-data class PhoneCallDeclineResponse(
-  @SerialName("status") val status: String,
 )
 
 @Serializable
@@ -58,40 +36,7 @@ data class PhoneCallEndedEvent(
 )
 
 @Serializable
-data class PhoneCallEndedEvent(
-  @SerialName("call_id") val callId: String,
-  @SerialName("device") val device: String,
-  @SerialName("reason") val reason: String,
-)
-
-@Serializable
 data class PhoneCallStartedEvent(
-  @SerialName("call_id") val callId: String,
-  @SerialName("device") val device: String,
-  @SerialName("remote_id") val remoteId: String,
-  @SerialName("display_name") val displayName: String,
-  @SerialName("status") val status: String,
-  @SerialName("direction") val direction: String,
-  @SerialName("label") val label: String? = null,
-  @SerialName("service") val service: String? = null,
-  @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-)
-
-@Serializable
-data class PhoneCallStartedEvent(
-  @SerialName("call_id") val callId: String,
-  @SerialName("device") val device: String,
-  @SerialName("remote_id") val remoteId: String,
-  @SerialName("display_name") val displayName: String,
-  @SerialName("status") val status: String,
-  @SerialName("direction") val direction: String,
-  @SerialName("label") val label: String? = null,
-  @SerialName("service") val service: String? = null,
-  @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-)
-
-@Serializable
-data class PhoneCallUpdatedEvent(
   @SerialName("call_id") val callId: String,
   @SerialName("device") val device: String,
   @SerialName("remote_id") val remoteId: String,
@@ -122,133 +67,27 @@ data class PhoneCallsGetRequest(
 )
 
 @Serializable
-data class PhoneCallsGetRequest(
-  @SerialName("device") val device: String,
-)
-
-@Serializable
 data class PhoneCallsGetResponse(
   @SerialName("calls") val calls: List<Value>,
 )
 
 @Serializable
-data class PhoneCallsGetResponse(
-  @SerialName("calls") val calls: List<Value>,
-)
-
-@Serializable
-sealed interface PhoneEvent {
-  @Serializable
-  @SerialName("phone.call.started")
-  data class PhoneCallStarted(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("remote_id") val remoteId: String,
-    @SerialName("display_name") val displayName: String,
-    @SerialName("status") val status: String,
-    @SerialName("direction") val direction: String,
-    @SerialName("label") val label: String? = null,
-    @SerialName("service") val service: String? = null,
-    @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-  ) : PhoneEvent
-  @Serializable
-  @SerialName("phone.call.updated")
-  data class PhoneCallUpdated(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("remote_id") val remoteId: String,
-    @SerialName("display_name") val displayName: String,
-    @SerialName("status") val status: String,
-    @SerialName("direction") val direction: String,
-    @SerialName("label") val label: String? = null,
-    @SerialName("service") val service: String? = null,
-    @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-  ) : PhoneEvent
-  @Serializable
-  @SerialName("phone.call.ended")
-  data class PhoneCallEnded(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("reason") val reason: String,
-  ) : PhoneEvent
+enum class PhoneEvent {
+  @SerialName("phone_call_started")
+  PHONE_CALL_STARTED,
+  @SerialName("phone_call_updated")
+  PHONE_CALL_UPDATED,
+  @SerialName("phone_call_ended")
+  PHONE_CALL_ENDED,
 }
 
 @Serializable
-sealed interface PhoneEvent {
-  @Serializable
-  @SerialName("phone.call.started")
-  data class PhoneCallStarted(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("remote_id") val remoteId: String,
-    @SerialName("display_name") val displayName: String,
-    @SerialName("status") val status: String,
-    @SerialName("direction") val direction: String,
-    @SerialName("label") val label: String? = null,
-    @SerialName("service") val service: String? = null,
-    @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-  ) : PhoneEvent
-  @Serializable
-  @SerialName("phone.call.updated")
-  data class PhoneCallUpdated(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("remote_id") val remoteId: String,
-    @SerialName("display_name") val displayName: String,
-    @SerialName("status") val status: String,
-    @SerialName("direction") val direction: String,
-    @SerialName("label") val label: String? = null,
-    @SerialName("service") val service: String? = null,
-    @SerialName("started_at_unix_s") val startedAtUnixS: Long? = null,
-  ) : PhoneEvent
-  @Serializable
-  @SerialName("phone.call.ended")
-  data class PhoneCallEnded(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-    @SerialName("reason") val reason: String,
-  ) : PhoneEvent
-}
-
-@Serializable
-sealed interface PhoneMethod {
-  @Serializable
-  @SerialName("phone.calls.get")
-  data class PhoneCallsGet(
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
-  @Serializable
-  @SerialName("phone.call.accept")
-  data class PhoneCallAccept(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
-  @Serializable
-  @SerialName("phone.call.decline")
-  data class PhoneCallDecline(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
-}
-
-@Serializable
-sealed interface PhoneMethod {
-  @Serializable
-  @SerialName("phone.calls.get")
-  data class PhoneCallsGet(
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
-  @Serializable
-  @SerialName("phone.call.accept")
-  data class PhoneCallAccept(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
-  @Serializable
-  @SerialName("phone.call.decline")
-  data class PhoneCallDecline(
-    @SerialName("call_id") val callId: String,
-    @SerialName("device") val device: String,
-  ) : PhoneMethod
+enum class PhoneMethod {
+  @SerialName("phone_calls_get")
+  PHONE_CALLS_GET,
+  @SerialName("phone_call_accept")
+  PHONE_CALL_ACCEPT,
+  @SerialName("phone_call_decline")
+  PHONE_CALL_DECLINE,
 }
 

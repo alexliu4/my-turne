@@ -7,33 +7,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-sealed interface AudioEvent {
-  @Serializable
-  @SerialName("audio.level")
-  data class AudioLevel(
-    @SerialName("level") val level: Double,
-  ) : AudioEvent
-  @Serializable
+enum class AudioEvent {
+  @SerialName("audio_level")
+  AUDIO_LEVEL,
   @SerialName("wind_level")
-  data class WindLevel(
-    @SerialName("level") val level: UByte,
-    @SerialName("stat") val stat: Double,
-  ) : AudioEvent
-}
-
-@Serializable
-sealed interface AudioEvent {
-  @Serializable
-  @SerialName("audio.level")
-  data class AudioLevel(
-    @SerialName("level") val level: Double,
-  ) : AudioEvent
-  @Serializable
-  @SerialName("wind_level")
-  data class WindLevel(
-    @SerialName("level") val level: UByte,
-    @SerialName("stat") val stat: Double,
-  ) : AudioEvent
+  WIND_LEVEL,
 }
 
 @Serializable
@@ -42,36 +20,12 @@ data class AudioLevelEvent(
 )
 
 @Serializable
-data class AudioLevelEvent(
-  @SerialName("level") val level: Double,
-)
-
-@Serializable
-sealed interface AudioMethod {
-  @Serializable
-  @SerialName("audio.record.start")
-  data class AudioRecordStart(
-  ) : AudioMethod
-  @Serializable
-  @SerialName("audio.record.stop")
-  data class AudioRecordStop(
-  ) : AudioMethod
+enum class AudioMethod {
+  @SerialName("audio_record_start")
+  AUDIO_RECORD_START,
+  @SerialName("audio_record_stop")
+  AUDIO_RECORD_STOP,
 }
-
-@Serializable
-sealed interface AudioMethod {
-  @Serializable
-  @SerialName("audio.record.start")
-  data class AudioRecordStart(
-  ) : AudioMethod
-  @Serializable
-  @SerialName("audio.record.stop")
-  data class AudioRecordStop(
-  ) : AudioMethod
-}
-
-@Serializable
-object AudioRecordStartRequest
 
 @Serializable
 object AudioRecordStartRequest
@@ -82,30 +36,11 @@ data class AudioRecordStartResponse(
 )
 
 @Serializable
-data class AudioRecordStartResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-object AudioRecordStopRequest
-
-@Serializable
 object AudioRecordStopRequest
 
 @Serializable
 data class AudioRecordStopResponse(
   @SerialName("status") val status: String,
-)
-
-@Serializable
-data class AudioRecordStopResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-data class WindLevelEvent(
-  @SerialName("level") val level: UByte,
-  @SerialName("stat") val stat: Double,
 )
 
 @Serializable

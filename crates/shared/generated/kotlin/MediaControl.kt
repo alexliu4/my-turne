@@ -7,63 +7,16 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-sealed interface MediaControlEvent {
-  @Serializable
-  @SerialName("media.now_playing.update")
-  data class MediaNowPlayingUpdate(
-    @SerialName("media_item_attributes") val mediaItemAttributes: Value? = null,
-    @SerialName("playback_attributes") val playbackAttributes: Value? = null,
-    @SerialName("media_generation") val mediaGeneration: ULong? = null,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("media.now_playing.artwork")
-  data class MediaNowPlayingArtwork(
-    @SerialName("data") val data: String,
-    @SerialName("content_type") val contentType: String,
-    @SerialName("media_generation") val mediaGeneration: ULong? = null,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("media.now_playing.artwork.failed")
-  data class MediaNowPlayingArtworkFailed(
-    @SerialName("transfer_id") val transferId: UInt,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("phone.volume.update")
-  data class PhoneVolumeUpdate(
-    @SerialName("volume_percent") val volumePercent: UByte,
-  ) : MediaControlEvent
+enum class MediaControlEvent {
+  @SerialName("media_now_playing_update")
+  MEDIA_NOW_PLAYING_UPDATE,
+  @SerialName("media_now_playing_artwork")
+  MEDIA_NOW_PLAYING_ARTWORK,
+  @SerialName("media_now_playing_artwork_failed")
+  MEDIA_NOW_PLAYING_ARTWORK_FAILED,
+  @SerialName("phone_volume_update")
+  PHONE_VOLUME_UPDATE,
 }
-
-@Serializable
-sealed interface MediaControlEvent {
-  @Serializable
-  @SerialName("media.now_playing.update")
-  data class MediaNowPlayingUpdate(
-    @SerialName("media_item_attributes") val mediaItemAttributes: Value? = null,
-    @SerialName("playback_attributes") val playbackAttributes: Value? = null,
-    @SerialName("media_generation") val mediaGeneration: ULong? = null,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("media.now_playing.artwork")
-  data class MediaNowPlayingArtwork(
-    @SerialName("data") val data: String,
-    @SerialName("content_type") val contentType: String,
-    @SerialName("media_generation") val mediaGeneration: ULong? = null,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("media.now_playing.artwork.failed")
-  data class MediaNowPlayingArtworkFailed(
-    @SerialName("transfer_id") val transferId: UInt,
-  ) : MediaControlEvent
-  @Serializable
-  @SerialName("phone.volume.update")
-  data class PhoneVolumeUpdate(
-    @SerialName("volume_percent") val volumePercent: UByte,
-  ) : MediaControlEvent
-}
-
-@Serializable
-object MediaControlLikeRequest
 
 @Serializable
 object MediaControlLikeRequest
@@ -74,100 +27,28 @@ data class MediaControlLikeResponse(
 )
 
 @Serializable
-data class MediaControlLikeResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-sealed interface MediaControlMethod {
-  @Serializable
-  @SerialName("media.control.play")
-  data class MediaControlPlay(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.pause")
-  data class MediaControlPause(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.next")
-  data class MediaControlNext(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.previous")
-  data class MediaControlPrevious(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.shuffle")
-  data class MediaControlShuffle(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.repeat")
-  data class MediaControlRepeat(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.like")
-  data class MediaControlLike(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.unlike")
-  data class MediaControlUnlike(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.volume_up")
-  data class MediaControlVolumeUp(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.volume_down")
-  data class MediaControlVolumeDown(
-  ) : MediaControlMethod
+enum class MediaControlMethod {
+  @SerialName("media_control_play")
+  MEDIA_CONTROL_PLAY,
+  @SerialName("media_control_pause")
+  MEDIA_CONTROL_PAUSE,
+  @SerialName("media_control_next")
+  MEDIA_CONTROL_NEXT,
+  @SerialName("media_control_previous")
+  MEDIA_CONTROL_PREVIOUS,
+  @SerialName("media_control_shuffle")
+  MEDIA_CONTROL_SHUFFLE,
+  @SerialName("media_control_repeat")
+  MEDIA_CONTROL_REPEAT,
+  @SerialName("media_control_like")
+  MEDIA_CONTROL_LIKE,
+  @SerialName("media_control_unlike")
+  MEDIA_CONTROL_UNLIKE,
+  @SerialName("media_control_volume_up")
+  MEDIA_CONTROL_VOLUME_UP,
+  @SerialName("media_control_volume_down")
+  MEDIA_CONTROL_VOLUME_DOWN,
 }
-
-@Serializable
-sealed interface MediaControlMethod {
-  @Serializable
-  @SerialName("media.control.play")
-  data class MediaControlPlay(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.pause")
-  data class MediaControlPause(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.next")
-  data class MediaControlNext(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.previous")
-  data class MediaControlPrevious(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.shuffle")
-  data class MediaControlShuffle(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.repeat")
-  data class MediaControlRepeat(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.like")
-  data class MediaControlLike(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.unlike")
-  data class MediaControlUnlike(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.volume_up")
-  data class MediaControlVolumeUp(
-  ) : MediaControlMethod
-  @Serializable
-  @SerialName("media.control.volume_down")
-  data class MediaControlVolumeDown(
-  ) : MediaControlMethod
-}
-
-@Serializable
-object MediaControlNextRequest
 
 @Serializable
 object MediaControlNextRequest
@@ -178,20 +59,7 @@ data class MediaControlNextResponse(
 )
 
 @Serializable
-data class MediaControlNextResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
 object MediaControlPauseRequest
-
-@Serializable
-object MediaControlPauseRequest
-
-@Serializable
-data class MediaControlPauseResponse(
-  @SerialName("status") val status: String,
-)
 
 @Serializable
 data class MediaControlPauseResponse(
@@ -202,20 +70,9 @@ data class MediaControlPauseResponse(
 object MediaControlPlayRequest
 
 @Serializable
-object MediaControlPlayRequest
-
-@Serializable
 data class MediaControlPlayResponse(
   @SerialName("status") val status: String,
 )
-
-@Serializable
-data class MediaControlPlayResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-object MediaControlPreviousRequest
 
 @Serializable
 object MediaControlPreviousRequest
@@ -226,20 +83,7 @@ data class MediaControlPreviousResponse(
 )
 
 @Serializable
-data class MediaControlPreviousResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
 object MediaControlRepeatRequest
-
-@Serializable
-object MediaControlRepeatRequest
-
-@Serializable
-data class MediaControlRepeatResponse(
-  @SerialName("status") val status: String,
-)
 
 @Serializable
 data class MediaControlRepeatResponse(
@@ -250,20 +94,9 @@ data class MediaControlRepeatResponse(
 object MediaControlShuffleRequest
 
 @Serializable
-object MediaControlShuffleRequest
-
-@Serializable
 data class MediaControlShuffleResponse(
   @SerialName("status") val status: String,
 )
-
-@Serializable
-data class MediaControlShuffleResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-object MediaControlUnlikeRequest
 
 @Serializable
 object MediaControlUnlikeRequest
@@ -274,20 +107,7 @@ data class MediaControlUnlikeResponse(
 )
 
 @Serializable
-data class MediaControlUnlikeResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
 object MediaControlVolumeDownRequest
-
-@Serializable
-object MediaControlVolumeDownRequest
-
-@Serializable
-data class MediaControlVolumeDownResponse(
-  @SerialName("status") val status: String,
-)
 
 @Serializable
 data class MediaControlVolumeDownResponse(
@@ -298,23 +118,8 @@ data class MediaControlVolumeDownResponse(
 object MediaControlVolumeUpRequest
 
 @Serializable
-object MediaControlVolumeUpRequest
-
-@Serializable
 data class MediaControlVolumeUpResponse(
   @SerialName("status") val status: String,
-)
-
-@Serializable
-data class MediaControlVolumeUpResponse(
-  @SerialName("status") val status: String,
-)
-
-@Serializable
-data class MediaNowPlayingArtworkEvent(
-  @SerialName("data") val data: String,
-  @SerialName("content_type") val contentType: String,
-  @SerialName("media_generation") val mediaGeneration: ULong? = null,
 )
 
 @Serializable
@@ -330,27 +135,10 @@ data class MediaNowPlayingArtworkFailedEvent(
 )
 
 @Serializable
-data class MediaNowPlayingArtworkFailedEvent(
-  @SerialName("transfer_id") val transferId: UInt,
-)
-
-@Serializable
 data class MediaNowPlayingUpdateEvent(
   @SerialName("media_item_attributes") val mediaItemAttributes: Value? = null,
   @SerialName("playback_attributes") val playbackAttributes: Value? = null,
   @SerialName("media_generation") val mediaGeneration: ULong? = null,
-)
-
-@Serializable
-data class MediaNowPlayingUpdateEvent(
-  @SerialName("media_item_attributes") val mediaItemAttributes: Value? = null,
-  @SerialName("playback_attributes") val playbackAttributes: Value? = null,
-  @SerialName("media_generation") val mediaGeneration: ULong? = null,
-)
-
-@Serializable
-data class PhoneVolumeUpdateEvent(
-  @SerialName("volume_percent") val volumePercent: UByte,
 )
 
 @Serializable

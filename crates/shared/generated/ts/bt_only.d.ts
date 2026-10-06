@@ -276,46 +276,6 @@ export interface DeviceVolumeUpdateResponse {
 }
 
 /**
- * Generated struct `GatewayToNocturneMsg`.
- */
-export interface GatewayToNocturneMsg {
-  /**
-   * Inventory field `id`.
-   */
-  id: Uuid;
-  /**
-   * Inventory field `meta`.
-   */
-  meta: MsgMeta;
-  /**
-   * Inventory field `data`.
-   */
-  data: GatewayToNocturneMsgData;
-}
-
-/**
- * Generated enum `GatewayToNocturneMsgData`.
- */
-export type GatewayToNocturneMsgData =
-  | ({ type: "system" } & GatewayToNocturneSystemMsg)
-  | ({ type: "error" } & WireError)
-;
-
-/**
- * Generated enum `GatewayToNocturneSystemMsg`.
- */
-export type GatewayToNocturneSystemMsg =
-  | ({ type: "otaBegin" } & OtaBegin)
-  | ({ type: "otaChunk" } & OtaChunk)
-  | ({ type: "otaAbandon" } & OtaAbandon)
-  | ({ type: "otaDownloadProgress" } & OtaDownloadProgress)
-  | ({ type: "otaPackageReady" } & OtaPackageReady)
-  | ({ type: "otaAssetRangeReply" } & OtaAssetRangeReply)
-  | ({ type: "otaAssetRangeRejected" } & OtaAssetRangeRejected)
-  | ({ type: "otaAssetRangeChunk" } & OtaAssetRangeChunk)
-;
-
-/**
  * Event payload for `keepalive`.
  * Companion keepalive event.
  * Inventory: `EVENT_INVENTORY` entry `keepalive` payload.
@@ -341,46 +301,6 @@ export interface KeepaliveEventMessage {
    */
   data: KeepaliveEvent;
 }
-
-/**
- * Generated struct `NocturneToGatewayMsg`.
- */
-export interface NocturneToGatewayMsg {
-  /**
-   * Inventory field `id`.
-   */
-  id: Uuid;
-  /**
-   * Inventory field `meta`.
-   */
-  meta: MsgMeta;
-  /**
-   * Inventory field `data`.
-   */
-  data: NocturneToGatewayMsgData;
-}
-
-/**
- * Generated enum `NocturneToGatewayMsgData`.
- */
-export type NocturneToGatewayMsgData =
-  | ({ type: "system" } & NocturneToGatewaySystemMsg)
-  | ({ type: "error" } & WireError)
-  | { type: "ack" }
-  | { type: "done" }
-;
-
-/**
- * Generated enum `NocturneToGatewaySystemMsg`.
- */
-export type NocturneToGatewaySystemMsg =
-  | ({ type: "otaProgress" } & OtaProgress)
-  | ({ type: "otaError" } & OtaError)
-  | ({ type: "otaBeginAck" } & OtaBeginAck)
-  | ({ type: "otaBeginRejected" } & OtaBeginRejected)
-  | ({ type: "otaAssetRange" } & OtaAssetRange)
-  | ({ type: "otaAssetRangeAbandon" } & OtaAssetRangeAbandon)
-;
 
 /**
  * Request envelope for `ping` in the `bt_only` method union.
