@@ -733,6 +733,23 @@ public enum Encoding: String, Codable, Sendable {
   case json = "json"
 }
 
+public enum HostCapability: String, Codable, Sendable {
+  case media = "media"
+  case volume = "volume"
+  case discord = "discord"
+  case systemStats = "systemStats"
+  case macros = "macros"
+  case appLaunch = "appLaunch"
+}
+
+public enum HostMessage: Codable, Sendable {
+  case hello(HostHello)
+  case status(HostStatus)
+  case action(HostAction)
+  case actionResult(HostActionResult)
+  case unknown
+}
+
 public enum MsgMeta: Codable, Sendable {
   case command
   case event

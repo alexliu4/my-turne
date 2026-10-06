@@ -329,6 +329,36 @@ enum class Encoding {
 }
 
 @Serializable
+enum class HostCapability {
+  @SerialName("media")
+  MEDIA,
+  @SerialName("volume")
+  VOLUME,
+  @SerialName("discord")
+  DISCORD,
+  @SerialName("system_stats")
+  SYSTEM_STATS,
+  @SerialName("macros")
+  MACROS,
+  @SerialName("app_launch")
+  APP_LAUNCH,
+}
+
+@Serializable
+enum class HostMessage {
+  @SerialName("hello")
+  HELLO,
+  @SerialName("status")
+  STATUS,
+  @SerialName("action")
+  ACTION,
+  @SerialName("action_result")
+  ACTION_RESULT,
+  @SerialName("unknown")
+  UNKNOWN,
+}
+
+@Serializable
 enum class MsgMeta {
   @SerialName("command")
   COMMAND,
