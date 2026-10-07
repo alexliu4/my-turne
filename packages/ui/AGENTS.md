@@ -4,6 +4,8 @@ This guide covers `packages/ui` in the Nocturne monorepo. The daemon lives in `c
 
 ## OVERVIEW
 
+The optional Windows HostBridge is configured at UI build time with `VITE_WINDOWS_HOST_URL` and `VITE_WINDOWS_TOKEN`. The app starts its single connection only when a host URL is set. Host state is available from `src/hooks/useHostBridge.ts` for future screens.
+
 Vite + React 19 SPA served by Chromium kiosk on the Spotify Car Thing (800×480, rotary dial + touch + hardware preset buttons). Talks to the `nocturned` daemon over WebSocket on port 5000 (same origin). No Spotify Web API calls from the browser — everything is proxied via the daemon.
 
 ## STACK

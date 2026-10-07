@@ -585,6 +585,8 @@ fn render_host_message_enum(out: &mut String) {
     out.push_str("  case status(HostStatus)\n");
     out.push_str("  case action(HostAction)\n");
     out.push_str("  case actionResult(HostActionResult)\n");
+    out.push_str("  case ping\n");
+    out.push_str("  case pong\n");
     out.push_str("  case unknown\n\n");
 
     out.push_str("  private enum CodingKeys: String, CodingKey {\n");
@@ -607,6 +609,10 @@ fn render_host_message_enum(out: &mut String) {
     out.push_str("    case \"host.actionResult\":\n");
     out.push_str("      let actionResult = try HostActionResult(from: decoder)\n");
     out.push_str("      self = .actionResult(actionResult)\n");
+    out.push_str("    case \"host.ping\":\n");
+    out.push_str("      self = .ping\n");
+    out.push_str("    case \"host.pong\":\n");
+    out.push_str("      self = .pong\n");
     out.push_str("    default:\n");
     out.push_str("      self = .unknown\n");
     out.push_str("    }\n");
@@ -627,6 +633,10 @@ fn render_host_message_enum(out: &mut String) {
     out.push_str("    case .actionResult(let actionResult):\n");
     out.push_str("      try container.encode(\"host.actionResult\", forKey: .type)\n");
     out.push_str("      try actionResult.encode(to: encoder)\n");
+    out.push_str("    case .ping:\n");
+    out.push_str("      try container.encode(\"host.ping\", forKey: .type)\n");
+    out.push_str("    case .pong:\n");
+    out.push_str("      try container.encode(\"host.pong\", forKey: .type)\n");
     out.push_str("    case .unknown:\n");
     out.push_str("      try container.encode(\"Unknown\", forKey: .type)\n");
     out.push_str("    }\n");

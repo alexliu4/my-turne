@@ -387,6 +387,14 @@ sealed class HostMessage {
   ) : HostMessage()
 
   @Serializable
+  @SerialName("host.ping")
+  object Ping : HostMessage()
+
+  @Serializable
+  @SerialName("host.pong")
+  object Pong : HostMessage()
+
+  @Serializable
   object Unknown : HostMessage()
 }
 
@@ -405,6 +413,8 @@ object HostMessageSerializer : KSerializer<HostMessage> {
       "host.status" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), fields)
       "host.action" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), fields)
       "host.actionResult" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), fields)
+      "host.ping" -> HostMessage.Ping
+      "host.pong" -> HostMessage.Pong
       else -> HostMessage.Unknown
     }
   }
@@ -416,6 +426,8 @@ object HostMessageSerializer : KSerializer<HostMessage> {
       is HostMessage.Status -> encodeKnown(jsonEncoder, "host.status", HostMessage.Status.serializer(), value)
       is HostMessage.Action -> encodeKnown(jsonEncoder, "host.action", HostMessage.Action.serializer(), value)
       is HostMessage.ActionResult -> encodeKnown(jsonEncoder, "host.actionResult", HostMessage.ActionResult.serializer(), value)
+      is HostMessage.Ping -> JsonObject(mapOf("type" to JsonPrimitive("host.ping")))
+      is HostMessage.Pong -> JsonObject(mapOf("type" to JsonPrimitive("host.pong")))
       is HostMessage.Unknown -> JsonObject(mapOf("type" to JsonPrimitive("Unknown")))
     }
     jsonEncoder.encodeJsonElement(jsonObject)

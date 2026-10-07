@@ -1,0 +1,18 @@
+[package]
+name = "nocturne-windows-companion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+
+[dependencies]
+libnocturne = { path = "../shared" }
+tokio = { workspace = true, features = ["full"] }
+tokio-tungstenite = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
+url = "2"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

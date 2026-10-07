@@ -61,6 +61,18 @@ fn test_host_status_serialization() {
 }
 
 #[test]
+fn test_host_heartbeat_serialization() {
+    for (message, discriminator) in [
+        (HostMessage::Ping, "host.ping"),
+        (HostMessage::Pong, "host.pong"),
+    ] {
+        let encoded = serde_json::to_value(&message).unwrap();
+        assert_eq!(encoded, json!({ "type": discriminator }));
+        assert_eq!(serde_json::from_value::<HostMessage>(encoded).unwrap(), message);
+    }
+}
+
+#[test]
 fn test_host_action_serialization() {
     let action = HostAction {
         request_id: "req-123".to_string(),

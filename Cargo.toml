@@ -7,6 +7,7 @@ members = [
     "crates/iap2",
     "crates/iap2-macros",
     "crates/iap2-mfi",
+    "crates/windows-companion",
     "tools/codegen",
 ]
 
