@@ -35,14 +35,7 @@ impl Default for CompanionConfig {
             bind_addr,
             auth_token,
             host_name,
-            capabilities: vec![
-                HostCapability::Media,
-                HostCapability::Volume,
-                HostCapability::Discord,
-                HostCapability::SystemStats,
-                HostCapability::Macros,
-                HostCapability::AppLaunch,
-            ],
+            capabilities: vec![],
             protocol_version: 1,
         }
     }
@@ -230,7 +223,7 @@ mod tests {
             bind_addr: addr,
             auth_token: None,
             host_name: "Test-PC".to_string(),
-            capabilities: vec![HostCapability::Media, HostCapability::Volume],
+            capabilities: vec![],
             protocol_version: 1,
         });
 
@@ -248,7 +241,7 @@ mod tests {
             if let HostMessage::Hello(hello) = msg {
                 assert_eq!(hello.host_name, "Test-PC");
                 assert_eq!(hello.protocol_version, 1);
-                assert_eq!(hello.capabilities, vec![HostCapability::Media, HostCapability::Volume]);
+                assert_eq!(hello.capabilities, Vec::<HostCapability>::new());
             } else {
                 panic!("Expected HostMessage::Hello");
             }
@@ -292,14 +285,20 @@ mod tests {
         });
 
         let url = format!("ws://{}", addr);
-        let (mut ws_stream, _) = connect_async(&url).await?;
+        let connect_result = connect_async(&url).await;
+        assert!(connect_result.is_ok(), "WebSocket handshake should connect to receive auth rejection message");
 
-        // Unauthorized connection should receive connected: false status then close
+        let (mut ws_stream, _) = connect_result.unwrap();
+
         if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
             let msg: HostMessage = serde_json::from_str(&text)?;
             if let HostMessage::Status(status) = msg {
-                assert!(!status.connected);
+                assert!(!status.connected, "Expected status.connected = false for unauthorized client");
+            } else {
+                panic!("Expected HostMessage::Status error response for unauthorized client");
             }
+        } else {
+            panic!("Expected rejection message before close");
         }
 
         Ok(())

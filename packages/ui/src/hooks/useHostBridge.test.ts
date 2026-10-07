@@ -56,13 +56,12 @@ describe("useHostBridge singleton manager", () => {
   beforeEach(() => {
     disconnectHostBridge();
     MockWebSocket.instances = [];
-    (globalThis as unknown as { WebSocket: typeof MockWebSocket }).WebSocket =
-      MockWebSocket as unknown as typeof WebSocket;
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
   });
 
   afterEach(() => {
     disconnectHostBridge();
-    (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket = originalWebSocket;
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = originalWebSocket;
   });
 
   test("connectHostBridge initializes singleton WebSocket", () => {
@@ -99,11 +98,11 @@ describe("useHostBridge singleton manager", () => {
       type: "host.hello",
       protocolVersion: 1,
       hostName: "Windows-Desktop",
-      capabilities: ["media", "volume", "discord"],
+      capabilities: [],
     });
 
     expect(receivedState.hostName).toBe("Windows-Desktop");
-    expect(receivedState.capabilities).toEqual(["media", "volume", "discord"]);
+    expect(receivedState.capabilities).toEqual([]);
 
     unsubscribe();
   });
@@ -119,6 +118,19 @@ describe("useHostBridge singleton manager", () => {
 
     expect(success).toBe(true);
     expect(ws.sentMessages.some((m) => m.includes("host.ping"))).toBe(true);
+  });
+
+  test("handles host.status disconnected message", () => {
+    connectHostBridge({ autoConnect: false });
+    const ws = MockWebSocket.instances[0];
+    ws.simulateOpen();
+
+    ws.simulateMessage({
+      type: "host.status",
+      connected: false,
+    });
+
+    expect(getHostBridgeState().connectionState).toBe("disconnected");
   });
 
   test("manual disconnectHostBridge stays disconnected without auto-reconnecting", () => {

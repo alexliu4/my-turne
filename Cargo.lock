@@ -1979,12 +1979,10 @@ dependencies = [
  "libnocturne",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
- "tungstenite",
 ]
 
 [[package]]

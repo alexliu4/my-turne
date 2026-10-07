@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { HostCapability, HostHello, HostMessage } from "@nocturne/shared/bindings/host";
+import type { HostCapability, HostHello, HostMessage } from "../../../../crates/shared/bindings/host";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 
