@@ -5,6 +5,15 @@ package dev.nocturne.schema
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable
 data class AmbientLightUpdateEvent(
@@ -390,24 +399,31 @@ object HostMessageSerializer : KSerializer<HostMessage> {
     val jsonObject = jsonElement as? JsonObject ?: error("Expected JsonObject for HostMessage")
     val typePrimitive = jsonObject["type"] as? JsonPrimitive ?: error("Missing or invalid 'type' in HostMessage")
     if (!typePrimitive.isString) error("'type' in HostMessage must be a string")
-    return when (val type = typePrimitive.content) {
-      "host.hello" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), jsonElement)
-      "host.status" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), jsonElement)
-      "host.action" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), jsonElement)
-      "host.actionResult" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), jsonElement)
+    val fields = JsonObject(jsonObject.filterKeys { it != "type" })
+    return when (typePrimitive.content) {
+      "host.hello" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), fields)
+      "host.status" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), fields)
+      "host.action" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), fields)
+      "host.actionResult" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), fields)
       else -> HostMessage.Unknown
     }
   }
 
   override fun serialize(encoder: Encoder, value: HostMessage) {
     val jsonEncoder = encoder as? JsonEncoder ?: error("HostMessageSerializer requires JsonEncoder")
-    when (value) {
-      is HostMessage.Hello -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Hello.serializer(), value))
-      is HostMessage.Status -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Status.serializer(), value))
-      is HostMessage.Action -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Action.serializer(), value))
-      is HostMessage.ActionResult -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.ActionResult.serializer(), value))
-      is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf("type" to JsonPrimitive("Unknown"))))
+    val jsonObject = when (value) {
+      is HostMessage.Hello -> encodeKnown(jsonEncoder, "host.hello", HostMessage.Hello.serializer(), value)
+      is HostMessage.Status -> encodeKnown(jsonEncoder, "host.status", HostMessage.Status.serializer(), value)
+      is HostMessage.Action -> encodeKnown(jsonEncoder, "host.action", HostMessage.Action.serializer(), value)
+      is HostMessage.ActionResult -> encodeKnown(jsonEncoder, "host.actionResult", HostMessage.ActionResult.serializer(), value)
+      is HostMessage.Unknown -> JsonObject(mapOf("type" to JsonPrimitive("Unknown")))
     }
+    jsonEncoder.encodeJsonElement(jsonObject)
+  }
+
+  private fun <T> encodeKnown(jsonEncoder: JsonEncoder, type: String, serializer: KSerializer<T>, value: T): JsonObject {
+    val fields = jsonEncoder.json.encodeToJsonElement(serializer, value) as JsonObject
+    return JsonObject(mapOf("type" to JsonPrimitive(type)) + fields)
   }
 }
 

@@ -210,7 +210,23 @@ fn render_family_module(module: &RustModule) -> String {
         return out;
     }
     out.push_str("import kotlinx.serialization.SerialName\n");
-    out.push_str("import kotlinx.serialization.Serializable\n\n");
+    out.push_str("import kotlinx.serialization.Serializable\n");
+    if module
+        .items
+        .iter()
+        .any(|item| matches!(item, RustItem::Enum(item) if item.name == "HostMessage"))
+    {
+        out.push_str("import kotlinx.serialization.KSerializer\n");
+        out.push_str("import kotlinx.serialization.descriptors.SerialDescriptor\n");
+        out.push_str("import kotlinx.serialization.descriptors.buildClassSerialDescriptor\n");
+        out.push_str("import kotlinx.serialization.encoding.Decoder\n");
+        out.push_str("import kotlinx.serialization.encoding.Encoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonDecoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonEncoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonObject\n");
+        out.push_str("import kotlinx.serialization.json.JsonPrimitive\n");
+    }
+    out.push('\n');
 
     for item in &module.items {
         match item {
@@ -306,24 +322,31 @@ fn render_host_message_enum_and_serializer(out: &mut String) {
     out.push_str("    val jsonObject = jsonElement as? JsonObject ?: error(\"Expected JsonObject for HostMessage\")\n");
     out.push_str("    val typePrimitive = jsonObject[\"type\"] as? JsonPrimitive ?: error(\"Missing or invalid 'type' in HostMessage\")\n");
     out.push_str("    if (!typePrimitive.isString) error(\"'type' in HostMessage must be a string\")\n");
-    out.push_str("    return when (val type = typePrimitive.content) {\n");
-    out.push_str("      \"host.hello\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), jsonElement)\n");
-    out.push_str("      \"host.status\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), jsonElement)\n");
-    out.push_str("      \"host.action\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), jsonElement)\n");
-    out.push_str("      \"host.actionResult\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), jsonElement)\n");
+    out.push_str("    val fields = JsonObject(jsonObject.filterKeys { it != \"type\" })\n");
+    out.push_str("    return when (typePrimitive.content) {\n");
+    out.push_str("      \"host.hello\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), fields)\n");
+    out.push_str("      \"host.status\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), fields)\n");
+    out.push_str("      \"host.action\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), fields)\n");
+    out.push_str("      \"host.actionResult\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), fields)\n");
     out.push_str("      else -> HostMessage.Unknown\n");
     out.push_str("    }\n");
     out.push_str("  }\n\n");
 
     out.push_str("  override fun serialize(encoder: Encoder, value: HostMessage) {\n");
     out.push_str("    val jsonEncoder = encoder as? JsonEncoder ?: error(\"HostMessageSerializer requires JsonEncoder\")\n");
-    out.push_str("    when (value) {\n");
-    out.push_str("      is HostMessage.Hello -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Hello.serializer(), value))\n");
-    out.push_str("      is HostMessage.Status -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Status.serializer(), value))\n");
-    out.push_str("      is HostMessage.Action -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Action.serializer(), value))\n");
-    out.push_str("      is HostMessage.ActionResult -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.ActionResult.serializer(), value))\n");
-    out.push_str("      is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\"))))\n");
+    out.push_str("    val jsonObject = when (value) {\n");
+    out.push_str("      is HostMessage.Hello -> encodeKnown(jsonEncoder, \"host.hello\", HostMessage.Hello.serializer(), value)\n");
+    out.push_str("      is HostMessage.Status -> encodeKnown(jsonEncoder, \"host.status\", HostMessage.Status.serializer(), value)\n");
+    out.push_str("      is HostMessage.Action -> encodeKnown(jsonEncoder, \"host.action\", HostMessage.Action.serializer(), value)\n");
+    out.push_str("      is HostMessage.ActionResult -> encodeKnown(jsonEncoder, \"host.actionResult\", HostMessage.ActionResult.serializer(), value)\n");
+    out.push_str("      is HostMessage.Unknown -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\")))\n");
     out.push_str("    }\n");
+    out.push_str("    jsonEncoder.encodeJsonElement(jsonObject)\n");
+    out.push_str("  }\n");
+    out.push_str("\n");
+    out.push_str("  private fun <T> encodeKnown(jsonEncoder: JsonEncoder, type: String, serializer: KSerializer<T>, value: T): JsonObject {\n");
+    out.push_str("    val fields = jsonEncoder.json.encodeToJsonElement(serializer, value) as JsonObject\n");
+    out.push_str("    return JsonObject(mapOf(\"type\" to JsonPrimitive(type)) + fields)\n");
     out.push_str("  }\n");
     out.push_str("}\n");
 }
@@ -580,13 +603,49 @@ mod tests {
 
     #[test]
     fn host_message_uses_custom_serializer_and_unknown_fallback() {
-        let mut out = String::new();
-        render_host_message_enum_and_serializer(&mut out);
+        let module = RustModule {
+            family: Family::Device,
+            items: vec![RustItem::Enum(RustEnum {
+                name: "HostMessage".to_string(),
+                tag_field: None,
+                variants: Vec::new(),
+            })],
+        };
+        let out = render_family_module(&module);
 
         assert!(out.contains("@Serializable(with = HostMessageSerializer::class)"));
         assert!(out.contains("sealed class HostMessage"));
         assert!(out.contains("object HostMessageSerializer : KSerializer<HostMessage>"));
+        for import in [
+            "kotlinx.serialization.KSerializer",
+            "kotlinx.serialization.descriptors.SerialDescriptor",
+            "kotlinx.serialization.descriptors.buildClassSerialDescriptor",
+            "kotlinx.serialization.encoding.Decoder",
+            "kotlinx.serialization.encoding.Encoder",
+            "kotlinx.serialization.json.JsonDecoder",
+            "kotlinx.serialization.json.JsonEncoder",
+            "kotlinx.serialization.json.JsonObject",
+            "kotlinx.serialization.json.JsonPrimitive",
+        ] {
+            assert!(out.contains(&format!("import {import}\n")), "missing {import}");
+        }
+        for (variant, discriminator) in [
+            ("Hello", "host.hello"),
+            ("Status", "host.status"),
+            ("Action", "host.action"),
+            ("ActionResult", "host.actionResult"),
+        ] {
+            assert!(out.contains(&format!(
+                "is HostMessage.{variant} -> encodeKnown(jsonEncoder, \"{discriminator}\", HostMessage.{variant}.serializer(), value)"
+            )));
+            assert!(out.contains(&format!(
+                "\"{discriminator}\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.{variant}.serializer(), fields)"
+            )));
+        }
+        assert!(out.contains("val fields = JsonObject(jsonObject.filterKeys { it != \"type\" })"));
+        assert!(out.contains("return JsonObject(mapOf(\"type\" to JsonPrimitive(type)) + fields)"));
+        assert!(out.contains("if (!typePrimitive.isString) error("));
         assert!(out.contains("else -> HostMessage.Unknown"));
-        assert!(out.contains("is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\"))))"));
+        assert!(out.contains("is HostMessage.Unknown -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\")))"));
     }
 }
