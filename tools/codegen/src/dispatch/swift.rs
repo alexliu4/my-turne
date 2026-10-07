@@ -549,6 +549,11 @@ fn render_struct(out: &mut String, item: &SwiftStruct) {
 }
 
 fn render_enum(out: &mut String, item: &SwiftEnum) {
+    if item.name == "HostMessage" {
+        render_host_message_enum(out);
+        return;
+    }
+
     if item.raw_string {
         out.push_str(&format!(
             "public enum {}: String, Codable, Sendable {{\n",
@@ -571,6 +576,61 @@ fn render_enum(out: &mut String, item: &SwiftEnum) {
             out.push_str(&format!("  case {name}\n"));
         }
     }
+    out.push_str("}\n");
+}
+
+fn render_host_message_enum(out: &mut String) {
+    out.push_str("public enum HostMessage: Codable, Sendable {\n");
+    out.push_str("  case hello(HostHello)\n");
+    out.push_str("  case status(HostStatus)\n");
+    out.push_str("  case action(HostAction)\n");
+    out.push_str("  case actionResult(HostActionResult)\n");
+    out.push_str("  case unknown\n\n");
+
+    out.push_str("  private enum CodingKeys: String, CodingKey {\n");
+    out.push_str("    case type = \"type\"\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  public init(from decoder: Decoder) throws {\n");
+    out.push_str("    let container = try decoder.container(keyedBy: CodingKeys.self)\n");
+    out.push_str("    let type = try container.decode(String.self, forKey: .type)\n");
+    out.push_str("    switch type {\n");
+    out.push_str("    case \"host.hello\":\n");
+    out.push_str("      let hello = try HostHello(from: decoder)\n");
+    out.push_str("      self = .hello(hello)\n");
+    out.push_str("    case \"host.status\":\n");
+    out.push_str("      let status = try HostStatus(from: decoder)\n");
+    out.push_str("      self = .status(status)\n");
+    out.push_str("    case \"host.action\":\n");
+    out.push_str("      let action = try HostAction(from: decoder)\n");
+    out.push_str("      self = .action(action)\n");
+    out.push_str("    case \"host.actionResult\":\n");
+    out.push_str("      let actionResult = try HostActionResult(from: decoder)\n");
+    out.push_str("      self = .actionResult(actionResult)\n");
+    out.push_str("    default:\n");
+    out.push_str("      self = .unknown\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  public func encode(to encoder: Encoder) throws {\n");
+    out.push_str("    var container = encoder.container(keyedBy: CodingKeys.self)\n");
+    out.push_str("    switch self {\n");
+    out.push_str("    case .hello(let hello):\n");
+    out.push_str("      try container.encode(\"host.hello\", forKey: .type)\n");
+    out.push_str("      try hello.encode(to: encoder)\n");
+    out.push_str("    case .status(let status):\n");
+    out.push_str("      try container.encode(\"host.status\", forKey: .type)\n");
+    out.push_str("      try status.encode(to: encoder)\n");
+    out.push_str("    case .action(let action):\n");
+    out.push_str("      try container.encode(\"host.action\", forKey: .type)\n");
+    out.push_str("      try action.encode(to: encoder)\n");
+    out.push_str("    case .actionResult(let actionResult):\n");
+    out.push_str("      try container.encode(\"host.actionResult\", forKey: .type)\n");
+    out.push_str("      try actionResult.encode(to: encoder)\n");
+    out.push_str("    case .unknown:\n");
+    out.push_str("      try container.encode(\"unknown\", forKey: .type)\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n");
     out.push_str("}\n");
 }
 

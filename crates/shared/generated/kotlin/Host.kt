@@ -8,14 +8,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class HostAction(
-  @SerialName("request_id") val requestId: String,
+  @SerialName("requestId") val requestId: String,
   @SerialName("action") val action: String,
   @SerialName("payload") val payload: Value? = null,
 )
 
 @Serializable
 data class HostActionResult(
-  @SerialName("request_id") val requestId: String,
+  @SerialName("requestId") val requestId: String,
   @SerialName("success") val success: Boolean,
   @SerialName("payload") val payload: Value? = null,
   @SerialName("error") val error: String? = null,
@@ -23,8 +23,8 @@ data class HostActionResult(
 
 @Serializable
 data class HostHello(
-  @SerialName("protocol_version") val protocolVersion: UInt,
-  @SerialName("host_name") val hostName: String,
+  @SerialName("protocolVersion") val protocolVersion: UInt,
+  @SerialName("hostName") val hostName: String,
   @SerialName("capabilities") val capabilities: List<HostCapability>,
 )
 

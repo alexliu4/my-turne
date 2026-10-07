@@ -78,11 +78,11 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
             iap2_csm: None,
             fields: vec![
                 RustField {
-                    name: "protocol_version".to_string(),
+                    name: "protocolVersion".to_string(),
                     ty: RustFieldType::U32,
                 },
                 RustField {
-                    name: "host_name".to_string(),
+                    name: "hostName".to_string(),
                     ty: RustFieldType::String,
                 },
                 RustField {
@@ -112,7 +112,7 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
             iap2_csm: None,
             fields: vec![
                 RustField {
-                    name: "request_id".to_string(),
+                    name: "requestId".to_string(),
                     ty: RustFieldType::String,
                 },
                 RustField {
@@ -134,7 +134,7 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
             iap2_csm: None,
             fields: vec![
                 RustField {
-                    name: "request_id".to_string(),
+                    name: "requestId".to_string(),
                     ty: RustFieldType::String,
                 },
                 RustField {
@@ -248,16 +248,31 @@ fn render_enum(out: &mut String, item: &RustEnum) {
         out.push_str("sealed class HostMessage {\n");
         out.push_str("  @Serializable\n");
         out.push_str("  @SerialName(\"host.hello\")\n");
-        out.push_str("  data class Hello(val data: HostHello) : HostMessage()\n\n");
+        out.push_str("  data class Hello(\n");
+        out.push_str("    @SerialName(\"protocolVersion\") val protocolVersion: UInt,\n");
+        out.push_str("    @SerialName(\"hostName\") val hostName: String,\n");
+        out.push_str("    @SerialName(\"capabilities\") val capabilities: List<HostCapability>,\n");
+        out.push_str("  ) : HostMessage()\n\n");
         out.push_str("  @Serializable\n");
         out.push_str("  @SerialName(\"host.status\")\n");
-        out.push_str("  data class Status(val data: HostStatus) : HostMessage()\n\n");
+        out.push_str("  data class Status(\n");
+        out.push_str("    @SerialName(\"connected\") val connected: Boolean,\n");
+        out.push_str("  ) : HostMessage()\n\n");
         out.push_str("  @Serializable\n");
         out.push_str("  @SerialName(\"host.action\")\n");
-        out.push_str("  data class Action(val data: HostAction) : HostMessage()\n\n");
+        out.push_str("  data class Action(\n");
+        out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+        out.push_str("    @SerialName(\"action\") val action: String,\n");
+        out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+        out.push_str("  ) : HostMessage()\n\n");
         out.push_str("  @Serializable\n");
         out.push_str("  @SerialName(\"host.actionResult\")\n");
-        out.push_str("  data class ActionResult(val data: HostActionResult) : HostMessage()\n\n");
+        out.push_str("  data class ActionResult(\n");
+        out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+        out.push_str("    @SerialName(\"success\") val success: Boolean,\n");
+        out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+        out.push_str("    @SerialName(\"error\") val error: String? = null,\n");
+        out.push_str("  ) : HostMessage()\n\n");
         out.push_str("  @Serializable\n");
         out.push_str("  object Unknown : HostMessage()\n");
         out.push_str("}\n");

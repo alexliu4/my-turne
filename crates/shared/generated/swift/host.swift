@@ -88,6 +88,51 @@ public enum HostMessage: Codable, Sendable {
   case action(HostAction)
   case actionResult(HostActionResult)
   case unknown
+
+  private enum CodingKeys: String, CodingKey {
+    case type = "type"
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let type = try container.decode(String.self, forKey: .type)
+    switch type {
+    case "host.hello":
+      let hello = try HostHello(from: decoder)
+      self = .hello(hello)
+    case "host.status":
+      let status = try HostStatus(from: decoder)
+      self = .status(status)
+    case "host.action":
+      let action = try HostAction(from: decoder)
+      self = .action(action)
+    case "host.actionResult":
+      let actionResult = try HostActionResult(from: decoder)
+      self = .actionResult(actionResult)
+    default:
+      self = .unknown
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .hello(let hello):
+      try container.encode("host.hello", forKey: .type)
+      try hello.encode(to: encoder)
+    case .status(let status):
+      try container.encode("host.status", forKey: .type)
+      try status.encode(to: encoder)
+    case .action(let action):
+      try container.encode("host.action", forKey: .type)
+      try action.encode(to: encoder)
+    case .actionResult(let actionResult):
+      try container.encode("host.actionResult", forKey: .type)
+      try actionResult.encode(to: encoder)
+    case .unknown:
+      try container.encode("unknown", forKey: .type)
+    }
+  }
 }
 
 public struct HostStatus: Codable, Sendable {

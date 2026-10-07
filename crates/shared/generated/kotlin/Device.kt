@@ -348,19 +348,34 @@ enum class HostCapability {
 sealed class HostMessage {
   @Serializable
   @SerialName("host.hello")
-  data class Hello(val data: HostHello) : HostMessage()
+  data class Hello(
+    @SerialName("protocolVersion") val protocolVersion: UInt,
+    @SerialName("hostName") val hostName: String,
+    @SerialName("capabilities") val capabilities: List<HostCapability>,
+  ) : HostMessage()
 
   @Serializable
   @SerialName("host.status")
-  data class Status(val data: HostStatus) : HostMessage()
+  data class Status(
+    @SerialName("connected") val connected: Boolean,
+  ) : HostMessage()
 
   @Serializable
   @SerialName("host.action")
-  data class Action(val data: HostAction) : HostMessage()
+  data class Action(
+    @SerialName("requestId") val requestId: String,
+    @SerialName("action") val action: String,
+    @SerialName("payload") val payload: Value? = null,
+  ) : HostMessage()
 
   @Serializable
   @SerialName("host.actionResult")
-  data class ActionResult(val data: HostActionResult) : HostMessage()
+  data class ActionResult(
+    @SerialName("requestId") val requestId: String,
+    @SerialName("success") val success: Boolean,
+    @SerialName("payload") val payload: Value? = null,
+    @SerialName("error") val error: String? = null,
+  ) : HostMessage()
 
   @Serializable
   object Unknown : HostMessage()
