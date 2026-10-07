@@ -87,6 +87,8 @@ public enum HostMessage: Codable, Sendable {
   case status(HostStatus)
   case action(HostAction)
   case actionResult(HostActionResult)
+  case ping
+  case pong
   case unknown
 
   private enum CodingKeys: String, CodingKey {
@@ -109,6 +111,10 @@ public enum HostMessage: Codable, Sendable {
     case "host.actionResult":
       let actionResult = try HostActionResult(from: decoder)
       self = .actionResult(actionResult)
+    case "host.ping":
+      self = .ping
+    case "host.pong":
+      self = .pong
     default:
       self = .unknown
     }
@@ -129,6 +135,10 @@ public enum HostMessage: Codable, Sendable {
     case .actionResult(let actionResult):
       try container.encode("host.actionResult", forKey: .type)
       try actionResult.encode(to: encoder)
+    case .ping:
+      try container.encode("host.ping", forKey: .type)
+    case .pong:
+      try container.encode("host.pong", forKey: .type)
     case .unknown:
       try container.encode("Unknown", forKey: .type)
     }

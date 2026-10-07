@@ -392,7 +392,11 @@ function useGlobalButtonMapping({
 }
 
 function AppContent() {
-  useHostBridge();
+  useHostBridge({
+    url: import.meta.env.VITE_WINDOWS_HOST_URL,
+    token: import.meta.env.VITE_WINDOWS_TOKEN,
+    autoConnect: Boolean(import.meta.env.VITE_WINDOWS_HOST_URL),
+  });
 
   const {
     settings,

@@ -68,6 +68,8 @@ Normalize Spotify context identities with `src/utils/spotifyContext.ts` before b
 
 ## CONVENTIONS
 
+- **Windows HostBridge**: `AppContent` configures the singleton `useHostBridge` from `VITE_WINDOWS_HOST_URL` and `VITE_WINDOWS_TOKEN` at build time. With no URL it stays inactive. Future host UI should subscribe through `useHostBridge()` or `subscribeHostBridgeState`, not open another WebSocket. A valid version 1 `host.hello` establishes connected state; capabilities remain empty until implemented on Windows.
+
 - **Standalone exports alongside hooks**: Large hooks export both `useXxx()` hooks and `getXxxState()`/`subscribeXxxState()` standalone functions for use outside React components
 - **UUID-correlated requests**: All WebSocket requests use UUID message IDs with pending request maps for response matching
 - **Retry with backoff**: Data fetching uses `MAX_RETRIES` + `RETRY_DELAY` constants, WebSocket reconnects use exponential backoff capped at 30s

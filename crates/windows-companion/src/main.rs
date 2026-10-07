@@ -1,11 +1,12 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use futures::{SinkExt, StreamExt};
 use libnocturne::{HostCapability, HostHello, HostMessage, HostStatus};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::accept_hdr_async;
-use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
@@ -23,17 +24,9 @@ impl Default for CompanionConfig {
             .or_else(|_| std::env::var("HOSTNAME"))
             .unwrap_or_else(|_| "Windows-PC".to_string());
 
-        let host_str = std::env::var("NOCTURNE_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-        let port_str = std::env::var("NOCTURNE_PORT").unwrap_or_else(|_| "8893".to_string());
-        let bind_addr: SocketAddr = format!("{}:{}", host_str, port_str)
-            .parse()
-            .unwrap_or_else(|_| "0.0.0.0:8893".parse().unwrap());
-
-        let auth_token = std::env::var("NOCTURNE_AUTH_TOKEN").ok();
-
         Self {
-            bind_addr,
-            auth_token,
+            bind_addr: "127.0.0.1:8893".parse().unwrap(),
+            auth_token: None,
             host_name,
             capabilities: vec![],
             protocol_version: 1,
@@ -53,7 +46,9 @@ impl CompanionServer {
     }
 
     pub async fn run(&self) -> Result<()> {
-        if !self.config.bind_addr.ip().is_loopback() && self.config.auth_token.is_none() {
+        if !self.config.bind_addr.ip().is_loopback()
+            && self.config.auth_token.as_deref().is_none_or(str::is_empty)
+        {
             bail!(
                 "Refusing to bind to non-loopback address {} without an authentication token (--token or NOCTURNE_AUTH_TOKEN)",
                 self.config.bind_addr
@@ -85,25 +80,20 @@ pub async fn handle_connection(
     let mut authed = config.auth_token.is_none();
     let token_expected = config.auth_token.clone();
 
-    let callback = |req: &Request, response: Response| -> std::result::Result<Response, tokio_tungstenite::tungstenite::handshake::server::ErrorResponse> {
+    let callback =
+        |req: &Request, response: Response| -> std::result::Result<Response, ErrorResponse> {
         if let Some(expected_token) = &token_expected {
             if let Some(auth_hdr) = req.headers().get("authorization") {
                 if let Ok(auth_str) = auth_hdr.to_str() {
-                    let bearer_prefix = "Bearer ";
-                    if auth_str.starts_with(bearer_prefix) && &auth_str[bearer_prefix.len()..] == expected_token {
+                    if auth_str.strip_prefix("Bearer ") == Some(expected_token.as_str()) {
                         authed = true;
                     }
                 }
-            } else if let Some(query) = req.uri().query() {
-                for pair in query.split('&') {
-                    let mut parts = pair.splitn(2, '=');
-                    if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
-                        if k == "token" && v == expected_token {
-                            authed = true;
-                            break;
-                        }
-                    }
-                }
+            }
+            if let Some(query) = req.uri().query() {
+                authed |= url::form_urlencoded::parse(query.as_bytes()).any(|(key, value)| {
+                    key == "token" && value.as_ref() == expected_token.as_str()
+                });
             }
         }
         Ok(response)
@@ -120,9 +110,35 @@ pub async fn handle_connection(
         return Ok(());
     }
 
+    // Require the client to prove protocol compatibility before announcing availability.
+    let client_hello = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match ws_stream.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    break serde_json::from_str::<HostMessage>(&text).ok()
+                }
+                Some(Ok(Message::Ping(payload))) => {
+                    if ws_stream.send(Message::Pong(payload)).await.is_err() {
+                        break None;
+                    }
+                }
+                _ => break None,
+            }
+        }
+    })
+    .await
+    .ok()
+    .flatten();
+    match client_hello {
+        Some(HostMessage::Hello(hello)) if hello.protocol_version == config.protocol_version => {}
+        _ => {
+            warn!("Invalid or incompatible client hello from {}", peer_addr);
+            let _ = ws_stream.close(None).await;
+            return Ok(());
+        }
+    }
     info!("Client {} connected and authenticated", peer_addr);
 
-    // Send host.hello
     let hello = HostMessage::Hello(HostHello {
         protocol_version: config.protocol_version,
         host_name: config.host_name.clone(),
@@ -136,27 +152,18 @@ pub async fn handle_connection(
         match msg {
             Message::Text(text) => {
                 match serde_json::from_str::<HostMessage>(&text) {
-                    Ok(HostMessage::Hello(client_hello)) => {
-                        info!(
-                            "Received hello from client {}, protocol version: {}",
-                            client_hello.host_name, client_hello.protocol_version
-                        );
-                        if client_hello.protocol_version != config.protocol_version {
-                            warn!(
-                                "Protocol version mismatch: host={}, client={}",
-                                config.protocol_version, client_hello.protocol_version
-                            );
-                            let _ = ws_stream.close(None).await;
-                            return Ok(());
-                        }
+                    Ok(HostMessage::Hello(_)) => {
+                        warn!("Unexpected duplicate client hello from {}", peer_addr);
+                        let _ = ws_stream.close(None).await;
+                        return Ok(());
                     }
                     Ok(HostMessage::Ping) => {
                         let pong = HostMessage::Pong;
                         let pong_json = serde_json::to_string(&pong)?;
                         ws_stream.send(Message::Text(pong_json.into())).await?;
                     }
-                    Ok(HostMessage::Action(action)) => {
-                        info!("Received host action: {}", action.action);
+                    Ok(HostMessage::Action(_)) => {
+                        warn!("Ignoring unsupported host action from {}", peer_addr);
                     }
                     Ok(HostMessage::Status(status)) => {
                         info!("Received host status update: connected={}", status.connected);
@@ -187,23 +194,21 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     info!("Starting Nocturne Windows Companion");
 
-    let mut bind_host = std::env::var("NOCTURNE_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let mut bind_host = std::env::var("NOCTURNE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let mut bind_port: u16 = std::env::var("NOCTURNE_PORT")
         .ok()
-        .and_then(|p| p.parse().ok())
+        .map(|port| port.parse())
+        .transpose()?
         .unwrap_or(8893);
     let mut auth_token = std::env::var("NOCTURNE_AUTH_TOKEN").ok();
 
-    let args: Vec<String> = std::env::args().collect();
-    for i in 0..args.len() {
-        if args[i] == "--host" && i + 1 < args.len() {
-            bind_host = args[i + 1].clone();
-        } else if args[i] == "--port" && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse() {
-                bind_port = p;
-            }
-        } else if args[i] == "--token" && i + 1 < args.len() {
-            auth_token = Some(args[i + 1].clone());
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--host" => bind_host = args.next().context("--host requires an address")?,
+            "--port" => bind_port = args.next().context("--port requires a number")?.parse()?,
+            "--token" => auth_token = Some(args.next().context("--token requires a value")?),
+            _ => bail!("Unknown argument: {arg}"),
         }
     }
 
@@ -244,6 +249,17 @@ mod tests {
 
         let url = format!("ws://{}", addr);
         let (mut ws_stream, _) = connect_async(&url).await?;
+        assert!(tokio::time::timeout(Duration::from_millis(20), ws_stream.next())
+            .await
+            .is_err());
+        let client_hello = HostMessage::Hello(HostHello {
+            protocol_version: 1,
+            host_name: "CarThing".to_string(),
+            capabilities: vec![],
+        });
+        ws_stream
+            .send(Message::Text(serde_json::to_string(&client_hello)?.into()))
+            .await?;
 
         if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
             let msg: HostMessage = serde_json::from_str(&text)?;
@@ -294,15 +310,15 @@ mod tests {
         });
 
         let url = format!("ws://{}", addr);
-        let connect_result = connect_async(&url).await;
-        assert!(connect_result.is_ok(), "WebSocket handshake should connect to receive auth rejection message");
-
-        let (mut ws_stream, _) = connect_result.unwrap();
+        let (mut ws_stream, _) = connect_async(&url).await?;
 
         if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
             let msg: HostMessage = serde_json::from_str(&text)?;
             if let HostMessage::Status(status) = msg {
-                assert!(!status.connected, "Expected status.connected = false for unauthorized client");
+                assert!(
+                    !status.connected,
+                    "Expected status.connected = false for unauthorized client"
+                );
             } else {
                 panic!("Expected HostMessage::Status error response for unauthorized client");
             }
@@ -321,6 +337,62 @@ mod tests {
             ..Default::default()
         };
         let server = CompanionServer::new(config);
-        assert!(server.run().await.is_err(), "Non-loopback binding without token should be refused");
+        assert!(
+            server.run().await.is_err(),
+            "Non-loopback binding without token should be refused"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lan_binding_with_empty_token_fails() {
+        let config = CompanionConfig {
+            bind_addr: "0.0.0.0:8893".parse().unwrap(),
+            auth_token: Some(String::new()),
+            ..Default::default()
+        };
+        assert!(CompanionServer::new(config).run().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_encoded_token_and_protocol_mismatch() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let config = Arc::new(CompanionConfig {
+            bind_addr: addr,
+            auth_token: Some("a+b &/%".to_string()),
+            host_name: "Test-PC".to_string(),
+            capabilities: vec![],
+            protocol_version: 1,
+        });
+        tokio::spawn(async move {
+            for _ in 0..2 {
+                let (stream, peer_addr) = listener.accept().await.unwrap();
+                let config = Arc::clone(&config);
+                tokio::spawn(async move {
+                    let _ = handle_connection(stream, peer_addr, config).await;
+                });
+            }
+        });
+        let url = format!("ws://{addr}/?token=a%2Bb+%26%2F%25");
+        let (mut ws, _) = connect_async(&url).await?;
+        let incompatible_hello = HostMessage::Hello(HostHello {
+            protocol_version: 2,
+            host_name: "CarThing".to_string(),
+            capabilities: vec![],
+        });
+        ws.send(Message::Text(serde_json::to_string(&incompatible_hello)?.into()))
+            .await?;
+        assert!(matches!(ws.next().await, Some(Ok(Message::Close(_)))));
+
+        let (mut ws, _) = connect_async(&url).await?;
+        let compatible_hello = HostMessage::Hello(HostHello {
+            protocol_version: 1,
+            host_name: "CarThing".to_string(),
+            capabilities: vec![],
+        });
+        ws.send(Message::Text(serde_json::to_string(&compatible_hello)?.into()))
+            .await?;
+        assert!(matches!(ws.next().await, Some(Ok(Message::Text(_)))));
+        Ok(())
     }
 }

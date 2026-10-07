@@ -283,7 +283,7 @@ Do not couple transport logic directly to UI components.
 
 ---
 
-# Sprint 2 — Minimal Windows Companion + Wireless Connection [COMPLETED]
+# Sprint 2 - Minimal Windows Companion + Wireless Connection
 
 ## Goal
 
@@ -301,9 +301,9 @@ Requirements:
 - [x] sends `host.hello`
 - [x] exposes connection status
 - [x] logs connect/disconnect events
-- [x] supports protocol version negotiation
+- [x] validates protocol version 1 and closes mismatches
 - [x] uses a configurable port
-- [x] binds safely to the local network only
+- [x] defaults to loopback and requires a token for any non-loopback bind
 
 ## Car Thing / Nocturne side
 
@@ -322,8 +322,8 @@ Do not expose an unauthenticated control endpoint broadly.
 
 For the MVP, use at minimum:
 
-- [x] LAN-only binding
-- [x] explicit paired host address
+- [x] explicit LAN interface binding with authentication
+- [x] explicit configured host address
 - [x] shared pairing token or equivalent lightweight authentication
 
 Avoid designing a full account system.
@@ -332,11 +332,21 @@ Avoid designing a full account system.
 
 Without USB data:
 
-1. [x] Car Thing connects to Windows over LAN
-2. [x] Windows companion reports capabilities
-3. [x] Car Thing detects Windows online/offline state
-4. [x] Disconnecting Windows does not break Spotify or Nocturne
-5. [x] Reconnecting Windows restores host availability automatically
+1. [ ] Car Thing connects to Windows over LAN
+2. [ ] Windows companion reports capabilities
+3. [ ] Car Thing detects Windows online/offline state
+4. [ ] Disconnecting Windows does not break Spotify or Nocturne
+5. [ ] Reconnecting Windows restores host availability automatically
+
+These acceptance criteria still require a Car Thing to Windows smoke test without USB data.
+The companion advertises an empty capability list until a host feature is implemented.
+
+For a LAN test, bind the companion to the Windows PC's LAN address with
+`NOCTURNE_HOST=<windows-lan-ip>` and `NOCTURNE_AUTH_TOKEN=<shared-token>`.
+Build the Car Thing UI with `VITE_WINDOWS_HOST_URL=ws://<windows-lan-ip>:8893`
+and `VITE_WINDOWS_TOKEN=<same-token>`. Without a configured URL, HostBridge
+stays inactive. The token is included in the device UI bundle and should be
+used only on a trusted LAN for this MVP.
 
 ---
 

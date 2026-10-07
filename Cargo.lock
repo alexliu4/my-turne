@@ -1977,12 +1977,12 @@ dependencies = [
  "anyhow",
  "futures",
  "libnocturne",
- "serde",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

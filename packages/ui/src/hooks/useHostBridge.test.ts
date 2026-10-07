@@ -1,137 +1,195 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  getHostBridgeState,
-  subscribeHostBridgeState,
+  configureHostBridge,
   connectHostBridge,
   disconnectHostBridge,
+  getHostBridgeState,
   sendHostMessage,
+  subscribeHostBridgeState,
 } from "./useHostBridge";
 
 class MockWebSocket {
-  static CONNECTING = 0;
   static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
   static instances: MockWebSocket[] = [];
-  url: string;
-  readyState: number = 0; // CONNECTING
+  readyState = 0;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: ((error: unknown) => void) | null = null;
+  onerror: (() => void) | null = null;
   sentMessages: string[] = [];
-
-  constructor(url: string) {
-    this.url = url;
+  constructor(readonly url: string) {
     MockWebSocket.instances.push(this);
   }
-
   send(data: string) {
     this.sentMessages.push(data);
   }
-
   close() {
-    this.readyState = 3; // CLOSED
-    if (this.onclose) this.onclose();
+    this.readyState = 3;
+    this.onclose?.();
   }
-
-  simulateOpen() {
-    this.readyState = 1; // OPEN
-    if (this.onopen) this.onopen();
+  open() {
+    this.readyState = 1;
+    this.onopen?.();
   }
-
-  simulateMessage(data: object) {
-    if (this.onmessage) this.onmessage({ data: JSON.stringify(data) });
+  message(value: unknown) {
+    this.onmessage?.({ data: JSON.stringify(value) });
   }
-
-  simulateError(err: unknown) {
-    if (this.onerror) this.onerror(err);
-  }
-}
-
-const originalWebSocket = globalThis.WebSocket;
-
-describe("useHostBridge singleton manager", () => {
-  beforeEach(() => {
-    disconnectHostBridge();
-    MockWebSocket.instances = [];
-    (globalThis as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
-  });
-
-  afterEach(() => {
-    disconnectHostBridge();
-    (globalThis as unknown as { WebSocket: unknown }).WebSocket = originalWebSocket;
-  });
-
-  test("connectHostBridge stays connecting on open until valid host.hello is received", () => {
-    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
-
-    expect(getHostBridgeState().connectionState).toBe("connecting");
-    expect(MockWebSocket.instances.length).toBe(1);
-    expect(MockWebSocket.instances[0].url).toBe("ws://192.168.1.50:8893");
-
-    const ws = MockWebSocket.instances[0];
-    ws.simulateOpen();
-
-    expect(getHostBridgeState().connectionState).toBe("connecting");
-
-    ws.simulateMessage({
+  hello() {
+    this.message({
       type: "host.hello",
       protocolVersion: 1,
       hostName: "Windows-PC",
       capabilities: [],
     });
+  }
+}
 
-    expect(getHostBridgeState().connectionState).toBe("connected");
-    expect(getHostBridgeState().hostName).toBe("Windows-PC");
+const originalWebSocket = globalThis.WebSocket;
+beforeEach(() => {
+  disconnectHostBridge();
+  connectHostBridge({ url: "", token: "", autoConnect: false });
+  MockWebSocket.instances = [];
+  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+});
+afterEach(() => {
+  disconnectHostBridge();
+  globalThis.WebSocket = originalWebSocket;
+});
+
+describe("HostBridge", () => {
+  test("unconfigured host is inactive; configured host auto-connects once", () => {
+    configureHostBridge({ url: "", autoConnect: true });
+    expect(MockWebSocket.instances).toHaveLength(0);
+    configureHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: true });
+    configureHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: true });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toBe("ws://192.168.1.50:8893/");
   });
 
-  test("appends token query param when token option is provided", () => {
-    connectHostBridge({ url: "ws://192.168.1.50:8893", token: "secret_pass" });
-
-    expect(MockWebSocket.instances.length).toBe(1);
-    expect(MockWebSocket.instances[0].url).toBe("ws://192.168.1.50:8893?token=secret_pass");
-  });
-
-  test("rejects unsupported protocol version and closes connection", () => {
-    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
+  test("only a complete version 1 hello marks the host connected", () => {
+    connectHostBridge({ url: "ws://192.168.1.50:8893" });
     const ws = MockWebSocket.instances[0];
-    ws.simulateOpen();
+    ws.open();
+    expect(getHostBridgeState().connectionState).toBe("connecting");
+    expect(sendHostMessage({ type: "host.ping" })).toBe(false);
+    ws.message({ type: "host.pong" });
+    ws.message({ type: "host.hello", protocolVersion: 1, hostName: "PC" });
+    expect(getHostBridgeState().connectionState).toBe("disconnected");
+    expect(getHostBridgeState().lastError).toBe("Invalid host.hello");
+  });
 
-    ws.simulateMessage({
+  test("version mismatch closes without connecting", () => {
+    connectHostBridge({ url: "ws://192.168.1.50:8893" });
+    const ws = MockWebSocket.instances[0];
+    ws.open();
+    ws.message({
       type: "host.hello",
-      protocolVersion: 999,
-      hostName: "Future-PC",
+      protocolVersion: 2,
+      hostName: "PC",
       capabilities: [],
     });
-
+    expect(ws.readyState).toBe(3);
+    ws.onerror?.();
     expect(getHostBridgeState().connectionState).toBe("disconnected");
-    expect(getHostBridgeState().lastError).toBe("Unsupported protocol version 999");
+    expect(getHostBridgeState().lastError).toBe(
+      "Unsupported protocol version 2",
+    );
   });
 
-  test("sendHostMessage sends JSON payload via active WebSocket", () => {
-    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
-    const ws = MockWebSocket.instances[0];
-    ws.simulateOpen();
-
-    const success = sendHostMessage({
-      type: "host.ping",
+  test("encodes token and exposes one shared connected state", () => {
+    const observed: string[] = [];
+    const unsubscribe = subscribeHostBridgeState(() => {
+      observed.push(getHostBridgeState().connectionState);
     });
-
-    expect(success).toBe(true);
-    expect(ws.sentMessages.some((m) => m.includes("host.ping"))).toBe(true);
+    connectHostBridge({
+      url: "ws://192.168.1.50:8893/path?x=1",
+      token: "a+b &/%",
+    });
+    const ws = MockWebSocket.instances[0];
+    expect(new URL(ws.url).searchParams.get("token")).toBe("a+b &/%");
+    expect(new URL(ws.url).searchParams.get("x")).toBe("1");
+    ws.open();
+    ws.hello();
+    expect(getHostBridgeState().hostName).toBe("Windows-PC");
+    expect(observed).toEqual(["connecting", "connected"]);
+    expect(sendHostMessage({ type: "host.ping" })).toBe(true);
+    expect(
+      ws.sentMessages.some((message) => message.includes("host.ping")),
+    ).toBe(true);
+    configureHostBridge({
+      url: "ws://192.168.1.50:8893/path?x=1",
+      autoConnect: true,
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    unsubscribe();
   });
 
-  test("manual disconnectHostBridge stays disconnected without auto-reconnecting", () => {
-    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: true });
+  test("manual disconnect cancels automatic reconnect", async () => {
+    connectHostBridge({
+      url: "ws://192.168.1.50:8893",
+      autoConnect: true,
+      reconnectIntervalMs: 10,
+    });
     const ws = MockWebSocket.instances[0];
-    ws.simulateOpen();
-
+    ws.open();
+    ws.hello();
     disconnectHostBridge();
-
+    await Bun.sleep(30);
+    expect(MockWebSocket.instances).toHaveLength(1);
     expect(getHostBridgeState().connectionState).toBe("disconnected");
-    expect(getHostBridgeState().capabilities).toEqual([]);
-    expect(MockWebSocket.instances.length).toBe(1);
+  });
+
+  test("auth failures preserve increasing reconnect backoff", async () => {
+    connectHostBridge({
+      url: "ws://192.168.1.50:8893",
+      autoConnect: true,
+      reconnectIntervalMs: 30,
+      maxReconnectIntervalMs: 200,
+    });
+    MockWebSocket.instances[0].open();
+    MockWebSocket.instances[0].message({
+      type: "host.status",
+      connected: false,
+    });
+    expect(getHostBridgeState().lastError).toBe("Host authentication failed");
+    await Bun.sleep(45);
+    expect(MockWebSocket.instances).toHaveLength(2);
+    MockWebSocket.instances[1].open();
+    MockWebSocket.instances[1].message({
+      type: "host.status",
+      connected: false,
+    });
+    await Bun.sleep(40);
+    expect(MockWebSocket.instances).toHaveLength(2);
+    await Bun.sleep(35);
+    expect(MockWebSocket.instances).toHaveLength(3);
+    MockWebSocket.instances[2].open();
+    MockWebSocket.instances[2].hello();
+    MockWebSocket.instances[2].close();
+    await Bun.sleep(45);
+    expect(MockWebSocket.instances).toHaveLength(4);
+  });
+
+  test("heartbeat requires pong and reconnects after timeout", async () => {
+    connectHostBridge({
+      url: "ws://192.168.1.50:8893",
+      autoConnect: true,
+      reconnectIntervalMs: 100,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 15,
+    });
+    const ws = MockWebSocket.instances[0];
+    ws.open();
+    ws.hello();
+    await Bun.sleep(20);
+    expect(
+      ws.sentMessages.some((message) => message.includes("host.ping")),
+    ).toBe(true);
+    ws.message({ type: "unknown" });
+    await Bun.sleep(35);
+    expect(ws.readyState).toBe(3);
+    expect(getHostBridgeState().lastError).toBe("Heartbeat timeout");
+    await Bun.sleep(105);
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
   });
 });

@@ -311,6 +311,12 @@ fn render_host_message_enum_and_serializer(out: &mut String) {
     out.push_str("    @SerialName(\"error\") val error: String? = null,\n");
     out.push_str("  ) : HostMessage()\n\n");
     out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.ping\")\n");
+    out.push_str("  object Ping : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.pong\")\n");
+    out.push_str("  object Pong : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
     out.push_str("  object Unknown : HostMessage()\n");
     out.push_str("}\n\n");
 
@@ -328,6 +334,8 @@ fn render_host_message_enum_and_serializer(out: &mut String) {
     out.push_str("      \"host.status\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), fields)\n");
     out.push_str("      \"host.action\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), fields)\n");
     out.push_str("      \"host.actionResult\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), fields)\n");
+    out.push_str("      \"host.ping\" -> HostMessage.Ping\n");
+    out.push_str("      \"host.pong\" -> HostMessage.Pong\n");
     out.push_str("      else -> HostMessage.Unknown\n");
     out.push_str("    }\n");
     out.push_str("  }\n\n");
@@ -339,6 +347,8 @@ fn render_host_message_enum_and_serializer(out: &mut String) {
     out.push_str("      is HostMessage.Status -> encodeKnown(jsonEncoder, \"host.status\", HostMessage.Status.serializer(), value)\n");
     out.push_str("      is HostMessage.Action -> encodeKnown(jsonEncoder, \"host.action\", HostMessage.Action.serializer(), value)\n");
     out.push_str("      is HostMessage.ActionResult -> encodeKnown(jsonEncoder, \"host.actionResult\", HostMessage.ActionResult.serializer(), value)\n");
+    out.push_str("      is HostMessage.Ping -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"host.ping\")))\n");
+    out.push_str("      is HostMessage.Pong -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"host.pong\")))\n");
     out.push_str("      is HostMessage.Unknown -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\")))\n");
     out.push_str("    }\n");
     out.push_str("    jsonEncoder.encodeJsonElement(jsonObject)\n");
