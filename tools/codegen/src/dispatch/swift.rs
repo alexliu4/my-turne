@@ -133,6 +133,97 @@ pub fn schema_from_inventory(inventory: &Inventory) -> SwiftSchema {
         );
     }
 
+    // Explicitly add Host structs to Swift schema
+    push_item(
+        &mut schema,
+        Family::Host,
+        SwiftItem::Struct(SwiftStruct {
+            name: "HostHello".to_string(),
+            fields: vec![
+                SwiftField {
+                    name: "protocolVersion".to_string(),
+                    wire_name: "protocolVersion".to_string(),
+                    ty: SwiftFieldType::UInt32,
+                },
+                SwiftField {
+                    name: "hostName".to_string(),
+                    wire_name: "hostName".to_string(),
+                    ty: SwiftFieldType::String,
+                },
+                SwiftField {
+                    name: "capabilities".to_string(),
+                    wire_name: "capabilities".to_string(),
+                    ty: SwiftFieldType::Array(Box::new(SwiftFieldType::Named("HostCapability".to_string()))),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        SwiftItem::Struct(SwiftStruct {
+            name: "HostStatus".to_string(),
+            fields: vec![SwiftField {
+                name: "connected".to_string(),
+                wire_name: "connected".to_string(),
+                ty: SwiftFieldType::Bool,
+            }],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        SwiftItem::Struct(SwiftStruct {
+            name: "HostAction".to_string(),
+            fields: vec![
+                SwiftField {
+                    name: "requestId".to_string(),
+                    wire_name: "requestId".to_string(),
+                    ty: SwiftFieldType::String,
+                },
+                SwiftField {
+                    name: "action".to_string(),
+                    wire_name: "action".to_string(),
+                    ty: SwiftFieldType::String,
+                },
+                SwiftField {
+                    name: "payload".to_string(),
+                    wire_name: "payload".to_string(),
+                    ty: SwiftFieldType::Optional(Box::new(SwiftFieldType::Value)),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        SwiftItem::Struct(SwiftStruct {
+            name: "HostActionResult".to_string(),
+            fields: vec![
+                SwiftField {
+                    name: "requestId".to_string(),
+                    wire_name: "requestId".to_string(),
+                    ty: SwiftFieldType::String,
+                },
+                SwiftField {
+                    name: "success".to_string(),
+                    wire_name: "success".to_string(),
+                    ty: SwiftFieldType::Bool,
+                },
+                SwiftField {
+                    name: "payload".to_string(),
+                    wire_name: "payload".to_string(),
+                    ty: SwiftFieldType::Optional(Box::new(SwiftFieldType::Value)),
+                },
+                SwiftField {
+                    name: "error".to_string(),
+                    wire_name: "error".to_string(),
+                    ty: SwiftFieldType::Optional(Box::new(SwiftFieldType::String)),
+                },
+            ],
+        }),
+    );
+
     sort_schema(&mut schema);
     schema
 }
@@ -458,6 +549,11 @@ fn render_struct(out: &mut String, item: &SwiftStruct) {
 }
 
 fn render_enum(out: &mut String, item: &SwiftEnum) {
+    if item.name == "HostMessage" {
+        render_host_message_enum(out);
+        return;
+    }
+
     if item.raw_string {
         out.push_str(&format!(
             "public enum {}: String, Codable, Sendable {{\n",
@@ -483,11 +579,66 @@ fn render_enum(out: &mut String, item: &SwiftEnum) {
     out.push_str("}\n");
 }
 
+fn render_host_message_enum(out: &mut String) {
+    out.push_str("public enum HostMessage: Codable, Sendable {\n");
+    out.push_str("  case hello(HostHello)\n");
+    out.push_str("  case status(HostStatus)\n");
+    out.push_str("  case action(HostAction)\n");
+    out.push_str("  case actionResult(HostActionResult)\n");
+    out.push_str("  case unknown\n\n");
+
+    out.push_str("  private enum CodingKeys: String, CodingKey {\n");
+    out.push_str("    case type = \"type\"\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  public init(from decoder: Decoder) throws {\n");
+    out.push_str("    let container = try decoder.container(keyedBy: CodingKeys.self)\n");
+    out.push_str("    let type = try container.decode(String.self, forKey: .type)\n");
+    out.push_str("    switch type {\n");
+    out.push_str("    case \"host.hello\":\n");
+    out.push_str("      let hello = try HostHello(from: decoder)\n");
+    out.push_str("      self = .hello(hello)\n");
+    out.push_str("    case \"host.status\":\n");
+    out.push_str("      let status = try HostStatus(from: decoder)\n");
+    out.push_str("      self = .status(status)\n");
+    out.push_str("    case \"host.action\":\n");
+    out.push_str("      let action = try HostAction(from: decoder)\n");
+    out.push_str("      self = .action(action)\n");
+    out.push_str("    case \"host.actionResult\":\n");
+    out.push_str("      let actionResult = try HostActionResult(from: decoder)\n");
+    out.push_str("      self = .actionResult(actionResult)\n");
+    out.push_str("    default:\n");
+    out.push_str("      self = .unknown\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  public func encode(to encoder: Encoder) throws {\n");
+    out.push_str("    var container = encoder.container(keyedBy: CodingKeys.self)\n");
+    out.push_str("    switch self {\n");
+    out.push_str("    case .hello(let hello):\n");
+    out.push_str("      try container.encode(\"host.hello\", forKey: .type)\n");
+    out.push_str("      try hello.encode(to: encoder)\n");
+    out.push_str("    case .status(let status):\n");
+    out.push_str("      try container.encode(\"host.status\", forKey: .type)\n");
+    out.push_str("      try status.encode(to: encoder)\n");
+    out.push_str("    case .action(let action):\n");
+    out.push_str("      try container.encode(\"host.action\", forKey: .type)\n");
+    out.push_str("      try action.encode(to: encoder)\n");
+    out.push_str("    case .actionResult(let actionResult):\n");
+    out.push_str("      try container.encode(\"host.actionResult\", forKey: .type)\n");
+    out.push_str("      try actionResult.encode(to: encoder)\n");
+    out.push_str("    case .unknown:\n");
+    out.push_str("      try container.encode(\"Unknown\", forKey: .type)\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n");
+    out.push_str("}\n");
+}
+
 fn generated_header() -> String {
     "// THIS FILE IS GENERATED BY tools/codegen. Do not edit by hand.\n// Re-generate with `just codegen`.\n\n".to_string()
 }
 
-fn all_families() -> [Family; 10] {
+fn all_families() -> [Family; 11] {
     [
         Family::Bluetooth,
         Family::Device,
@@ -499,6 +650,7 @@ fn all_families() -> [Family; 10] {
         Family::BtOnly,
         Family::Ota,
         Family::Iap2,
+        Family::Host,
     ]
 }
 
@@ -514,6 +666,7 @@ fn family_file_stem(family: Family) -> &'static str {
         Family::BtOnly => "bt_only",
         Family::Ota => "ota",
         Family::Iap2 => "iap2",
+        Family::Host => "host",
     }
 }
 
@@ -529,6 +682,7 @@ fn family_type_name(family: Family) -> &'static str {
         Family::BtOnly => "BtOnly",
         Family::Ota => "Ota",
         Family::Iap2 => "Iap2",
+        Family::Host => "Host",
     }
 }
 
@@ -568,7 +722,9 @@ fn lower_first(s: &str) -> String {
 
 fn infer_family(name: &str) -> Family {
     let lower = name.to_ascii_lowercase();
-    if lower.contains("bluetooth") {
+    if name.starts_with("Host") || lower.contains("host") {
+        Family::Host
+    } else if lower.contains("bluetooth") {
         Family::Bluetooth
     } else if lower.contains("spotify") {
         Family::Spotify
