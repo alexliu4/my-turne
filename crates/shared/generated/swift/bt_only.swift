@@ -148,6 +148,22 @@ public struct DeviceVolumeUpdateResponse: Codable, Sendable {
   }
 }
 
+public enum GatewayToNocturneMsgData: Codable, Sendable {
+  case system(GatewayToNocturneSystemMsg)
+  case error(WireError)
+}
+
+public enum GatewayToNocturneSystemMsg: Codable, Sendable {
+  case otaBegin(OtaBegin)
+  case otaChunk(OtaChunk)
+  case otaAbandon(OtaAbandon)
+  case otaDownloadProgress(OtaDownloadProgress)
+  case otaPackageReady(OtaPackageReady)
+  case otaAssetRangeReply(OtaAssetRangeReply)
+  case otaAssetRangeRejected(OtaAssetRangeRejected)
+  case otaAssetRangeChunk(OtaAssetRangeChunk)
+}
+
 public struct KeepaliveEvent: Codable, Sendable {
   public let timestamp: Double
 
@@ -160,6 +176,22 @@ public struct KeepaliveEvent: Codable, Sendable {
   private enum CodingKeys: String, CodingKey {
     case timestamp = "timestamp"
   }
+}
+
+public enum NocturneToGatewayMsgData: Codable, Sendable {
+  case system(NocturneToGatewaySystemMsg)
+  case error(WireError)
+  case ack
+  case done
+}
+
+public enum NocturneToGatewaySystemMsg: Codable, Sendable {
+  case otaProgress(OtaProgress)
+  case otaError(OtaError)
+  case otaBeginAck(OtaBeginAck)
+  case otaBeginRejected(OtaBeginRejected)
+  case otaAssetRange(OtaAssetRange)
+  case otaAssetRangeAbandon(OtaAssetRangeAbandon)
 }
 
 public struct PingRequest: Codable, Sendable {

@@ -147,11 +147,9 @@ pub fn schema_from_inventory(inventory: &Inventory) -> SwiftSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = inventory
-        .enums
-        .values()
-        .filter(|e| e.name.starts_with("Host"))
-        .collect();
+    let mut enums: Vec<&EnumDef> = Vec::new();
+    enums.extend(inventory.wire_enums.values());
+    enums.extend(inventory.enums.values());
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {
@@ -725,6 +723,7 @@ mod tests {
         aliases: &[],
         payload: BATTERY_EVENT_PAYLOAD,
         iap2_csm: None,
+        skip_serializing_none: false,
         doc: "Battery state changed.",
     };
 

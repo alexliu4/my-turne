@@ -153,25 +153,7 @@ fn render_struct(out: &mut String, item: &RustStruct) {
 }
 
 fn render_enum(out: &mut String, item: &RustEnum, schema: &RustSchema) {
-    let is_method_or_event_enum = item.name.ends_with("Method") || item.name.ends_with("Event");
-    let has_payload_variants = item.variants.iter().any(|v| v.payload.is_some());
-    if is_method_or_event_enum || !has_payload_variants {
-        out.push_str("@Serializable\n");
-        out.push_str(&format!("enum class {} {{\n", item.name));
-        for variant in &item.variants {
-            let snake = pascal_to_snake(&variant.name);
-            let serial_name = if is_method_or_event_enum {
-                &snake
-            } else {
-                variant.wire_value.as_deref().unwrap_or(&snake)
-            };
-            let case_name = enum_case_name(&snake);
-            out.push_str(&format!(
-                "  @SerialName({serial_name:?})\n  {case_name},\n"
-            ));
-        }
-        out.push_str("}\n");
-    } else {
+    if item.name == "HostMessage" {
         out.push_str("@Serializable\n");
         out.push_str(&format!("sealed interface {} {{\n", item.name));
         for variant in &item.variants {
@@ -205,6 +187,22 @@ fn render_enum(out: &mut String, item: &RustEnum, schema: &RustSchema) {
                 out.push_str(&format!("  @SerialName({serial_name:?})\n"));
                 out.push_str(&format!("  object {class_name} : {}\n", item.name));
             }
+        }
+        out.push_str("}\n");
+    } else {
+        out.push_str("@Serializable\n");
+        out.push_str(&format!("enum class {} {{\n", item.name));
+        for variant in &item.variants {
+            let snake = pascal_to_snake(&variant.name);
+            let serial_name = if item.name == "HostCapability" {
+                variant.wire_value.as_deref().unwrap_or(&snake)
+            } else {
+                &snake
+            };
+            let case_name = enum_case_name(&snake);
+            out.push_str(&format!(
+                "  @SerialName({serial_name:?})\n  {case_name},\n"
+            ));
         }
         out.push_str("}\n");
     }
@@ -358,6 +356,7 @@ mod tests {
         aliases: &[],
         payload: BATTERY_EVENT_PAYLOAD,
         iap2_csm: None,
+        skip_serializing_none: false,
         doc: "Battery state changed.",
     };
     const EMPTY_REQUEST_METHOD: Method = Method {

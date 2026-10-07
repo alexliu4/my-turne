@@ -58,10 +58,34 @@ export interface OtaActivateResponse {
 }
 
 /**
+ * Generated enum `OtaErrorCode`.
+ */
+export type OtaErrorCode =
+  | "unknownUpdate"
+  | "offsetMismatch"
+  | "hashMismatch"
+  | "sizeMismatch"
+  | "cancelled"
+  | "writeFailed"
+  | "confirmFailed"
+  | "internal"
+;
+
+/**
  * Discriminated event union for the `ota` inventory family.
  * Inventory: `EVENT_INVENTORY` entries grouped by `Family`.
  */
 export type OtaEvent = never;
+
+/**
+ * Generated enum `OtaKind`.
+ */
+export type OtaKind =
+  | "image"
+  | "daemon"
+  | "builtinWebapp"
+  | "bandaid"
+;
 
 /**
  * Discriminated method-request union for the `ota` inventory family.
@@ -79,3 +103,14 @@ export type OtaMethodResponse =
   | OtaActivateMethodResponseMessage
 ;
 
+/**
+ * Generated enum `OtaPhase`.
+ */
+export type OtaPhase =
+  | "downloading"
+  | "streaming"
+  | "verifying"
+  | "writing"
+  | "confirming"
+  | "reboot"
+;

@@ -25,7 +25,33 @@ public struct OtaActivateResponse: Codable, Sendable {
   }
 }
 
+public enum OtaErrorCode: String, Codable, Sendable {
+  case unknownUpdate = "unknownUpdate"
+  case offsetMismatch = "offsetMismatch"
+  case hashMismatch = "hashMismatch"
+  case sizeMismatch = "sizeMismatch"
+  case cancelled = "cancelled"
+  case writeFailed = "writeFailed"
+  case confirmFailed = "confirmFailed"
+  case `internal` = "internal"
+}
+
+public enum OtaKind: String, Codable, Sendable {
+  case image = "image"
+  case daemon = "daemon"
+  case builtinWebapp = "builtinWebapp"
+  case bandaid = "bandaid"
+}
+
 public enum OtaMethod: Codable, Sendable {
   case otaActivate(OtaActivateRequest)
 }
 
+public enum OtaPhase: String, Codable, Sendable {
+  case downloading = "downloading"
+  case streaming = "streaming"
+  case verifying = "verifying"
+  case writing = "writing"
+  case confirming = "confirming"
+  case reboot = "reboot"
+}

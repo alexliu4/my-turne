@@ -170,11 +170,9 @@ pub fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = inventory
-        .enums
-        .values()
-        .filter(|e| e.name.starts_with("Host"))
-        .collect();
+    let mut enums: Vec<&EnumDef> = Vec::new();
+    enums.extend(inventory.wire_enums.values());
+    enums.extend(inventory.enums.values());
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {
@@ -224,12 +222,18 @@ pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> RustS
                 request_name.clone(),
                 &method.request,
                 None,
+                false,
             )),
         );
         push_item(
             &mut schema,
             method.family,
-            RustItem::Struct(struct_from_payload(response_name, &method.response, None)),
+            RustItem::Struct(struct_from_payload(
+                response_name,
+                &method.response,
+                None,
+                false,
+            )),
         );
         variants_for(&mut method_variants, method.family).push(RustEnumVariant {
             name: base,
@@ -249,6 +253,7 @@ pub fn schema_from_methods_events(methods: &[Method], events: &[Event]) -> RustS
                 payload_name.clone(),
                 &event.payload,
                 event.iap2_csm,
+                event.skip_serializing_none,
             )),
         );
         variants_for(&mut event_variants, event.family).push(RustEnumVariant {
@@ -392,11 +397,12 @@ fn struct_from_payload(
     name: String,
     payload: &Payload,
     iap2_csm: Option<&'static str>,
+    skip_serializing_none: bool,
 ) -> RustStruct {
     RustStruct {
         name,
         iap2_csm: iap2_csm.map(ToOwned::to_owned),
-        skip_serializing_none: false,
+        skip_serializing_none,
         fields: payload
             .fields
             .iter()
@@ -569,7 +575,7 @@ fn render_family_module(module: &RustModule) -> String {
 }
 
 fn render_struct(out: &mut String, item: &RustStruct) {
-    if item.skip_serializing_none || item.name == "AppReadyEvent" || item.name == "SubscriptionUpdatedEvent" {
+    if item.skip_serializing_none {
         out.push_str("#[serde_with::skip_serializing_none]\n");
     }
     out.push_str(&format!("#[derive({DERIVE_ATTR})]\n"));
@@ -941,6 +947,7 @@ mod tests {
             aliases: &[],
             payload: BATTERY_EVENT_PAYLOAD,
             iap2_csm: Some("BatteryChangedCsm"),
+            skip_serializing_none: false,
             doc: "Battery state changed.",
         };
         let schema = schema_from_methods_events(&[method], &[event]);

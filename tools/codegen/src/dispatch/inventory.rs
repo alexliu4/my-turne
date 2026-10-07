@@ -106,6 +106,7 @@ pub struct Event {
     pub aliases: &'static [&'static str],
     pub payload: Payload,
     pub iap2_csm: Option<&'static str>,
+    pub skip_serializing_none: bool,
     pub doc: &'static str,
 }
 
@@ -222,6 +223,27 @@ const fn event(
         aliases,
         payload,
         iap2_csm: None,
+        skip_serializing_none: false,
+        doc,
+    }
+}
+
+const fn event_skip_serializing_none(
+    name: &'static str,
+    family: Family,
+    source: &'static str,
+    aliases: &'static [&'static str],
+    payload: Payload,
+    doc: &'static str,
+) -> Event {
+    Event {
+        name,
+        family,
+        source,
+        aliases,
+        payload,
+        iap2_csm: None,
+        skip_serializing_none: true,
         doc,
     }
 }
@@ -242,6 +264,7 @@ pub const fn event_with_iap2_csm(
         aliases,
         payload,
         iap2_csm: Some(iap2_csm),
+        skip_serializing_none: false,
         doc,
     }
 }
@@ -2340,7 +2363,7 @@ pub const METHOD_INVENTORY: &[Method] = &[
 ];
 
 pub const EVENT_INVENTORY: &[Event] = &[
-    event(
+    event_skip_serializing_none(
         "app.ready",
         Family::Device,
         "app.ready",
@@ -2420,7 +2443,7 @@ pub const EVENT_INVENTORY: &[Event] = &[
         ),
         "Phone app ready event cached and replayed to WS clients.",
     ),
-    event(
+    event_skip_serializing_none(
         "subscription.updated",
         Family::Device,
         "subscription.updated",
@@ -3854,16 +3877,16 @@ fn collect_enum(en: &ItemEnum) -> EnumDef {
         .iter()
         .map(|v| {
             let variant_rename = serde_rename(&v.attrs);
-            let wire_value = variant_rename.unwrap_or_else(|| {
+            let wire_value = variant_rename.or_else(|| {
                 if rename_all.as_deref() == Some("camelCase") {
-                    lower_first(&v.ident.to_string())
+                    Some(lower_first(&v.ident.to_string()))
                 } else {
-                    v.ident.to_string()
+                    None
                 }
             });
             WireVariant {
                 name: v.ident.to_string(),
-                wire_value: Some(wire_value),
+                wire_value,
                 payload: variant_single_payload(&v.fields),
                 is_struct: matches!(v.fields, Fields::Named(_)),
                 tag: variant_tag(&v.attrs),

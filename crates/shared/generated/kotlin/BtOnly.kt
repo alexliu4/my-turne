@@ -78,9 +78,65 @@ data class DeviceVolumeUpdateResponse(
 )
 
 @Serializable
+enum class GatewayToNocturneMsgData {
+  @SerialName("system")
+  SYSTEM,
+  @SerialName("error")
+  ERROR,
+}
+
+@Serializable
+enum class GatewayToNocturneSystemMsg {
+  @SerialName("ota_begin")
+  OTA_BEGIN,
+  @SerialName("ota_chunk")
+  OTA_CHUNK,
+  @SerialName("ota_abandon")
+  OTA_ABANDON,
+  @SerialName("ota_download_progress")
+  OTA_DOWNLOAD_PROGRESS,
+  @SerialName("ota_package_ready")
+  OTA_PACKAGE_READY,
+  @SerialName("ota_asset_range_reply")
+  OTA_ASSET_RANGE_REPLY,
+  @SerialName("ota_asset_range_rejected")
+  OTA_ASSET_RANGE_REJECTED,
+  @SerialName("ota_asset_range_chunk")
+  OTA_ASSET_RANGE_CHUNK,
+}
+
+@Serializable
 data class KeepaliveEvent(
   @SerialName("timestamp") val timestamp: Double,
 )
+
+@Serializable
+enum class NocturneToGatewayMsgData {
+  @SerialName("system")
+  SYSTEM,
+  @SerialName("error")
+  ERROR,
+  @SerialName("ack")
+  ACK,
+  @SerialName("done")
+  DONE,
+}
+
+@Serializable
+enum class NocturneToGatewaySystemMsg {
+  @SerialName("ota_progress")
+  OTA_PROGRESS,
+  @SerialName("ota_error")
+  OTA_ERROR,
+  @SerialName("ota_begin_ack")
+  OTA_BEGIN_ACK,
+  @SerialName("ota_begin_rejected")
+  OTA_BEGIN_REJECTED,
+  @SerialName("ota_asset_range")
+  OTA_ASSET_RANGE,
+  @SerialName("ota_asset_range_abandon")
+  OTA_ASSET_RANGE_ABANDON,
+}
 
 @Serializable
 object PingRequest

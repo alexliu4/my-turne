@@ -16,8 +16,55 @@ data class OtaActivateResponse(
 )
 
 @Serializable
+enum class OtaErrorCode {
+  @SerialName("unknown_update")
+  UNKNOWN_UPDATE,
+  @SerialName("offset_mismatch")
+  OFFSET_MISMATCH,
+  @SerialName("hash_mismatch")
+  HASH_MISMATCH,
+  @SerialName("size_mismatch")
+  SIZE_MISMATCH,
+  @SerialName("cancelled")
+  CANCELLED,
+  @SerialName("write_failed")
+  WRITE_FAILED,
+  @SerialName("confirm_failed")
+  CONFIRM_FAILED,
+  @SerialName("internal")
+  INTERNAL,
+}
+
+@Serializable
+enum class OtaKind {
+  @SerialName("image")
+  IMAGE,
+  @SerialName("daemon")
+  DAEMON,
+  @SerialName("builtin_webapp")
+  BUILTIN_WEBAPP,
+  @SerialName("bandaid")
+  BANDAID,
+}
+
+@Serializable
 enum class OtaMethod {
   @SerialName("ota_activate")
   OTA_ACTIVATE,
 }
 
+@Serializable
+enum class OtaPhase {
+  @SerialName("downloading")
+  DOWNLOADING,
+  @SerialName("streaming")
+  STREAMING,
+  @SerialName("verifying")
+  VERIFYING,
+  @SerialName("writing")
+  WRITING,
+  @SerialName("confirming")
+  CONFIRMING,
+  @SerialName("reboot")
+  REBOOT,
+}

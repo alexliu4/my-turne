@@ -111,6 +111,14 @@ export interface AppReadyEventTimezone {
 }
 
 /**
+ * Generated enum `Compression`.
+ */
+export type Compression =
+  | "gzip"
+  | "none"
+;
+
+/**
  * Request envelope for `device.ab.failover` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `device.ab.failover`.
  */
@@ -1460,6 +1468,14 @@ export interface DeviceVersionResponse {
 }
 
 /**
+ * Generated enum `Encoding`.
+ */
+export type Encoding =
+  | "msgpack"
+  | "json"
+;
+
+/**
  * Generated struct `HostAction`.
  */
 export interface HostAction {
@@ -1537,7 +1553,7 @@ export type HostMessage =
   | ({ type: "host.status" } & HostStatus)
   | ({ type: "host.action" } & HostAction)
   | ({ type: "host.actionResult" } & HostActionResult)
-  | { type: "Unknown" }
+  | { type: "unknown" }
 ;
 
 /**
@@ -1549,6 +1565,16 @@ export interface HostStatus {
    */
   connected: boolean;
 }
+
+/**
+ * Generated enum `MsgMeta`.
+ */
+export type MsgMeta =
+  | { type: "command" }
+  | { type: "event" }
+  | { type: "request" }
+  | ({ type: "response" } & ResponseMeta)
+;
 
 /**
  * Event payload for `network.status`.
@@ -1726,6 +1752,14 @@ export interface OnboardingSetStateResponse {
 }
 
 /**
+ * Generated enum `Priority`.
+ */
+export type Priority =
+  | "normal"
+  | "bulk"
+;
+
+/**
  * Request envelope for `reset_boot_counter` in the `device` method union.
  * Inventory: `METHOD_INVENTORY` entry `reset_boot_counter`.
  */
@@ -1822,3 +1856,12 @@ export interface SubscriptionUpdatedEventMessage {
   data: SubscriptionUpdatedEvent;
 }
 
+/**
+ * Generated enum `WireError`.
+ */
+export type WireError =
+  | { type: "unsupported" }
+  | { type: "unimplemented" }
+  | { type: "malformed" }
+  | { type: "handlerFailed" }
+;

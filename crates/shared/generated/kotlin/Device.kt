@@ -28,6 +28,14 @@ data class AppReadyEvent(
 )
 
 @Serializable
+enum class Compression {
+  @SerialName("gzip")
+  GZIP,
+  @SerialName("none")
+  NONE,
+}
+
+@Serializable
 object DeviceAbFailoverRequest
 
 @Serializable
@@ -313,6 +321,14 @@ data class DeviceVersionResponse(
 )
 
 @Serializable
+enum class Encoding {
+  @SerialName("msgpack")
+  MSGPACK,
+  @SerialName("json")
+  JSON,
+}
+
+@Serializable
 data class HostAction(
   @SerialName("requestId") val requestId: String,
   @SerialName("action") val action: String,
@@ -390,6 +406,18 @@ data class HostStatus(
 )
 
 @Serializable
+enum class MsgMeta {
+  @SerialName("command")
+  COMMAND,
+  @SerialName("event")
+  EVENT,
+  @SerialName("request")
+  REQUEST,
+  @SerialName("response")
+  RESPONSE,
+}
+
+@Serializable
 data class NetworkStatusEvent(
   @SerialName("status") val status: String,
 )
@@ -424,6 +452,14 @@ data class OnboardingSetStateRequest(
 object OnboardingSetStateResponse
 
 @Serializable
+enum class Priority {
+  @SerialName("normal")
+  NORMAL,
+  @SerialName("bulk")
+  BULK,
+}
+
+@Serializable
 object ResetBootCounterRequest
 
 @Serializable
@@ -441,3 +477,14 @@ data class SubscriptionUpdatedEvent(
   @SerialName("entitlements_verified") val entitlementsVerified: Boolean? = null,
 )
 
+@Serializable
+enum class WireError {
+  @SerialName("unsupported")
+  UNSUPPORTED,
+  @SerialName("unimplemented")
+  UNIMPLEMENTED,
+  @SerialName("malformed")
+  MALFORMED,
+  @SerialName("handler_failed")
+  HANDLER_FAILED,
+}

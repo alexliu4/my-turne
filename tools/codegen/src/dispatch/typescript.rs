@@ -123,11 +123,9 @@ pub fn schema_from_inventory(inventory: &Inventory) -> TypeScriptSchema {
         );
     }
 
-    let mut enums: Vec<&EnumDef> = inventory
-        .enums
-        .values()
-        .filter(|e| e.name.starts_with("Host"))
-        .collect();
+    let mut enums: Vec<&EnumDef> = Vec::new();
+    enums.extend(inventory.wire_enums.values());
+    enums.extend(inventory.enums.values());
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     for def in enums {
@@ -167,7 +165,10 @@ fn union_from_enum_def(def: &EnumDef) -> TypeScriptUnion {
         .variants
         .iter()
         .map(|v| {
-            let wire_val = v.wire_value.as_deref().unwrap_or(&v.name);
+            let wire_val = v
+                .wire_value
+                .clone()
+                .unwrap_or_else(|| lower_first(&v.name));
             if raw_string_enum {
                 format!("{:?}", wire_val)
             } else if let Some(payload) = &v.payload {
@@ -717,6 +718,14 @@ fn family_file_stem(family: Family) -> &'static str {
     }
 }
 
+fn lower_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(f) => f.to_lowercase().collect::<String>() + chars.as_str(),
+    }
+}
+
 fn family_type_name(family: Family) -> &'static str {
     match family {
         Family::Bluetooth => "Bluetooth",
@@ -836,6 +845,7 @@ mod tests {
             aliases: &[],
             payload: BATTERY_EVENT_PAYLOAD,
             iap2_csm: None,
+            skip_serializing_none: false,
             doc: "Battery state changed.",
         };
         let schema = schema_from_methods_events(&[method], &[event]);
