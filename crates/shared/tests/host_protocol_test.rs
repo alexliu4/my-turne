@@ -161,7 +161,7 @@ fn test_action_without_payload() {
         payload: None,
     };
     let serialized = serde_json::to_value(&HostMessage::Action(action)).unwrap();
-    assert_eq!(serialized["payload"], serde_json::Value::Null);
+    assert!(serialized.get("payload").is_none());
 }
 
 #[test]
@@ -190,8 +190,8 @@ fn test_action_result_without_payload_and_error() {
         error: None,
     };
     let serialized = serde_json::to_value(&HostMessage::ActionResult(result)).unwrap();
-    assert_eq!(serialized["payload"], serde_json::Value::Null);
-    assert_eq!(serialized["error"], serde_json::Value::Null);
+    assert!(serialized.get("payload").is_none());
+    assert!(serialized.get("error").is_none());
 }
 
 #[test]
