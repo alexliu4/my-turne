@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use super::{
     casing::{pascal_to_snake, snake_to_camel},
     inventory::{EVENT_INVENTORY, Event, Family, Inventory, METHOD_INVENTORY, Method},
-    rust::{self, RustEnum, RustFieldType, RustItem, RustModule, RustSchema, RustStruct},
+    rust::{self, RustEnum, RustField, RustFieldType, RustItem, RustModule, RustSchema, RustStruct},
 };
 
 pub const KOTLIN_OUTPUT_DIR: &str = "crates/shared/generated/kotlin";
@@ -68,7 +68,101 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
         &mut schema,
         rust::schema_from_methods_events(inventory.methods, inventory.events),
     );
+
+    // Explicitly add Host structs to Kotlin schema
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostHello".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "protocol_version".to_string(),
+                    ty: RustFieldType::U32,
+                },
+                RustField {
+                    name: "host_name".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "capabilities".to_string(),
+                    ty: RustFieldType::Vec(Box::new(RustFieldType::Named("HostCapability".to_string()))),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostStatus".to_string(),
+            iap2_csm: None,
+            fields: vec![RustField {
+                name: "connected".to_string(),
+                ty: RustFieldType::Bool,
+            }],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostAction".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "request_id".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "action".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "payload".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::JsonValue)),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostActionResult".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "request_id".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "success".to_string(),
+                    ty: RustFieldType::Bool,
+                },
+                RustField {
+                    name: "payload".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::JsonValue)),
+                },
+                RustField {
+                    name: "error".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::String)),
+                },
+            ],
+        }),
+    );
+
     schema
+}
+
+fn push_item(schema: &mut RustSchema, family: Family, item: RustItem) {
+    let module = schema
+        .modules
+        .iter_mut()
+        .find(|module| module.family == family)
+        .expect("all families initialized");
+    module.items.push(item);
 }
 
 fn merge_schema(target: &mut RustSchema, source: RustSchema) {
@@ -149,16 +243,51 @@ fn render_struct(out: &mut String, item: &RustStruct) {
 }
 
 fn render_enum(out: &mut String, item: &RustEnum) {
+    if item.name == "HostMessage" {
+        out.push_str("@Serializable\n");
+        out.push_str("sealed class HostMessage {\n");
+        out.push_str("  @Serializable\n");
+        out.push_str("  @SerialName(\"host.hello\")\n");
+        out.push_str("  data class Hello(val data: HostHello) : HostMessage()\n\n");
+        out.push_str("  @Serializable\n");
+        out.push_str("  @SerialName(\"host.status\")\n");
+        out.push_str("  data class Status(val data: HostStatus) : HostMessage()\n\n");
+        out.push_str("  @Serializable\n");
+        out.push_str("  @SerialName(\"host.action\")\n");
+        out.push_str("  data class Action(val data: HostAction) : HostMessage()\n\n");
+        out.push_str("  @Serializable\n");
+        out.push_str("  @SerialName(\"host.actionResult\")\n");
+        out.push_str("  data class ActionResult(val data: HostActionResult) : HostMessage()\n\n");
+        out.push_str("  @Serializable\n");
+        out.push_str("  object Unknown : HostMessage()\n");
+        out.push_str("}\n");
+        return;
+    }
+
     out.push_str("@Serializable\n");
     out.push_str(&format!("enum class {} {{\n", item.name));
     for variant in &item.variants {
-        let serial_name = pascal_to_snake(&variant.name);
+        let serial_name = if item.name == "HostCapability" {
+            lower_first(&variant.name)
+        } else {
+            pascal_to_snake(&variant.name)
+        };
+        let case_name = enum_case_name(&pascal_to_snake(&variant.name));
         out.push_str(&format!(
-            "  @SerialName({serial_name:?})\n  {},\n",
-            enum_case_name(&serial_name)
+            "  @SerialName({serial_name:?})\n  {case_name},\n"
         ));
     }
     out.push_str("}\n");
+}
+
+fn lower_first(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    if let Some(first) = chars.next() {
+        out.extend(first.to_lowercase());
+    }
+    out.push_str(chars.as_str());
+    out
 }
 
 impl KotlinFieldType for RustFieldType {
@@ -200,7 +329,7 @@ fn generated_header() -> String {
     "// THIS FILE IS GENERATED BY tools/codegen. Do not edit by hand.\n// Re-generate with `just codegen`.\n\n".to_string()
 }
 
-fn all_families() -> [Family; 10] {
+fn all_families() -> [Family; 11] {
     [
         Family::Bluetooth,
         Family::Device,
@@ -212,6 +341,7 @@ fn all_families() -> [Family; 10] {
         Family::BtOnly,
         Family::Ota,
         Family::Iap2,
+        Family::Host,
     ]
 }
 
@@ -227,6 +357,7 @@ fn family_type_name(family: Family) -> &'static str {
         Family::BtOnly => "BtOnly",
         Family::Ota => "Ota",
         Family::Iap2 => "Iap2",
+        Family::Host => "Host",
     }
 }
 

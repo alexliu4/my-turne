@@ -336,26 +336,34 @@ enum class HostCapability {
   VOLUME,
   @SerialName("discord")
   DISCORD,
-  @SerialName("system_stats")
+  @SerialName("systemStats")
   SYSTEM_STATS,
   @SerialName("macros")
   MACROS,
-  @SerialName("app_launch")
+  @SerialName("appLaunch")
   APP_LAUNCH,
 }
 
 @Serializable
-enum class HostMessage {
-  @SerialName("hello")
-  HELLO,
-  @SerialName("status")
-  STATUS,
-  @SerialName("action")
-  ACTION,
-  @SerialName("action_result")
-  ACTION_RESULT,
-  @SerialName("unknown")
-  UNKNOWN,
+sealed class HostMessage {
+  @Serializable
+  @SerialName("host.hello")
+  data class Hello(val data: HostHello) : HostMessage()
+
+  @Serializable
+  @SerialName("host.status")
+  data class Status(val data: HostStatus) : HostMessage()
+
+  @Serializable
+  @SerialName("host.action")
+  data class Action(val data: HostAction) : HostMessage()
+
+  @Serializable
+  @SerialName("host.actionResult")
+  data class ActionResult(val data: HostActionResult) : HostMessage()
+
+  @Serializable
+  object Unknown : HostMessage()
 }
 
 @Serializable

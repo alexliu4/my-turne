@@ -22,14 +22,9 @@ pub enum HostCapability {
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "host.ts")]
 pub struct HostHello {
-    #[serde(default = "default_protocol_version")]
     pub protocol_version: u32,
     pub host_name: String,
     pub capabilities: Vec<HostCapability>,
-}
-
-fn default_protocol_version() -> u32 {
-    1
 }
 
 #[typeshare]
@@ -49,7 +44,7 @@ pub struct HostStatus {
 pub struct HostAction {
     pub request_id: String,
     pub action: String,
-    #[ts(type = "unknown")]
+    #[ts(optional, type = "unknown")]
     pub payload: Option<Value>,
 }
 
@@ -61,8 +56,9 @@ pub struct HostAction {
 pub struct HostActionResult {
     pub request_id: String,
     pub success: bool,
-    #[ts(type = "unknown")]
+    #[ts(optional, type = "unknown")]
     pub payload: Option<Value>,
+    #[ts(optional)]
     pub error: Option<String>,
 }
 
