@@ -30,9 +30,11 @@ let isManuallyDisconnected = false;
 let lastMessageTimestamp = 0;
 
 let activeConfig = {
-  url: "ws://localhost:8893",
-  token: undefined as string | undefined,
-  autoConnect: true,
+  url: typeof window !== "undefined" && (window as unknown as { NOCTURNE_WINDOWS_HOST_URL?: string }).NOCTURNE_WINDOWS_HOST_URL
+    ? (window as unknown as { NOCTURNE_WINDOWS_HOST_URL: string }).NOCTURNE_WINDOWS_HOST_URL
+    : "",
+  token: typeof window !== "undefined" ? (window as unknown as { NOCTURNE_WINDOWS_TOKEN?: string }).NOCTURNE_WINDOWS_TOKEN : undefined,
+  autoConnect: false,
   reconnectIntervalMs: 1000,
   maxReconnectIntervalMs: 16000,
   heartbeatIntervalMs: 10000,
@@ -98,6 +100,14 @@ export function connectHostBridge(overrideConfig?: Partial<typeof activeConfig>)
   }
   isManuallyDisconnected = false;
 
+  if (!activeConfig.url) {
+    updateState({
+      connectionState: "disconnected",
+      lastError: "No Windows host URL configured",
+    });
+    return;
+  }
+
   clearTimers();
   if (globalWs) {
     globalWs.close();
@@ -122,14 +132,9 @@ export function connectHostBridge(overrideConfig?: Partial<typeof activeConfig>)
 
     ws.onopen = () => {
       if (globalWs !== ws) return;
-      reconnectAttempt = 0;
       lastMessageTimestamp = Date.now();
 
-      updateState({
-        connectionState: "connected",
-      });
-
-      // Send client hello
+      // Keep state as connecting until valid host.hello is received
       sendHostMessage({
         type: "host.hello",
         protocolVersion: 1,
@@ -171,7 +176,18 @@ export function connectHostBridge(overrideConfig?: Partial<typeof activeConfig>)
         const message = JSON.parse(event.data);
         if (message.type === "host.hello") {
           const hello = message as HostHello;
+          if (hello.protocolVersion !== 1) {
+            updateState({
+              connectionState: "disconnected",
+              lastError: `Unsupported protocol version ${hello.protocolVersion}`,
+            });
+            ws.close();
+            return;
+          }
+
+          reconnectAttempt = 0;
           updateState({
+            connectionState: "connected",
             hostName: hello.hostName,
             protocolVersion: hello.protocolVersion,
             capabilities: hello.capabilities || [],
@@ -209,7 +225,7 @@ export function connectHostBridge(overrideConfig?: Partial<typeof activeConfig>)
         capabilities: [],
       });
 
-      if (!isManuallyDisconnected && activeConfig.autoConnect) {
+      if (!isManuallyDisconnected && activeConfig.autoConnect && activeConfig.url) {
         const attempt = reconnectAttempt;
         const delay = Math.min(
           activeConfig.reconnectIntervalMs * Math.pow(2, attempt),
@@ -247,22 +263,28 @@ export function useHostBridge(options: HostBridgeOptions = {}) {
   useEffect(() => {
     const unsubscribe = subscribeHostBridgeState(setState);
 
-    if (
+    const hasOptions =
       options.url ||
       options.token ||
       options.autoConnect !== undefined ||
       options.reconnectIntervalMs ||
       options.maxReconnectIntervalMs ||
       options.heartbeatIntervalMs ||
-      options.heartbeatTimeoutMs
-    ) {
-      activeConfig = { ...activeConfig, ...options };
+      options.heartbeatTimeoutMs;
+
+    if (hasOptions) {
+      activeConfig = {
+        ...activeConfig,
+        ...options,
+        autoConnect: options.autoConnect ?? (Boolean(options.url) || Boolean(activeConfig.url)),
+      };
     }
 
     if (
       currentState.connectionState === "disconnected" &&
       !isManuallyDisconnected &&
-      (options.autoConnect ?? activeConfig.autoConnect)
+      activeConfig.autoConnect &&
+      activeConfig.url
     ) {
       connectHostBridge();
     }

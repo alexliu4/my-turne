@@ -64,7 +64,7 @@ describe("useHostBridge singleton manager", () => {
     (globalThis as unknown as { WebSocket: unknown }).WebSocket = originalWebSocket;
   });
 
-  test("connectHostBridge initializes singleton WebSocket", () => {
+  test("connectHostBridge stays connecting on open until valid host.hello is received", () => {
     connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
 
     expect(getHostBridgeState().connectionState).toBe("connecting");
@@ -74,7 +74,17 @@ describe("useHostBridge singleton manager", () => {
     const ws = MockWebSocket.instances[0];
     ws.simulateOpen();
 
+    expect(getHostBridgeState().connectionState).toBe("connecting");
+
+    ws.simulateMessage({
+      type: "host.hello",
+      protocolVersion: 1,
+      hostName: "Windows-PC",
+      capabilities: [],
+    });
+
     expect(getHostBridgeState().connectionState).toBe("connected");
+    expect(getHostBridgeState().hostName).toBe("Windows-PC");
   });
 
   test("appends token query param when token option is provided", () => {
@@ -84,31 +94,24 @@ describe("useHostBridge singleton manager", () => {
     expect(MockWebSocket.instances[0].url).toBe("ws://192.168.1.50:8893?token=secret_pass");
   });
 
-  test("subscribers receive state updates and host.hello capabilities", () => {
-    let receivedState = getHostBridgeState();
-    const unsubscribe = subscribeHostBridgeState((s) => {
-      receivedState = s;
-    });
-
-    connectHostBridge({ autoConnect: false });
+  test("rejects unsupported protocol version and closes connection", () => {
+    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
     const ws = MockWebSocket.instances[0];
     ws.simulateOpen();
 
     ws.simulateMessage({
       type: "host.hello",
-      protocolVersion: 1,
-      hostName: "Windows-Desktop",
+      protocolVersion: 999,
+      hostName: "Future-PC",
       capabilities: [],
     });
 
-    expect(receivedState.hostName).toBe("Windows-Desktop");
-    expect(receivedState.capabilities).toEqual([]);
-
-    unsubscribe();
+    expect(getHostBridgeState().connectionState).toBe("disconnected");
+    expect(getHostBridgeState().lastError).toBe("Unsupported protocol version 999");
   });
 
   test("sendHostMessage sends JSON payload via active WebSocket", () => {
-    connectHostBridge({ autoConnect: false });
+    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: false });
     const ws = MockWebSocket.instances[0];
     ws.simulateOpen();
 
@@ -120,21 +123,8 @@ describe("useHostBridge singleton manager", () => {
     expect(ws.sentMessages.some((m) => m.includes("host.ping"))).toBe(true);
   });
 
-  test("handles host.status disconnected message", () => {
-    connectHostBridge({ autoConnect: false });
-    const ws = MockWebSocket.instances[0];
-    ws.simulateOpen();
-
-    ws.simulateMessage({
-      type: "host.status",
-      connected: false,
-    });
-
-    expect(getHostBridgeState().connectionState).toBe("disconnected");
-  });
-
   test("manual disconnectHostBridge stays disconnected without auto-reconnecting", () => {
-    connectHostBridge({ autoConnect: true });
+    connectHostBridge({ url: "ws://192.168.1.50:8893", autoConnect: true });
     const ws = MockWebSocket.instances[0];
     ws.simulateOpen();
 

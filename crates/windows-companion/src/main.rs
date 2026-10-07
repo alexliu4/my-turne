@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use futures::{SinkExt, StreamExt};
 use libnocturne::{HostCapability, HostHello, HostMessage, HostStatus};
 use std::net::SocketAddr;
@@ -53,6 +53,13 @@ impl CompanionServer {
     }
 
     pub async fn run(&self) -> Result<()> {
+        if !self.config.bind_addr.ip().is_loopback() && self.config.auth_token.is_none() {
+            bail!(
+                "Refusing to bind to non-loopback address {} without an authentication token (--token or NOCTURNE_AUTH_TOKEN)",
+                self.config.bind_addr
+            );
+        }
+
         let listener = TcpListener::bind(self.config.bind_addr).await?;
         info!("Windows Companion WebSocket server listening on {}", self.config.bind_addr);
 
@@ -139,6 +146,8 @@ pub async fn handle_connection(
                                 "Protocol version mismatch: host={}, client={}",
                                 config.protocol_version, client_hello.protocol_version
                             );
+                            let _ = ws_stream.close(None).await;
+                            return Ok(());
                         }
                     }
                     Ok(HostMessage::Ping) => {
@@ -302,5 +311,16 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_lan_binding_without_token_fails() {
+        let config = CompanionConfig {
+            bind_addr: "0.0.0.0:8893".parse().unwrap(),
+            auth_token: None,
+            ..Default::default()
+        };
+        let server = CompanionServer::new(config);
+        assert!(server.run().await.is_err(), "Non-loopback binding without token should be refused");
     }
 }

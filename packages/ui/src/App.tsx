@@ -34,6 +34,7 @@ import {
   getButtonMappingValue,
 } from "./utils/presetStorage";
 import { selectPresentedPhoneCall, usePhoneCalls } from "./hooks/usePhoneCalls";
+import { useHostBridge } from "./hooks/useHostBridge";
 import SplashScreen from "./components/screens/SplashScreen";
 import UIShell, { MockingbirdPhoneCallOverlay } from "./mockingbird/UIShell";
 import { useSubscription } from "./hooks/useSubscription";
@@ -391,6 +392,8 @@ function useGlobalButtonMapping({
 }
 
 function AppContent() {
+  useHostBridge();
+
   const {
     settings,
     updateSetting,
