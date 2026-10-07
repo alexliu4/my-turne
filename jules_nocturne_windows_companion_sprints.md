@@ -391,9 +391,10 @@ Offline
 
 ## Acceptance Criteria
 
-UI updates in real time when Windows connects/disconnects.
-
-No host-dependent app should crash while offline.
+- [x] UI updates in real time when Windows connects/disconnects.
+- [x] Host Status settings panel created (`packages/ui/src/components/settings/HostStatus.tsx`) and added to Settings menu under "Windows PC".
+- [x] Displays host name, connection status, and real-time capability availability badges.
+- [x] No host-dependent app should crash while offline.
 
 ---
 
