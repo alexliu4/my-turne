@@ -122,6 +122,9 @@ pub fn write_schema_to_dir(schema: &RustSchema, out_dir: impl AsRef<Path>) -> Re
 
     let modules = complete_modules(schema);
     for module in &modules {
+        if module.items.is_empty() {
+            continue;
+        }
         let path = out_dir.join(format!("{}.rs", family_file_stem(module.family)));
         std::fs::write(&path, render_family_module(module))
             .with_context(|| format!("write {}", path.display()))?;
@@ -494,13 +497,14 @@ fn complete_modules(schema: &RustSchema) -> Vec<RustModule> {
 
 fn render_root_module(modules: &[RustModule]) -> String {
     let mut out = generated_header();
-    for family in all_families() {
-        out.push_str(&format!("pub mod {};\n", family_file_stem(family)));
+    for module in modules.iter().filter(|module| !module.items.is_empty()) {
+        let module_stem = family_file_stem(module.family);
+        out.push_str(&format!("pub mod {module_stem};\n"));
     }
     out.push('\n');
     for module in modules.iter().filter(|module| !module.items.is_empty()) {
-        let module = family_file_stem(module.family);
-        out.push_str(&format!("pub use {module}::*;\n"));
+        let module_stem = family_file_stem(module.family);
+        out.push_str(&format!("pub use {module_stem}::*;\n"));
     }
     out
 }
@@ -924,15 +928,26 @@ mod tests {
     #[test]
     fn root_module_re_exports_each_family_module() {
         let schema = schema_from_methods_events(
-            &[Method {
-                name: "set_volume",
-                family: Family::Device,
-                source: "setVolume",
-                aliases: &[],
-                request: SET_VOLUME_REQUEST,
-                response: SET_VOLUME_RESPONSE,
-                doc: "Set playback volume.",
-            }],
+            &[
+                Method {
+                    name: "set_volume",
+                    family: Family::Device,
+                    source: "setVolume",
+                    aliases: &[],
+                    request: SET_VOLUME_REQUEST,
+                    response: SET_VOLUME_RESPONSE,
+                    doc: "Set playback volume.",
+                },
+                Method {
+                    name: "media_control",
+                    family: Family::MediaControl,
+                    source: "mediaControl",
+                    aliases: &[],
+                    request: SET_VOLUME_REQUEST,
+                    response: SET_VOLUME_RESPONSE,
+                    doc: "Media control.",
+                },
+            ],
             &[],
         );
         let modules = complete_modules(&schema);
@@ -941,8 +956,7 @@ mod tests {
         assert!(out.contains("pub mod device;"));
         assert!(out.contains("pub use device::*;"));
         assert!(out.contains("pub mod media_control;"));
-        assert!(out.contains("pub mod bt_only;"));
-        assert!(!out.contains("pub use bt_only::*;"));
+        assert!(!out.contains("pub mod bt_only;"));
     }
 
     #[test]

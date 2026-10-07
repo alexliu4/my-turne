@@ -5,7 +5,6 @@ pub mod audio;
 pub mod bluetooth;
 pub mod bt_only;
 pub mod device;
-pub mod host;
 pub mod iap2;
 pub mod media_control;
 pub mod ota;

@@ -93,13 +93,16 @@ pub fn write_schema_to_dir(schema: &TypeScriptSchema, out_dir: impl AsRef<Path>)
 
     let modules = complete_modules(schema);
     for module in &modules {
+        if module.items.is_empty() {
+            continue;
+        }
         let path = out_dir.join(format!("{}.d.ts", family_file_stem(module.family)));
         std::fs::write(&path, render_family_module(module))
             .with_context(|| format!("write {}", path.display()))?;
     }
 
     let index_path = out_dir.join("index.d.ts");
-    std::fs::write(&index_path, render_index_module())
+    std::fs::write(&index_path, render_index_module(&modules))
         .with_context(|| format!("write {}", index_path.display()))?;
     Ok(())
 }
@@ -491,12 +494,12 @@ fn complete_modules(schema: &TypeScriptSchema) -> Vec<TypeScriptModule> {
         .collect()
 }
 
-fn render_index_module() -> String {
+fn render_index_module(modules: &[TypeScriptModule]) -> String {
     let mut out = generated_header();
-    for family in all_families() {
+    for module in modules.iter().filter(|module| !module.items.is_empty()) {
         out.push_str(&format!(
             "export * from \"./{}\";\n",
-            family_file_stem(family)
+            family_file_stem(module.family)
         ));
     }
     out
@@ -747,10 +750,19 @@ mod tests {
 
     #[test]
     fn index_re_exports_each_family_declaration_file() {
-        let out = render_index_module();
+        let method = Method {
+            name: "device.set_volume",
+            family: Family::Device,
+            source: "device.setVolume",
+            aliases: &[],
+            request: SET_VOLUME_REQUEST,
+            response: SET_VOLUME_RESPONSE,
+            doc: "Set playback volume.",
+        };
+        let schema = schema_from_methods_events(&[method], &[]);
+        let modules = complete_modules(&schema);
+        let out = render_index_module(&modules);
 
         assert!(out.contains("export * from \"./device\";"));
-        assert!(out.contains("export * from \"./media_control\";"));
-        assert!(out.contains("export * from \"./bt_only\";"));
     }
 }
