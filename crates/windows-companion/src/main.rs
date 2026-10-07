@@ -23,9 +23,17 @@ impl Default for CompanionConfig {
             .or_else(|_| std::env::var("HOSTNAME"))
             .unwrap_or_else(|_| "Windows-PC".to_string());
 
+        let host_str = std::env::var("NOCTURNE_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+        let port_str = std::env::var("NOCTURNE_PORT").unwrap_or_else(|_| "8893".to_string());
+        let bind_addr: SocketAddr = format!("{}:{}", host_str, port_str)
+            .parse()
+            .unwrap_or_else(|_| "0.0.0.0:8893".parse().unwrap());
+
+        let auth_token = std::env::var("NOCTURNE_AUTH_TOKEN").ok();
+
         Self {
-            bind_addr: "127.0.0.1:8893".parse().unwrap(),
-            auth_token: None,
+            bind_addr,
+            auth_token,
             host_name,
             capabilities: vec![
                 HostCapability::Media,
@@ -140,13 +148,18 @@ pub async fn handle_connection(
                             );
                         }
                     }
+                    Ok(HostMessage::Ping) => {
+                        let pong = HostMessage::Pong;
+                        let pong_json = serde_json::to_string(&pong)?;
+                        ws_stream.send(Message::Text(pong_json.into())).await?;
+                    }
                     Ok(HostMessage::Action(action)) => {
                         info!("Received host action: {}", action.action);
                     }
                     Ok(HostMessage::Status(status)) => {
                         info!("Received host status update: connected={}", status.connected);
                     }
-                    Ok(HostMessage::ActionResult(_)) => {}
+                    Ok(HostMessage::Pong) | Ok(HostMessage::ActionResult(_)) => {}
                     Ok(HostMessage::Unknown) | Err(_) => {
                         warn!("Received unknown or malformed host message from {}", peer_addr);
                     }
@@ -172,19 +185,30 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     info!("Starting Nocturne Windows Companion");
 
-    let mut bind_port: u16 = 8893;
+    let mut bind_host = std::env::var("NOCTURNE_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let mut bind_port: u16 = std::env::var("NOCTURNE_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8893);
+    let mut auth_token = std::env::var("NOCTURNE_AUTH_TOKEN").ok();
+
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--port" && i + 1 < args.len() {
+        if args[i] == "--host" && i + 1 < args.len() {
+            bind_host = args[i + 1].clone();
+        } else if args[i] == "--port" && i + 1 < args.len() {
             if let Ok(p) = args[i + 1].parse() {
                 bind_port = p;
             }
+        } else if args[i] == "--token" && i + 1 < args.len() {
+            auth_token = Some(args[i + 1].clone());
         }
     }
 
-    let bind_addr: SocketAddr = format!("127.0.0.1:{}", bind_port).parse()?;
+    let bind_addr: SocketAddr = format!("{}:{}", bind_host, bind_port).parse()?;
     let config = CompanionConfig {
         bind_addr,
+        auth_token,
         ..Default::default()
     };
 
@@ -230,6 +254,18 @@ mod tests {
             }
         } else {
             panic!("Expected text message");
+        }
+
+        // Test host.ping -> host.pong
+        let ping = HostMessage::Ping;
+        let ping_json = serde_json::to_string(&ping)?;
+        ws_stream.send(Message::Text(ping_json.into())).await?;
+
+        if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
+            let msg: HostMessage = serde_json::from_str(&text)?;
+            assert_eq!(msg, HostMessage::Pong);
+        } else {
+            panic!("Expected host.pong");
         }
 
         ws_stream.close(None).await?;

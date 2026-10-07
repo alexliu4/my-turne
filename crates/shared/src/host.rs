@@ -76,6 +76,10 @@ pub enum HostMessage {
     Action(HostAction),
     #[serde(rename = "host.actionResult")]
     ActionResult(HostActionResult),
+    #[serde(rename = "host.ping")]
+    Ping,
+    #[serde(rename = "host.pong")]
+    Pong,
     #[serde(other)]
     Unknown,
 }

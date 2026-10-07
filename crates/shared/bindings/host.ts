@@ -8,6 +8,6 @@ export type HostCapability = "media" | "volume" | "discord" | "systemStats" | "m
 
 export type HostHello = { protocolVersion: number, hostName: string, capabilities: Array<HostCapability>, };
 
-export type HostMessage = { "type": "host.hello" } & HostHello | { "type": "host.status" } & HostStatus | { "type": "host.action" } & HostAction | { "type": "host.actionResult" } & HostActionResult | { "type": "Unknown" };
+export type HostMessage = { "type": "host.hello" } & HostHello | { "type": "host.status" } & HostStatus | { "type": "host.action" } & HostAction | { "type": "host.actionResult" } & HostActionResult | { "type": "host.ping" } | { "type": "host.pong" } | { "type": "Unknown" };
 
 export type HostStatus = { connected: boolean, };
