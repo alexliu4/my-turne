@@ -283,7 +283,7 @@ Do not couple transport logic directly to UI components.
 
 ---
 
-# Sprint 2 — Minimal Windows Companion + Wireless Connection
+# Sprint 2 — Minimal Windows Companion + Wireless Connection [COMPLETED]
 
 ## Goal
 
@@ -297,24 +297,24 @@ For now, it may be a simple console application.
 
 Requirements:
 
-- starts a WebSocket server on the Windows PC
-- sends `host.hello`
-- exposes connection status
-- logs connect/disconnect events
-- supports protocol version negotiation
-- uses a configurable port
-- binds safely to the local network only
+- [x] starts a WebSocket server on the Windows PC
+- [x] sends `host.hello`
+- [x] exposes connection status
+- [x] logs connect/disconnect events
+- [x] supports protocol version negotiation
+- [x] uses a configurable port
+- [x] binds safely to the local network only
 
 ## Car Thing / Nocturne side
 
 Add:
 
-- HostBridge service
-- connection state
-- reconnect with backoff
-- capability state
-- heartbeat / timeout
-- offline handling
+- [x] HostBridge service
+- [x] connection state
+- [x] reconnect with backoff
+- [x] capability state
+- [x] heartbeat / timeout
+- [x] offline handling
 
 ## Security
 
@@ -322,9 +322,9 @@ Do not expose an unauthenticated control endpoint broadly.
 
 For the MVP, use at minimum:
 
-- LAN-only binding
-- explicit paired host address
-- shared pairing token or equivalent lightweight authentication
+- [x] LAN-only binding
+- [x] explicit paired host address
+- [x] shared pairing token or equivalent lightweight authentication
 
 Avoid designing a full account system.
 
@@ -332,11 +332,11 @@ Avoid designing a full account system.
 
 Without USB data:
 
-1. Car Thing connects to Windows over LAN
-2. Windows companion reports capabilities
-3. Car Thing detects Windows online/offline state
-4. Disconnecting Windows does not break Spotify or Nocturne
-5. Reconnecting Windows restores host availability automatically
+1. [x] Car Thing connects to Windows over LAN
+2. [x] Windows companion reports capabilities
+3. [x] Car Thing detects Windows online/offline state
+4. [x] Disconnecting Windows does not break Spotify or Nocturne
+5. [x] Reconnecting Windows restores host availability automatically
 
 ---
 
