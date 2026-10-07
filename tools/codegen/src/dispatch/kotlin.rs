@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use super::{
     casing::{pascal_to_snake, snake_to_camel},
     inventory::{EVENT_INVENTORY, Event, Family, Inventory, METHOD_INVENTORY, Method},
-    rust::{self, RustEnum, RustFieldType, RustItem, RustModule, RustSchema, RustStruct},
+    rust::{self, RustEnum, RustField, RustFieldType, RustItem, RustModule, RustSchema, RustStruct},
 };
 
 pub const KOTLIN_OUTPUT_DIR: &str = "crates/shared/generated/kotlin";
@@ -68,7 +68,101 @@ fn schema_from_inventory(inventory: &Inventory) -> RustSchema {
         &mut schema,
         rust::schema_from_methods_events(inventory.methods, inventory.events),
     );
+
+    // Explicitly add Host structs to Kotlin schema
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostHello".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "protocolVersion".to_string(),
+                    ty: RustFieldType::U32,
+                },
+                RustField {
+                    name: "hostName".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "capabilities".to_string(),
+                    ty: RustFieldType::Vec(Box::new(RustFieldType::Named("HostCapability".to_string()))),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostStatus".to_string(),
+            iap2_csm: None,
+            fields: vec![RustField {
+                name: "connected".to_string(),
+                ty: RustFieldType::Bool,
+            }],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostAction".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "requestId".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "action".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "payload".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::JsonValue)),
+                },
+            ],
+        }),
+    );
+    push_item(
+        &mut schema,
+        Family::Host,
+        RustItem::Struct(RustStruct {
+            name: "HostActionResult".to_string(),
+            iap2_csm: None,
+            fields: vec![
+                RustField {
+                    name: "requestId".to_string(),
+                    ty: RustFieldType::String,
+                },
+                RustField {
+                    name: "success".to_string(),
+                    ty: RustFieldType::Bool,
+                },
+                RustField {
+                    name: "payload".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::JsonValue)),
+                },
+                RustField {
+                    name: "error".to_string(),
+                    ty: RustFieldType::Option(Box::new(RustFieldType::String)),
+                },
+            ],
+        }),
+    );
+
     schema
+}
+
+fn push_item(schema: &mut RustSchema, family: Family, item: RustItem) {
+    let module = schema
+        .modules
+        .iter_mut()
+        .find(|module| module.family == family)
+        .expect("all families initialized");
+    module.items.push(item);
 }
 
 fn merge_schema(target: &mut RustSchema, source: RustSchema) {
@@ -116,7 +210,23 @@ fn render_family_module(module: &RustModule) -> String {
         return out;
     }
     out.push_str("import kotlinx.serialization.SerialName\n");
-    out.push_str("import kotlinx.serialization.Serializable\n\n");
+    out.push_str("import kotlinx.serialization.Serializable\n");
+    if module
+        .items
+        .iter()
+        .any(|item| matches!(item, RustItem::Enum(item) if item.name == "HostMessage"))
+    {
+        out.push_str("import kotlinx.serialization.KSerializer\n");
+        out.push_str("import kotlinx.serialization.descriptors.SerialDescriptor\n");
+        out.push_str("import kotlinx.serialization.descriptors.buildClassSerialDescriptor\n");
+        out.push_str("import kotlinx.serialization.encoding.Decoder\n");
+        out.push_str("import kotlinx.serialization.encoding.Encoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonDecoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonEncoder\n");
+        out.push_str("import kotlinx.serialization.json.JsonObject\n");
+        out.push_str("import kotlinx.serialization.json.JsonPrimitive\n");
+    }
+    out.push('\n');
 
     for item in &module.items {
         match item {
@@ -149,16 +259,106 @@ fn render_struct(out: &mut String, item: &RustStruct) {
 }
 
 fn render_enum(out: &mut String, item: &RustEnum) {
+    if item.name == "HostMessage" {
+        render_host_message_enum_and_serializer(out);
+        return;
+    }
+
     out.push_str("@Serializable\n");
     out.push_str(&format!("enum class {} {{\n", item.name));
     for variant in &item.variants {
-        let serial_name = pascal_to_snake(&variant.name);
+        let serial_name = if item.name == "HostCapability" {
+            lower_first(&variant.name)
+        } else {
+            pascal_to_snake(&variant.name)
+        };
+        let case_name = enum_case_name(&pascal_to_snake(&variant.name));
         out.push_str(&format!(
-            "  @SerialName({serial_name:?})\n  {},\n",
-            enum_case_name(&serial_name)
+            "  @SerialName({serial_name:?})\n  {case_name},\n"
         ));
     }
     out.push_str("}\n");
+}
+
+fn render_host_message_enum_and_serializer(out: &mut String) {
+    out.push_str("@Serializable(with = HostMessageSerializer::class)\n");
+    out.push_str("sealed class HostMessage {\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.hello\")\n");
+    out.push_str("  data class Hello(\n");
+    out.push_str("    @SerialName(\"protocolVersion\") val protocolVersion: UInt,\n");
+    out.push_str("    @SerialName(\"hostName\") val hostName: String,\n");
+    out.push_str("    @SerialName(\"capabilities\") val capabilities: List<HostCapability>,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.status\")\n");
+    out.push_str("  data class Status(\n");
+    out.push_str("    @SerialName(\"connected\") val connected: Boolean,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.action\")\n");
+    out.push_str("  data class Action(\n");
+    out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+    out.push_str("    @SerialName(\"action\") val action: String,\n");
+    out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.actionResult\")\n");
+    out.push_str("  data class ActionResult(\n");
+    out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+    out.push_str("    @SerialName(\"success\") val success: Boolean,\n");
+    out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+    out.push_str("    @SerialName(\"error\") val error: String? = null,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  object Unknown : HostMessage()\n");
+    out.push_str("}\n\n");
+
+    out.push_str("object HostMessageSerializer : KSerializer<HostMessage> {\n");
+    out.push_str("  override val descriptor: SerialDescriptor = buildClassSerialDescriptor(\"HostMessage\")\n\n");
+    out.push_str("  override fun deserialize(decoder: Decoder): HostMessage {\n");
+    out.push_str("    val jsonDecoder = decoder as? JsonDecoder ?: error(\"HostMessageSerializer requires JsonDecoder\")\n");
+    out.push_str("    val jsonElement = jsonDecoder.decodeJsonElement()\n");
+    out.push_str("    val jsonObject = jsonElement as? JsonObject ?: error(\"Expected JsonObject for HostMessage\")\n");
+    out.push_str("    val typePrimitive = jsonObject[\"type\"] as? JsonPrimitive ?: error(\"Missing or invalid 'type' in HostMessage\")\n");
+    out.push_str("    if (!typePrimitive.isString) error(\"'type' in HostMessage must be a string\")\n");
+    out.push_str("    val fields = JsonObject(jsonObject.filterKeys { it != \"type\" })\n");
+    out.push_str("    return when (typePrimitive.content) {\n");
+    out.push_str("      \"host.hello\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), fields)\n");
+    out.push_str("      \"host.status\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), fields)\n");
+    out.push_str("      \"host.action\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), fields)\n");
+    out.push_str("      \"host.actionResult\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), fields)\n");
+    out.push_str("      else -> HostMessage.Unknown\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  override fun serialize(encoder: Encoder, value: HostMessage) {\n");
+    out.push_str("    val jsonEncoder = encoder as? JsonEncoder ?: error(\"HostMessageSerializer requires JsonEncoder\")\n");
+    out.push_str("    val jsonObject = when (value) {\n");
+    out.push_str("      is HostMessage.Hello -> encodeKnown(jsonEncoder, \"host.hello\", HostMessage.Hello.serializer(), value)\n");
+    out.push_str("      is HostMessage.Status -> encodeKnown(jsonEncoder, \"host.status\", HostMessage.Status.serializer(), value)\n");
+    out.push_str("      is HostMessage.Action -> encodeKnown(jsonEncoder, \"host.action\", HostMessage.Action.serializer(), value)\n");
+    out.push_str("      is HostMessage.ActionResult -> encodeKnown(jsonEncoder, \"host.actionResult\", HostMessage.ActionResult.serializer(), value)\n");
+    out.push_str("      is HostMessage.Unknown -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\")))\n");
+    out.push_str("    }\n");
+    out.push_str("    jsonEncoder.encodeJsonElement(jsonObject)\n");
+    out.push_str("  }\n");
+    out.push_str("\n");
+    out.push_str("  private fun <T> encodeKnown(jsonEncoder: JsonEncoder, type: String, serializer: KSerializer<T>, value: T): JsonObject {\n");
+    out.push_str("    val fields = jsonEncoder.json.encodeToJsonElement(serializer, value) as JsonObject\n");
+    out.push_str("    return JsonObject(mapOf(\"type\" to JsonPrimitive(type)) + fields)\n");
+    out.push_str("  }\n");
+    out.push_str("}\n");
+}
+
+fn lower_first(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    if let Some(first) = chars.next() {
+        out.extend(first.to_lowercase());
+    }
+    out.push_str(chars.as_str());
+    out
 }
 
 impl KotlinFieldType for RustFieldType {
@@ -200,7 +400,7 @@ fn generated_header() -> String {
     "// THIS FILE IS GENERATED BY tools/codegen. Do not edit by hand.\n// Re-generate with `just codegen`.\n\n".to_string()
 }
 
-fn all_families() -> [Family; 10] {
+fn all_families() -> [Family; 11] {
     [
         Family::Bluetooth,
         Family::Device,
@@ -212,6 +412,7 @@ fn all_families() -> [Family; 10] {
         Family::BtOnly,
         Family::Ota,
         Family::Iap2,
+        Family::Host,
     ]
 }
 
@@ -227,6 +428,7 @@ fn family_type_name(family: Family) -> &'static str {
         Family::BtOnly => "BtOnly",
         Family::Ota => "Ota",
         Family::Iap2 => "Iap2",
+        Family::Host => "Host",
     }
 }
 
@@ -397,5 +599,53 @@ mod tests {
 
         assert!(out.contains("@file:Suppress(\"unused\")"));
         assert!(out.contains("package dev.nocturne.schema"));
+    }
+
+    #[test]
+    fn host_message_uses_custom_serializer_and_unknown_fallback() {
+        let module = RustModule {
+            family: Family::Device,
+            items: vec![RustItem::Enum(RustEnum {
+                name: "HostMessage".to_string(),
+                tag_field: None,
+                variants: Vec::new(),
+            })],
+        };
+        let out = render_family_module(&module);
+
+        assert!(out.contains("@Serializable(with = HostMessageSerializer::class)"));
+        assert!(out.contains("sealed class HostMessage"));
+        assert!(out.contains("object HostMessageSerializer : KSerializer<HostMessage>"));
+        for import in [
+            "kotlinx.serialization.KSerializer",
+            "kotlinx.serialization.descriptors.SerialDescriptor",
+            "kotlinx.serialization.descriptors.buildClassSerialDescriptor",
+            "kotlinx.serialization.encoding.Decoder",
+            "kotlinx.serialization.encoding.Encoder",
+            "kotlinx.serialization.json.JsonDecoder",
+            "kotlinx.serialization.json.JsonEncoder",
+            "kotlinx.serialization.json.JsonObject",
+            "kotlinx.serialization.json.JsonPrimitive",
+        ] {
+            assert!(out.contains(&format!("import {import}\n")), "missing {import}");
+        }
+        for (variant, discriminator) in [
+            ("Hello", "host.hello"),
+            ("Status", "host.status"),
+            ("Action", "host.action"),
+            ("ActionResult", "host.actionResult"),
+        ] {
+            assert!(out.contains(&format!(
+                "is HostMessage.{variant} -> encodeKnown(jsonEncoder, \"{discriminator}\", HostMessage.{variant}.serializer(), value)"
+            )));
+            assert!(out.contains(&format!(
+                "\"{discriminator}\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.{variant}.serializer(), fields)"
+            )));
+        }
+        assert!(out.contains("val fields = JsonObject(jsonObject.filterKeys { it != \"type\" })"));
+        assert!(out.contains("return JsonObject(mapOf(\"type\" to JsonPrimitive(type)) + fields)"));
+        assert!(out.contains("if (!typePrimitive.isString) error("));
+        assert!(out.contains("else -> HostMessage.Unknown"));
+        assert!(out.contains("is HostMessage.Unknown -> JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\")))"));
     }
 }

@@ -126,6 +126,115 @@ fn test_unknown_host_message_type_fails_safely() {
 }
 
 #[test]
+fn test_missing_protocol_version_fails_deserialization() {
+    let missing_pv = json!({
+        "type": "host.hello",
+        "hostName": "DESKTOP-TEST",
+        "capabilities": ["media"]
+    });
+
+    let result: Result<HostMessage, _> = serde_json::from_value(missing_pv);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_action_without_payload() {
+    let raw_action = json!({
+        "type": "host.action",
+        "requestId": "req-456",
+        "action": "system.mute"
+    });
+
+    let deserialized: HostMessage = serde_json::from_value(raw_action).unwrap();
+    match deserialized {
+        HostMessage::Action(a) => {
+            assert_eq!(a.request_id, "req-456");
+            assert_eq!(a.action, "system.mute");
+            assert_eq!(a.payload, None);
+        }
+        _ => panic!("expected HostMessage::Action"),
+    }
+
+    let action = HostAction {
+        request_id: "req-456".to_string(),
+        action: "system.mute".to_string(),
+        payload: None,
+    };
+    let serialized = serde_json::to_value(&HostMessage::Action(action)).unwrap();
+    assert!(serialized.get("payload").is_none());
+}
+
+#[test]
+fn test_action_result_without_payload_and_error() {
+    let raw_result = json!({
+        "type": "host.actionResult",
+        "requestId": "req-789",
+        "success": true
+    });
+
+    let deserialized: HostMessage = serde_json::from_value(raw_result).unwrap();
+    match deserialized {
+        HostMessage::ActionResult(r) => {
+            assert_eq!(r.request_id, "req-789");
+            assert!(r.success);
+            assert_eq!(r.payload, None);
+            assert_eq!(r.error, None);
+        }
+        _ => panic!("expected HostMessage::ActionResult"),
+    }
+
+    let result = HostActionResult {
+        request_id: "req-789".to_string(),
+        success: true,
+        payload: None,
+        error: None,
+    };
+    let serialized = serde_json::to_value(&HostMessage::ActionResult(result)).unwrap();
+    assert!(serialized.get("payload").is_none());
+    assert!(serialized.get("error").is_none());
+}
+
+#[test]
+fn test_exact_system_stats_and_app_launch_capabilities() {
+    let hello = HostHello {
+        protocol_version: 1,
+        host_name: "HOST".to_string(),
+        capabilities: vec![
+            HostCapability::SystemStats,
+            HostCapability::AppLaunch,
+            HostCapability::Media,
+            HostCapability::Volume,
+            HostCapability::Discord,
+            HostCapability::Macros,
+        ],
+    };
+
+    let serialized = serde_json::to_value(&HostMessage::Hello(hello)).unwrap();
+    assert_eq!(
+        serialized["capabilities"],
+        json!(["systemStats", "appLaunch", "media", "volume", "discord", "macros"])
+    );
+
+    let raw_hello = json!({
+        "type": "host.hello",
+        "protocolVersion": 1,
+        "hostName": "HOST",
+        "capabilities": ["systemStats", "appLaunch"]
+    });
+
+    let deserialized: HostMessage = serde_json::from_value(raw_hello).unwrap();
+    match deserialized {
+        HostMessage::Hello(h) => {
+            assert_eq!(
+                h.capabilities,
+                vec![HostCapability::SystemStats, HostCapability::AppLaunch]
+            );
+        }
+        _ => panic!("expected HostMessage::Hello"),
+    }
+}
+
+#[test]
 fn test_malformed_host_message_handling() {
     // Missing required field 'hostName' for host.hello
     let malformed_hello = json!({
