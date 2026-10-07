@@ -11,4 +11,3 @@ export * from "./voice";
 export * from "./bt_only";
 export * from "./ota";
 export * from "./iap2";
-export * from "./host";

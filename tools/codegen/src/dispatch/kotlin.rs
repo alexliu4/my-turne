@@ -244,38 +244,7 @@ fn render_struct(out: &mut String, item: &RustStruct) {
 
 fn render_enum(out: &mut String, item: &RustEnum) {
     if item.name == "HostMessage" {
-        out.push_str("@Serializable\n");
-        out.push_str("sealed class HostMessage {\n");
-        out.push_str("  @Serializable\n");
-        out.push_str("  @SerialName(\"host.hello\")\n");
-        out.push_str("  data class Hello(\n");
-        out.push_str("    @SerialName(\"protocolVersion\") val protocolVersion: UInt,\n");
-        out.push_str("    @SerialName(\"hostName\") val hostName: String,\n");
-        out.push_str("    @SerialName(\"capabilities\") val capabilities: List<HostCapability>,\n");
-        out.push_str("  ) : HostMessage()\n\n");
-        out.push_str("  @Serializable\n");
-        out.push_str("  @SerialName(\"host.status\")\n");
-        out.push_str("  data class Status(\n");
-        out.push_str("    @SerialName(\"connected\") val connected: Boolean,\n");
-        out.push_str("  ) : HostMessage()\n\n");
-        out.push_str("  @Serializable\n");
-        out.push_str("  @SerialName(\"host.action\")\n");
-        out.push_str("  data class Action(\n");
-        out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
-        out.push_str("    @SerialName(\"action\") val action: String,\n");
-        out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
-        out.push_str("  ) : HostMessage()\n\n");
-        out.push_str("  @Serializable\n");
-        out.push_str("  @SerialName(\"host.actionResult\")\n");
-        out.push_str("  data class ActionResult(\n");
-        out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
-        out.push_str("    @SerialName(\"success\") val success: Boolean,\n");
-        out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
-        out.push_str("    @SerialName(\"error\") val error: String? = null,\n");
-        out.push_str("  ) : HostMessage()\n\n");
-        out.push_str("  @Serializable\n");
-        out.push_str("  object Unknown : HostMessage()\n");
-        out.push_str("}\n");
+        render_host_message_enum_and_serializer(out);
         return;
     }
 
@@ -292,6 +261,70 @@ fn render_enum(out: &mut String, item: &RustEnum) {
             "  @SerialName({serial_name:?})\n  {case_name},\n"
         ));
     }
+    out.push_str("}\n");
+}
+
+fn render_host_message_enum_and_serializer(out: &mut String) {
+    out.push_str("@Serializable(with = HostMessageSerializer::class)\n");
+    out.push_str("sealed class HostMessage {\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.hello\")\n");
+    out.push_str("  data class Hello(\n");
+    out.push_str("    @SerialName(\"protocolVersion\") val protocolVersion: UInt,\n");
+    out.push_str("    @SerialName(\"hostName\") val hostName: String,\n");
+    out.push_str("    @SerialName(\"capabilities\") val capabilities: List<HostCapability>,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.status\")\n");
+    out.push_str("  data class Status(\n");
+    out.push_str("    @SerialName(\"connected\") val connected: Boolean,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.action\")\n");
+    out.push_str("  data class Action(\n");
+    out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+    out.push_str("    @SerialName(\"action\") val action: String,\n");
+    out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  @SerialName(\"host.actionResult\")\n");
+    out.push_str("  data class ActionResult(\n");
+    out.push_str("    @SerialName(\"requestId\") val requestId: String,\n");
+    out.push_str("    @SerialName(\"success\") val success: Boolean,\n");
+    out.push_str("    @SerialName(\"payload\") val payload: Value? = null,\n");
+    out.push_str("    @SerialName(\"error\") val error: String? = null,\n");
+    out.push_str("  ) : HostMessage()\n\n");
+    out.push_str("  @Serializable\n");
+    out.push_str("  object Unknown : HostMessage()\n");
+    out.push_str("}\n\n");
+
+    out.push_str("object HostMessageSerializer : KSerializer<HostMessage> {\n");
+    out.push_str("  override val descriptor: SerialDescriptor = buildClassSerialDescriptor(\"HostMessage\")\n\n");
+    out.push_str("  override fun deserialize(decoder: Decoder): HostMessage {\n");
+    out.push_str("    val jsonDecoder = decoder as? JsonDecoder ?: error(\"HostMessageSerializer requires JsonDecoder\")\n");
+    out.push_str("    val jsonElement = jsonDecoder.decodeJsonElement()\n");
+    out.push_str("    val jsonObject = jsonElement as? JsonObject ?: error(\"Expected JsonObject for HostMessage\")\n");
+    out.push_str("    val typePrimitive = jsonObject[\"type\"] as? JsonPrimitive ?: error(\"Missing or invalid 'type' in HostMessage\")\n");
+    out.push_str("    if (!typePrimitive.isString) error(\"'type' in HostMessage must be a string\")\n");
+    out.push_str("    return when (val type = typePrimitive.content) {\n");
+    out.push_str("      \"host.hello\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), jsonElement)\n");
+    out.push_str("      \"host.status\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), jsonElement)\n");
+    out.push_str("      \"host.action\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), jsonElement)\n");
+    out.push_str("      \"host.actionResult\" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), jsonElement)\n");
+    out.push_str("      else -> HostMessage.Unknown\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n\n");
+
+    out.push_str("  override fun serialize(encoder: Encoder, value: HostMessage) {\n");
+    out.push_str("    val jsonEncoder = encoder as? JsonEncoder ?: error(\"HostMessageSerializer requires JsonEncoder\")\n");
+    out.push_str("    when (value) {\n");
+    out.push_str("      is HostMessage.Hello -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Hello.serializer(), value))\n");
+    out.push_str("      is HostMessage.Status -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Status.serializer(), value))\n");
+    out.push_str("      is HostMessage.Action -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Action.serializer(), value))\n");
+    out.push_str("      is HostMessage.ActionResult -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.ActionResult.serializer(), value))\n");
+    out.push_str("      is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\"))))\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n");
     out.push_str("}\n");
 }
 
@@ -543,5 +576,17 @@ mod tests {
 
         assert!(out.contains("@file:Suppress(\"unused\")"));
         assert!(out.contains("package dev.nocturne.schema"));
+    }
+
+    #[test]
+    fn host_message_uses_custom_serializer_and_unknown_fallback() {
+        let mut out = String::new();
+        render_host_message_enum_and_serializer(&mut out);
+
+        assert!(out.contains("@Serializable(with = HostMessageSerializer::class)"));
+        assert!(out.contains("sealed class HostMessage"));
+        assert!(out.contains("object HostMessageSerializer : KSerializer<HostMessage>"));
+        assert!(out.contains("else -> HostMessage.Unknown"));
+        assert!(out.contains("is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf(\"type\" to JsonPrimitive(\"Unknown\"))))"));
     }
 }

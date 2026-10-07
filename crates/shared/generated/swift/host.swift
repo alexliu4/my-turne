@@ -130,7 +130,7 @@ public enum HostMessage: Codable, Sendable {
       try container.encode("host.actionResult", forKey: .type)
       try actionResult.encode(to: encoder)
     case .unknown:
-      try container.encode("unknown", forKey: .type)
+      try container.encode("Unknown", forKey: .type)
     }
   }
 }

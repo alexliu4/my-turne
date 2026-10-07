@@ -344,7 +344,7 @@ enum class HostCapability {
   APP_LAUNCH,
 }
 
-@Serializable
+@Serializable(with = HostMessageSerializer::class)
 sealed class HostMessage {
   @Serializable
   @SerialName("host.hello")
@@ -379,6 +379,36 @@ sealed class HostMessage {
 
   @Serializable
   object Unknown : HostMessage()
+}
+
+object HostMessageSerializer : KSerializer<HostMessage> {
+  override val descriptor: SerialDescriptor = buildClassSerialDescriptor("HostMessage")
+
+  override fun deserialize(decoder: Decoder): HostMessage {
+    val jsonDecoder = decoder as? JsonDecoder ?: error("HostMessageSerializer requires JsonDecoder")
+    val jsonElement = jsonDecoder.decodeJsonElement()
+    val jsonObject = jsonElement as? JsonObject ?: error("Expected JsonObject for HostMessage")
+    val typePrimitive = jsonObject["type"] as? JsonPrimitive ?: error("Missing or invalid 'type' in HostMessage")
+    if (!typePrimitive.isString) error("'type' in HostMessage must be a string")
+    return when (val type = typePrimitive.content) {
+      "host.hello" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Hello.serializer(), jsonElement)
+      "host.status" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Status.serializer(), jsonElement)
+      "host.action" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.Action.serializer(), jsonElement)
+      "host.actionResult" -> jsonDecoder.json.decodeFromJsonElement(HostMessage.ActionResult.serializer(), jsonElement)
+      else -> HostMessage.Unknown
+    }
+  }
+
+  override fun serialize(encoder: Encoder, value: HostMessage) {
+    val jsonEncoder = encoder as? JsonEncoder ?: error("HostMessageSerializer requires JsonEncoder")
+    when (value) {
+      is HostMessage.Hello -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Hello.serializer(), value))
+      is HostMessage.Status -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Status.serializer(), value))
+      is HostMessage.Action -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.Action.serializer(), value))
+      is HostMessage.ActionResult -> jsonEncoder.encodeJsonElement(jsonEncoder.json.encodeToJsonElement(HostMessage.ActionResult.serializer(), value))
+      is HostMessage.Unknown -> jsonEncoder.encodeJsonElement(JsonObject(mapOf("type" to JsonPrimitive("Unknown"))))
+    }
+  }
 }
 
 @Serializable

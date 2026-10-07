@@ -628,7 +628,7 @@ fn render_host_message_enum(out: &mut String) {
     out.push_str("      try container.encode(\"host.actionResult\", forKey: .type)\n");
     out.push_str("      try actionResult.encode(to: encoder)\n");
     out.push_str("    case .unknown:\n");
-    out.push_str("      try container.encode(\"unknown\", forKey: .type)\n");
+    out.push_str("      try container.encode(\"Unknown\", forKey: .type)\n");
     out.push_str("    }\n");
     out.push_str("  }\n");
     out.push_str("}\n");
