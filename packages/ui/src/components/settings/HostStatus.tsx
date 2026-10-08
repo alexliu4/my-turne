@@ -1,6 +1,6 @@
 import React from "react";
 import { useHostBridge } from "../../hooks/useHostBridge";
-import type { HostCapability } from "../../../../crates/shared/bindings/host";
+import type { HostCapability } from "../../../../../crates/shared/bindings/host";
 
 const ALL_CAPABILITIES: { key: HostCapability; label: string }[] = [
   { key: "media", label: "Media" },
