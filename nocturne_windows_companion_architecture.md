@@ -13,6 +13,7 @@ The Car Thing should **not depend on the Windows PC for core functionality**. Wi
 ### Keep Nocturne running through the always-on Mac mini
 
 The Mac mini remains the reliable always-on machine that supports Nocturne connectivity.
+It also runs a separate raw TCP proxy for Windows HostBridge traffic.
 
 This avoids tying the Car Thing's basic operation to the Windows PC, which may be sleeping, rebooting, gaming, or turned off.
 
@@ -34,6 +35,7 @@ The Windows machine is a **capability provider**, not the primary brain of the C
              |                |
              | Nocturne       |
              | Connector      |
+             | TCP proxy      |
              | Always on      |
              +-------+--------+
                      |
@@ -48,7 +50,14 @@ The Windows machine is a **capability provider**, not the primary brain of the C
              | Apps           |
              +-------+--------+
                      |
-                     | LAN / WebSocket
+                     | WebSocket over LAN to Mac TCP proxy
+                     |
+             +-------v--------+
+             | TCP proxy on   |
+             | same Mac mini  |
+             +-------+--------+
+                     |
+                     | raw TCP over LAN
                      |
              +-------v--------+
              |  Windows PC    |
@@ -138,8 +147,11 @@ Avoid recreating the full DeskThing desktop platform at the start.
 Initial model:
 
 ```text
-Car Thing <-> WebSocket over LAN <-> Windows companion
+Car Thing -> Mac TCP proxy -> Windows companion
 ```
+
+The proxy forwards TCP bytes without handling WebSocket messages. The Windows
+companion still owns the HostBridge protocol, authentication, and capabilities.
 
 Possible structure:
 
@@ -311,21 +323,17 @@ This means configurable mappings do **not** inherently require a USB data wire.
 
 ## Networking Decision
 
-Prefer direct communication:
+Use the Mac mini as the Windows transport path:
 
 ```text
-Car Thing <-> Windows PC
+Car Thing -> Mac TCP proxy -> Windows Companion
 ```
 
-Do not unnecessarily relay Windows integration traffic through the Mac mini:
-
-```text
-Car Thing -> Mac mini -> Windows
-```
-
-The Mac mini should remain responsible for its existing Nocturne / connectivity role.
-
-Windows-specific integrations should communicate directly with the Car Thing over the LAN whenever possible.
+The Mac mini continues running Nocturne Connector. Its separate proxy forwards
+the existing WebSocket TCP connection to Windows Companion without changing
+HostBridge messages or handling the shared token. Car Thing must be able to
+route to the Mac listener, and the Mac must be able to reach Windows over the
+LAN. No USB data cable is required for normal operation.
 
 ---
 

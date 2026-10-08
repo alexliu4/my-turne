@@ -5,7 +5,7 @@ This is the practical workflow for updating the Nocturne UI on a Spotify Car Thi
 ## Your setup
 
 - **Windows PC**: main coding machine, runs the Windows Companion, and can build the React UI with Bun.
-- **Mac mini**: deployment bridge to the Car Thing.
+- **Mac mini**: deployment bridge to the Car Thing, always-on Nocturne Connector, and separate Windows HostBridge TCP proxy.
 - **Car Thing**: runs Nocturne and serves the active UI from:
 
 ```text
@@ -96,11 +96,13 @@ packages/ui/.env.local
 with:
 
 ```env
-VITE_WINDOWS_HOST_URL=ws://<WINDOWS_LAN_IP>:8893
+VITE_WINDOWS_HOST_URL=ws://<MAC_CARTHING_REACHABLE_IP>:8893
 VITE_WINDOWS_TOKEN=<SHARED_TOKEN>
 ```
 
-Use the same token as the Windows Companion.
+Use the same token as the Windows Companion. The Mac proxy forwards the
+WebSocket connection unchanged to `<WINDOWS_LAN_IP>:8893` and does not handle
+the token.
 
 These values are embedded into the UI when you run:
 
@@ -110,7 +112,8 @@ bun run build
 
 So:
 
-- changing the Windows IP requires another build
+- changing the Mac listener IP requires another build
+- changing the Windows IP requires updating the Windows bind address and proxy target, but no UI rebuild
 - changing the token requires another build
 - `.env.local` should not be committed
 - `dist/` should not be committed
@@ -140,9 +143,11 @@ Afterward, the Mac should have:
 
 ## 4. Connect the Car Thing to the Mac mini
 
-For deployment, connect the Car Thing to the Mac mini with a **data-capable USB cable**.
+For this SSH deployment path, you can connect the Car Thing to the Mac mini
+with a data-capable USB cable. USB is not required for normal Windows HostBridge
+operation. If SSH already reaches the Car Thing over the network, use that route.
 
-Test the USB development connection:
+Test the SSH deployment connection:
 
 ```bash
 ping nocturne.local
@@ -433,23 +438,40 @@ For the LAN test it should listen on the Windows LAN address, not only:
 127.0.0.1
 ```
 
+On the Mac mini, from the repo root, start the separate TCP proxy:
+
+```bash
+cargo run -p nocturne-mac-tcp-proxy -- \
+  --bind "${MAC_CARTHING_REACHABLE_IP}:8893" \
+  --target "${WINDOWS_LAN_IP}:8893"
+```
+
+Set `MAC_CARTHING_REACHABLE_IP` and `WINDOWS_LAN_IP` in the Mac shell first.
+The proxy requires both addresses. It forwards raw TCP in both directions;
+Windows Companion continues to handle the WebSocket protocol and shared token.
+Keep the proxy running while testing HostBridge.
+
 ---
 
 ## 11. Sprint 2 physical acceptance test
 
-After deploying the updated UI:
+Before relying on the rebuilt UI, test a TCP connection from the Car Thing shell to
+`<MAC_CARTHING_REACHABLE_IP>:8893` and confirm Windows Companion observes it.
+If the shell reports `Network is unreachable`, stop: the current Car Thing to
+Mac route cannot support this plain TCP proxy.
+
+After deploying the UI built with the Mac listener URL:
 
 1. Start the Windows Companion.
-2. Confirm the Car Thing has the new UI.
-3. Disconnect the USB **data** connection.
-4. Keep the Windows PC and Car Thing on the same LAN/Wi-Fi.
-5. Confirm the Car Thing connects to the Windows Companion.
-6. Stop the Windows Companion with `Ctrl+C`.
-7. Confirm the Windows host becomes offline.
-8. Confirm normal Nocturne / Spotify continues working.
-9. Restart the Windows Companion.
-10. Confirm the Car Thing reconnects automatically.
-11. Test once with an incorrect token and confirm the connection is safely rejected.
+2. Start the Mac TCP proxy targeting Windows.
+3. Confirm the Car Thing has the new UI and disconnect any USB data cable.
+4. Confirm Host Status connects and authenticates through the Mac proxy.
+5. Stop the Windows Companion with `Ctrl+C`.
+6. Confirm the Windows host becomes offline.
+7. Confirm normal Nocturne / Spotify continues working.
+8. Restart the Windows Companion.
+9. Confirm HostBridge reconnects automatically.
+10. Test once with an incorrect token and confirm Windows Companion rejects it.
 
 If all of those pass, Sprint 2's physical acceptance criteria are complete.
 
