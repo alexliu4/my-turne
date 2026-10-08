@@ -112,8 +112,11 @@ mod windows_impl {
     pub struct WindowsAudioBackend {
         volume: IAudioEndpointVolume,
         callback: IAudioEndpointVolumeCallback,
+        com_initialized: bool,
     }
 
+    // IAudioEndpointVolume and IAudioEndpointVolumeCallback COM interfaces
+    // in Windows Core Audio are free-threaded (MTA) and safe to call across threads.
     unsafe impl Send for WindowsAudioBackend {}
     unsafe impl Sync for WindowsAudioBackend {}
 
@@ -140,7 +143,8 @@ mod windows_impl {
     impl WindowsAudioBackend {
         pub fn new(tx: broadcast::Sender<VolumeStatePayload>) -> std::result::Result<Self, String> {
             unsafe {
-                CoInitializeEx(None, COINIT_MULTITHREADED).ok();
+                let com_res = CoInitializeEx(None, COINIT_MULTITHREADED);
+                let com_initialized = com_res.is_ok();
 
                 let enumerator: IMMDeviceEnumerator =
                     CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
@@ -159,7 +163,11 @@ mod windows_impl {
                     .RegisterControlChangeNotify(&callback)
                     .map_err(|e| format!("Failed to register volume notification callback: {e}"))?;
 
-                Ok(Self { volume, callback })
+                Ok(Self {
+                    volume,
+                    callback,
+                    com_initialized,
+                })
             }
         }
     }
@@ -168,6 +176,9 @@ mod windows_impl {
         fn drop(&mut self) {
             unsafe {
                 let _ = self.volume.UnregisterControlChangeNotify(&self.callback);
+                if self.com_initialized {
+                    CoUninitialize();
+                }
             }
         }
     }

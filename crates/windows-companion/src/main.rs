@@ -437,6 +437,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_volume_broadcast_propagation() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+
+        let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
+        let (tx, _) = broadcast::channel(16);
+        let event_tx = tx.clone();
+
+        let server_config = Arc::new(CompanionConfig {
+            bind_addr: addr,
+            auth_token: None,
+            host_name: "Test-PC".to_string(),
+            capabilities: vec![HostCapability::Volume],
+            protocol_version: 1,
+        });
+        let volume_mgr_arc = Arc::new(volume_mgr);
+
+        tokio::spawn(async move {
+            if let Ok((stream, peer_addr)) = listener.accept().await {
+                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr_arc), tx.subscribe()).await;
+            }
+        });
+
+        let url = format!("ws://{}", addr);
+        let (mut ws_stream, _) = connect_async(&url).await?;
+
+        let client_hello = HostMessage::Hello(HostHello {
+            protocol_version: 1,
+            host_name: "CarThing".to_string(),
+            capabilities: vec![],
+        });
+        ws_stream
+            .send(Message::Text(serde_json::to_string(&client_hello)?.into()))
+            .await?;
+
+        // Read hello and initial volume state
+        let _hello = ws_stream.next().await;
+        let _init_vol = ws_stream.next().await;
+
+        // Trigger external volume change broadcast
+        let external_state = VolumeStatePayload::new(88, true);
+        event_tx.send(external_state)?;
+
+        // Verify WebSocket client receives volume.state update
+        if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
+            let msg: HostMessage = serde_json::from_str(&text)?;
+            if let HostMessage::Action(action) = msg {
+                assert_eq!(action.action, "volume.state");
+                let payload = action.payload.unwrap();
+                assert_eq!(payload["volumePercent"], 88);
+                assert_eq!(payload["muted"], true);
+            } else {
+                panic!("Expected volume.state broadcast message");
+            }
+        } else {
+            panic!("Expected WebSocket text message");
+        }
+
+        ws_stream.close(None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_companion_server_auth_failure() -> Result<()> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;

@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import type {
   HostCapability,
   HostMessage,
-} from "../../../../crates/shared/bindings/host";
+} from "../../../../../crates/shared/bindings/host";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 export interface HostBridgeOptions {
@@ -77,6 +77,14 @@ function clearTimers() {
   reconnectTimer = handshakeTimer = heartbeatTimer = null;
   pendingPingAt = null;
 }
+function trackVolumeRequest(reqId: string) {
+  if (pendingVolumeRequests.size >= 50) {
+    const oldest = pendingVolumeRequests.values().next().value;
+    if (oldest) pendingVolumeRequests.delete(oldest);
+  }
+  pendingVolumeRequests.add(reqId);
+}
+
 function offline(error?: string | null) {
   pendingVolumeRequests.clear();
   updateState({
@@ -172,7 +180,7 @@ export function setHostVolume(volumePercent: number, requestId?: string): boolea
     action: "volume.set",
     payload: { volumePercent },
   });
-  if (sent) pendingVolumeRequests.add(reqId);
+  if (sent) trackVolumeRequest(reqId);
   return sent;
 }
 
@@ -184,7 +192,7 @@ export function adjustHostVolume(delta: number, requestId?: string): boolean {
     action: "volume.adjust",
     payload: { delta },
   });
-  if (sent) pendingVolumeRequests.add(reqId);
+  if (sent) trackVolumeRequest(reqId);
   return sent;
 }
 
@@ -196,7 +204,7 @@ export function toggleHostMute(muted?: boolean, requestId?: string): boolean {
     action: "volume.toggleMute",
     payload: muted !== undefined ? { muted } : undefined,
   });
-  if (sent) pendingVolumeRequests.add(reqId);
+  if (sent) trackVolumeRequest(reqId);
   return sent;
 }
 
@@ -207,7 +215,7 @@ export function getHostVolume(requestId?: string): boolean {
     requestId: reqId,
     action: "volume.get",
   });
-  if (sent) pendingVolumeRequests.add(reqId);
+  if (sent) trackVolumeRequest(reqId);
   return sent;
 }
 
@@ -330,6 +338,9 @@ export function connectHostBridge(options: HostBridgeOptions = {}) {
             pendingVolumeRequests.delete(reqId);
             if (payload.success === true) {
               updateVolumeFromPayload(payload.payload);
+              updateState({ lastError: null });
+            } else if (payload.error && typeof payload.error === "string") {
+              updateState({ lastError: payload.error });
             }
           }
         }

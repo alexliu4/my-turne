@@ -1,6 +1,6 @@
 import React from "react";
 import { useHostBridge } from "../../hooks/useHostBridge";
-import type { HostCapability } from "../../../../crates/shared/bindings/host";
+import type { HostCapability } from "../../../../../crates/shared/bindings/host";
 
 const ALL_CAPABILITIES: { key: HostCapability; label: string }[] = [
   { key: "media", label: "Media" },
@@ -104,7 +104,7 @@ export default function HostStatus() {
         </div>
       )}
 
-      {lastError && !isConnected && (
+      {lastError && (
         <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20 text-red-300 text-[24px] font-[560]">
           {lastError}
         </div>
