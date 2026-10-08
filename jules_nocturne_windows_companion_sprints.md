@@ -38,7 +38,7 @@ All new host integrations must work over the local network.
 Target connection:
 
 ```text
-Car Thing <-> LAN / Wi-Fi <-> Windows Companion
+Car Thing -> LAN / Wi-Fi -> Mac TCP proxy -> Windows Companion
 ```
 
 USB may still be used for development, flashing, debugging, or recovery, but it must not be required for normal operation.
@@ -59,16 +59,8 @@ Windows-specific apps should gracefully show an offline state.
 ## 4. Keep Mac mini and Windows responsibilities separate
 
 The Mac mini can continue running Nocturne Connector because it is always on.
-
-Do not route Windows integrations through the Mac mini unless technically necessary.
-
-Preferred:
-
-```text
-Car Thing <-> Windows PC
-```
-
-Not:
+For Windows HostBridge, it also runs a separate raw TCP proxy. The proxy only
+forwards bytes; Windows Companion still owns the WebSocket protocol and token.
 
 ```text
 Car Thing -> Mac mini -> Windows PC
@@ -115,7 +107,13 @@ Those may come later after the core architecture is stable.
                 | Apps           |
                 +-------+--------+
                         |
-                        | LAN / WebSocket
+                        | WebSocket over LAN via Mac TCP proxy
+                        |
+                +-------v--------+
+                |  Mac TCP proxy |
+                +-------+--------+
+                        |
+                        | raw TCP over LAN
                         |
                 +-------v--------+
                 |  Windows PC    |
@@ -287,7 +285,7 @@ Do not couple transport logic directly to UI components.
 
 ## Goal
 
-Prove Car Thing can connect to Windows over LAN without USB.
+Prove Car Thing can reach Windows Companion through the Mac TCP proxy without USB.
 
 ## Windows Companion
 
@@ -332,21 +330,30 @@ Avoid designing a full account system.
 
 Without USB data:
 
-1. [ ] Car Thing connects to Windows over LAN
+1. [ ] Car Thing connects to Windows Companion through the Mac TCP proxy
 2. [ ] Windows companion reports capabilities
 3. [ ] Car Thing detects Windows online/offline state
 4. [ ] Disconnecting Windows does not break Spotify or Nocturne
 5. [ ] Reconnecting Windows restores host availability automatically
 
-These acceptance criteria still require a Car Thing to Windows smoke test without USB data.
+These acceptance criteria still require a Car Thing to Mac proxy smoke test without USB data.
 The companion advertises an empty capability list until a host feature is implemented.
 
 For a LAN test, bind the companion to the Windows PC's LAN address with
-`NOCTURNE_HOST=<windows-lan-ip>` and `NOCTURNE_AUTH_TOKEN=<shared-token>`.
-Build the Car Thing UI with `VITE_WINDOWS_HOST_URL=ws://<windows-lan-ip>:8893`
-and `VITE_WINDOWS_TOKEN=<same-token>`. Without a configured URL, HostBridge
-stays inactive. The token is included in the device UI bundle and should be
-used only on a trusted LAN for this MVP.
+`NOCTURNE_HOST=<WINDOWS_LAN_IP>` and `NOCTURNE_AUTH_TOKEN=<shared-token>`.
+On the Mac, run `cargo run -p nocturne-mac-tcp-proxy -- --bind <MAC_CARTHING_REACHABLE_IP>:8893 --target <WINDOWS_LAN_IP>:8893`.
+Build the Car Thing UI with `VITE_WINDOWS_HOST_URL=ws://<MAC_CARTHING_REACHABLE_IP>:8893`
+and `VITE_WINDOWS_TOKEN=<same-token>`. The proxy requires both addresses and
+never handles the token. Without a configured UI URL, HostBridge stays inactive.
+The token is included in the device UI bundle and should be used only on a
+trusted LAN for this MVP.
+
+Before rebuilding the UI, connect from the Car Thing shell to the Mac proxy
+port and confirm that Windows Companion observes the connection. If this
+returns `Network is unreachable`, stop: plain TCP forwarding cannot work over
+the current Car Thing to Mac connection. With routing confirmed, Host Status
+should authenticate, go Offline when Windows Companion stops, and reconnect
+when it restarts.
 
 ---
 

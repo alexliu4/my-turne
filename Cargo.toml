@@ -8,6 +8,7 @@ members = [
     "crates/iap2-macros",
     "crates/iap2-mfi",
     "crates/windows-companion",
+    "crates/mac-tcp-proxy",
     "tools/codegen",
 ]
 

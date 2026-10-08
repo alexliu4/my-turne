@@ -1964,6 +1964,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nocturne-mac-tcp-proxy"
+version = "2.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "nocturne-swupdate-sys"
 version = "2.1.0"
 dependencies = [
