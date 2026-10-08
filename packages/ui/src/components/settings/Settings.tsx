@@ -23,12 +23,10 @@ import {
   SettingsSupportIcon,
   SettingsAboutIcon,
   BluetoothIcon,
-  LaptopIcon,
 } from "../common/icons";
 import SoftwareUpdate from "./SoftwareUpdate";
 import BluetoothDevices from "./network/BluetoothDevices";
 import About from "./About";
-import HostStatus from "./HostStatus";
 import { useSettings } from "../../contexts/SettingsContext";
 import {
   isConnectorPlatform,
@@ -223,12 +221,6 @@ const settingsStructure: Record<string, SettingsSection> = {
         component: SoftwareUpdate,
       },
     ],
-  },
-  hostStatus: {
-    title: "Windows PC",
-    icon: LaptopIcon,
-    type: "custom",
-    component: HostStatus,
   },
   bluetooth: {
     title: "Bluetooth",

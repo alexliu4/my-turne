@@ -42,7 +42,6 @@ pub enum Family {
     BtOnly,
     Ota, // OTA was first; keep as a family for cohesion
     Iap2,
-    Host,
 }
 
 /// Canonical field-level shape used by the non-OTA wire inventory.

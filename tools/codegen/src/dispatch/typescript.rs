@@ -614,7 +614,6 @@ fn family_file_stem(family: Family) -> &'static str {
         Family::BtOnly => "bt_only",
         Family::Ota => "ota",
         Family::Iap2 => "iap2",
-        Family::Host => "host",
     }
 }
 
@@ -630,7 +629,6 @@ fn family_type_name(family: Family) -> &'static str {
         Family::BtOnly => "BtOnly",
         Family::Ota => "Ota",
         Family::Iap2 => "Iap2",
-        Family::Host => "Host",
     }
 }
 

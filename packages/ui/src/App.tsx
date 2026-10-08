@@ -34,7 +34,6 @@ import {
   getButtonMappingValue,
 } from "./utils/presetStorage";
 import { selectPresentedPhoneCall, usePhoneCalls } from "./hooks/usePhoneCalls";
-import { useHostBridge } from "./hooks/useHostBridge";
 import SplashScreen from "./components/screens/SplashScreen";
 import UIShell, { MockingbirdPhoneCallOverlay } from "./mockingbird/UIShell";
 import { useSubscription } from "./hooks/useSubscription";
@@ -392,12 +391,6 @@ function useGlobalButtonMapping({
 }
 
 function AppContent() {
-  useHostBridge({
-    url: import.meta.env.VITE_WINDOWS_HOST_URL,
-    token: import.meta.env.VITE_WINDOWS_TOKEN,
-    autoConnect: Boolean(import.meta.env.VITE_WINDOWS_HOST_URL),
-  });
-
   const {
     settings,
     updateSetting,
