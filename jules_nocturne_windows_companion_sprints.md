@@ -54,9 +54,12 @@ Windows Unavailable:
 Car Thing → Bluetooth/RFCOMM → Mac Connector
 ```
 
-## 3. Location of Windows Connector Code
+## 3. Repository Responsibility Split
 
-All future Windows connector implementation belongs in a separate fork of `usenocturne/nocturne-connector`. Do **not** vendor or copy that repo into `my-turne`.
+- `my-turne-connector` (fork of `usenocturne/nocturne-connector`): Exposes reliable Windows Connector identity and Windows-native functionality.
+- `my-turne`: Implements/selects Windows-over-Mac route priority and fallback in the `nocturned` daemon.
+
+Windows-specific connector code belongs in a fork of `usenocturne/nocturne-connector` (do not vendor or copy into `my-turne`), while daemon routing selection is implemented in `my-turne`.
 
 Future Windows UI requests travel through the local Nocturne WebSocket / daemon RPC path, not a direct network socket.
 
@@ -64,14 +67,14 @@ Future Windows UI requests travel through the local Nocturne WebSocket / daemon 
 
 # Next Steps & Revised Sprints
 
-## Transport & Fallback Validation (Must precede feature sprints)
+## Transport & Fallback Validation (Cross-repo Integration Checkpoint)
 
-Before resuming feature sprints (volume, media, Discord, etc.), transport/fallback validation must happen in the `nocturne-connector` fork:
+Before resuming feature sprints (volume, media, Discord, etc.), transport/fallback validation is a cross-repo integration checkpoint:
 
 1. Validate Car Thing → Bluetooth/RFCOMM connection to native Windows Connector.
-2. Validate automatic preferred routing when Windows Connector is healthy.
+2. Validate automatic preferred routing in the `my-turne` daemon when Windows Connector is healthy.
 3. Validate automatic fallback to Mac Connector when Windows disconnects.
-4. Validate automatic re-promotion when Windows reconnects.
+4. Validate automatic re-promotion when Windows reconnects across both repositories.
 
 ## Feature Sprints (Deferred until transport validation succeeds)
 

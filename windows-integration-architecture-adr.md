@@ -32,10 +32,12 @@ Windows Unavailable:
 Car Thing → Nocturne daemon → Bluetooth/RFCOMM → Mac Connector
 ```
 
-### Key Decisions
+### Key Decisions & Responsibility Split
 
-1. **Native Transport**: Windows integration uses the native `usenocturne/nocturne-connector` implementation over the existing Bluetooth/RFCOMM RPC daemon path.
-2. **Repository Isolation**: Windows-specific connector code lives in a separate fork of `usenocturne/nocturne-connector`. It is **not** vendored into `my-turne`.
-3. **Route Priority & Fallback**: Routing logic will prefer a healthy Windows Connector when available and automatically fall back to the Mac Connector when Windows is offline.
+1. **Responsibility Split**:
+   - `my-turne-connector` (fork of `usenocturne/nocturne-connector`): Exposes reliable Windows Connector identity and Windows-native functionality.
+   - `my-turne`: Implements and selects Windows-over-Mac route priority and fallback in the `nocturned` daemon.
+2. **Native Transport**: Windows integration uses the native `usenocturne/nocturne-connector` implementation over the existing Bluetooth/RFCOMM RPC daemon path.
+3. **Repository Isolation**: Windows-specific connector code lives in a separate fork of `usenocturne/nocturne-connector`. It is **not** vendored into `my-turne`.
 4. **Daemon RPC Path**: UI requests travel through the local Nocturne daemon WebSocket / daemon RPC path rather than a separate direct network socket.
-5. **Transport Validation Gate**: Transport and fallback validation must be completed and verified before resuming Windows feature sprints.
+5. **Cross-Repo Integration Checkpoint**: Windows → Mac → Windows transport, route priority, and fallback validation must be completed across both repositories before resuming Windows feature sprints.

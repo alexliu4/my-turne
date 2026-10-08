@@ -57,7 +57,7 @@ Car Thing UI
   → Nocturne Connector
 ```
 
-Future Windows integration uses native Windows support inside `usenocturne/nocturne-connector`.
+Future Windows integration uses native Windows support in a fork of `usenocturne/nocturne-connector`.
 
 ### Runtime Routing Model
 
@@ -71,9 +71,12 @@ Car Thing → Nocturne daemon → Bluetooth/RFCOMM → Mac Connector
 
 Routing will prefer a healthy Windows Connector and fall back to the Mac Connector when Windows is offline or unavailable.
 
-### Code Organization
+### Responsibility Split across Repositories
 
-All Windows connector changes belong in a separate fork of `usenocturne/nocturne-connector`. That repo is **not** vendored or copied into `my-turne`.
+- `my-turne-connector` (fork of `usenocturne/nocturne-connector`): Exposes reliable Windows Connector identity and Windows-native functionality.
+- `my-turne`: Implements and selects Windows-over-Mac route priority and fallback in the `nocturned` daemon.
+
+Windows-specific connector code belongs in a fork of `usenocturne/nocturne-connector` (do not vendor or copy into `my-turne`), while daemon routing selection is implemented in `my-turne`.
 
 Future Windows UI requests will travel through the existing local Nocturne WebSocket / daemon RPC path, rather than a separate direct network socket.
 
@@ -106,8 +109,9 @@ Require an active Windows Nocturne Connector route:
 
 ## Transport Validation Requirement
 
-Before resuming feature sprints (volume, media, Discord, etc.), transport and fallback validation must be completed in the `nocturne-connector` fork to confirm:
+Before resuming feature sprints (volume, media, Discord, etc.), transport and fallback validation is a cross-repo integration checkpoint to confirm:
 
 1. Car Thing connects reliably to the native Windows Nocturne Connector over Bluetooth/RFCOMM.
-2. Automatic route priority favors the Windows Connector when online.
+2. `my-turne` daemon automatic route priority favors the Windows Connector when online.
 3. Failover cleanly redirects traffic to the Mac Connector when Windows disconnects.
+4. Windows → Mac → Windows failover and re-promotion operate reliably across both repositories.
