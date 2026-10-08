@@ -166,45 +166,49 @@ export function sendHostMessage(message: HostMessage): boolean {
 
 export function setHostVolume(volumePercent: number, requestId?: string): boolean {
   const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
-  pendingVolumeRequests.add(reqId);
-  return sendHostMessage({
+  const sent = sendHostMessage({
     type: "host.action",
     requestId: reqId,
     action: "volume.set",
     payload: { volumePercent },
   });
+  if (sent) pendingVolumeRequests.add(reqId);
+  return sent;
 }
 
 export function adjustHostVolume(delta: number, requestId?: string): boolean {
   const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
-  pendingVolumeRequests.add(reqId);
-  return sendHostMessage({
+  const sent = sendHostMessage({
     type: "host.action",
     requestId: reqId,
     action: "volume.adjust",
     payload: { delta },
   });
+  if (sent) pendingVolumeRequests.add(reqId);
+  return sent;
 }
 
 export function toggleHostMute(muted?: boolean, requestId?: string): boolean {
   const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
-  pendingVolumeRequests.add(reqId);
-  return sendHostMessage({
+  const sent = sendHostMessage({
     type: "host.action",
     requestId: reqId,
     action: "volume.toggleMute",
     payload: muted !== undefined ? { muted } : undefined,
   });
+  if (sent) pendingVolumeRequests.add(reqId);
+  return sent;
 }
 
 export function getHostVolume(requestId?: string): boolean {
   const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
-  pendingVolumeRequests.add(reqId);
-  return sendHostMessage({
+  const sent = sendHostMessage({
     type: "host.action",
     requestId: reqId,
     action: "volume.get",
   });
+  if (sent) pendingVolumeRequests.add(reqId);
+  return sent;
 }
 
 export function disconnectHostBridge() {

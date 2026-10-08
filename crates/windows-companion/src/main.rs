@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::Message;
@@ -40,26 +40,46 @@ impl Default for CompanionConfig {
 
 pub struct CompanionServer {
     config: Arc<CompanionConfig>,
-    volume_mgr: Arc<VolumeManager>,
+    volume_mgr: Option<Arc<VolumeManager>>,
     volume_rx: broadcast::Sender<VolumeStatePayload>,
 }
 
 impl CompanionServer {
-    pub fn new(config: CompanionConfig) -> Self {
-        let (volume_mgr, rx) = VolumeManager::new_auto();
+    pub fn new(mut config: CompanionConfig) -> Self {
         let (tx_chan, _) = broadcast::channel(16);
-        let tx_clone = tx_chan.clone();
-
-        let mut rx_event = rx;
-        tokio::spawn(async move {
-            while let Ok(state) = rx_event.recv().await {
-                let _ = tx_clone.send(state);
+        let (volume_mgr, capabilities) = match VolumeManager::try_new_auto() {
+            Ok((mgr, rx)) => {
+                let tx_clone = tx_chan.clone();
+                let mut rx_event = rx;
+                tokio::spawn(async move {
+                    loop {
+                        match rx_event.recv().await {
+                            Ok(state) => {
+                                let _ = tx_clone.send(state);
+                            }
+                            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                            Err(broadcast::error::RecvError::Closed) => break,
+                        }
+                    }
+                });
+                (Some(Arc::new(mgr)), config.capabilities.clone())
             }
-        });
+            Err(err) => {
+                warn!("Volume backend initialization failed; volume capability disabled: {err}");
+                let caps: Vec<HostCapability> = config
+                    .capabilities
+                    .into_iter()
+                    .filter(|c| *c != HostCapability::Volume)
+                    .collect();
+                (None, caps)
+            }
+        };
+
+        config.capabilities = capabilities;
 
         Self {
             config: Arc::new(config),
-            volume_mgr: Arc::new(volume_mgr),
+            volume_mgr,
             volume_rx: tx_chan,
         }
     }
@@ -71,7 +91,7 @@ impl CompanionServer {
     ) -> Self {
         Self {
             config: Arc::new(config),
-            volume_mgr: Arc::new(volume_mgr),
+            volume_mgr: Some(Arc::new(volume_mgr)),
             volume_rx: event_tx,
         }
     }
@@ -93,7 +113,7 @@ impl CompanionServer {
             let (stream, peer_addr) = listener.accept().await?;
             info!("Incoming connection from {}", peer_addr);
             let config = Arc::clone(&self.config);
-            let volume_mgr = Arc::clone(&self.volume_mgr);
+            let volume_mgr = self.volume_mgr.clone();
             let volume_sub = self.volume_rx.subscribe();
 
             tokio::spawn(async move {
@@ -109,7 +129,7 @@ pub async fn handle_connection(
     stream: TcpStream,
     peer_addr: SocketAddr,
     config: Arc<CompanionConfig>,
-    volume_mgr: Arc<VolumeManager>,
+    volume_mgr: Option<Arc<VolumeManager>>,
     mut volume_sub: broadcast::Receiver<VolumeStatePayload>,
 ) -> Result<()> {
     let mut authed = config.auth_token.is_none();
@@ -181,16 +201,18 @@ pub async fn handle_connection(
     });
     ws_stream.send(Message::Text(serde_json::to_string(&hello)?.into())).await?;
 
-    // Send initial volume state if capability enabled
+    // Send initial volume state if capability enabled and volume_mgr present
     if config.capabilities.contains(&HostCapability::Volume) {
-        if let Ok(initial_vol) = volume_mgr.get_state() {
-            let initial_vol_event = HostMessage::Action(HostAction {
-                request_id: "init".to_string(),
-                action: "volume.state".to_string(),
-                payload: Some(initial_vol.to_json()),
-            });
-            if let Ok(json) = serde_json::to_string(&initial_vol_event) {
-                let _ = ws_stream.send(Message::Text(json.into())).await;
+        if let Some(ref mgr) = volume_mgr {
+            if let Ok(initial_vol) = mgr.get_state() {
+                let initial_vol_event = HostMessage::Action(HostAction {
+                    request_id: "init".to_string(),
+                    action: "volume.state".to_string(),
+                    payload: Some(initial_vol.to_json()),
+                });
+                if let Ok(json) = serde_json::to_string(&initial_vol_event) {
+                    let _ = ws_stream.send(Message::Text(json.into())).await;
+                }
             }
         }
     }
@@ -198,17 +220,21 @@ pub async fn handle_connection(
     loop {
         tokio::select! {
             ext_vol = volume_sub.recv() => {
-                if let Ok(new_state) = ext_vol {
-                    let event = HostMessage::Action(HostAction {
-                        request_id: "ext".to_string(),
-                        action: "volume.state".to_string(),
-                        payload: Some(new_state.to_json()),
-                    });
-                    if let Ok(json) = serde_json::to_string(&event) {
-                        if ws_stream.send(Message::Text(json.into())).await.is_err() {
-                            break;
+                match ext_vol {
+                    Ok(new_state) => {
+                        let event = HostMessage::Action(HostAction {
+                            request_id: "ext".to_string(),
+                            action: "volume.state".to_string(),
+                            payload: Some(new_state.to_json()),
+                        });
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            if ws_stream.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
                         }
                     }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
             msg = ws_stream.next() => {
@@ -234,32 +260,46 @@ pub async fn handle_connection(
                             }
                             Ok(HostMessage::Action(action)) => {
                                 if action.action.starts_with("volume.") {
-                                    match volume_mgr.handle_action(&action.action, action.payload.as_ref()) {
-                                        Ok(new_state) => {
-                                            let state_value = new_state.to_json();
-                                            let result = HostMessage::ActionResult(HostActionResult {
-                                                request_id: action.request_id,
-                                                success: true,
-                                                payload: Some(state_value),
-                                                error: None,
-                                            });
-                                            if let Ok(json) = serde_json::to_string(&result) {
-                                                if ws_stream.send(Message::Text(json.into())).await.is_err() {
-                                                    break;
+                                    if let Some(ref mgr) = volume_mgr {
+                                        match mgr.handle_action(&action.action, action.payload.as_ref()) {
+                                            Ok(new_state) => {
+                                                let state_value = new_state.to_json();
+                                                let result = HostMessage::ActionResult(HostActionResult {
+                                                    request_id: action.request_id,
+                                                    success: true,
+                                                    payload: Some(state_value),
+                                                    error: None,
+                                                });
+                                                if let Ok(json) = serde_json::to_string(&result) {
+                                                    if ws_stream.send(Message::Text(json.into())).await.is_err() {
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            Err(err_msg) => {
+                                                let result = HostMessage::ActionResult(HostActionResult {
+                                                    request_id: action.request_id,
+                                                    success: false,
+                                                    payload: None,
+                                                    error: Some(err_msg),
+                                                });
+                                                if let Ok(json) = serde_json::to_string(&result) {
+                                                    if ws_stream.send(Message::Text(json.into())).await.is_err() {
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
-                                        Err(err_msg) => {
-                                            let result = HostMessage::ActionResult(HostActionResult {
-                                                request_id: action.request_id,
-                                                success: false,
-                                                payload: None,
-                                                error: Some(err_msg),
-                                            });
-                                            if let Ok(json) = serde_json::to_string(&result) {
-                                                if ws_stream.send(Message::Text(json.into())).await.is_err() {
-                                                    break;
-                                                }
+                                    } else {
+                                        let result = HostMessage::ActionResult(HostActionResult {
+                                            request_id: action.request_id,
+                                            success: false,
+                                            payload: None,
+                                            error: Some("Volume capability unavailable".to_string()),
+                                        });
+                                        if let Ok(json) = serde_json::to_string(&result) {
+                                            if ws_stream.send(Message::Text(json.into())).await.is_err() {
+                                                break;
                                             }
                                         }
                                     }
@@ -328,11 +368,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_companion_server_handshake() -> Result<()> {
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let addr = listener.local_addr()?;
-
         let config = CompanionConfig {
-            bind_addr: addr,
+            bind_addr: "127.0.0.1:0".parse().unwrap(),
             auth_token: None,
             host_name: "Test-PC".to_string(),
             capabilities: vec![HostCapability::Volume],
@@ -348,10 +385,19 @@ mod tests {
             }
         });
 
-        let server = CompanionServer::new_with_mgr(config, volume_mgr, tx);
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let server_config = Arc::new(CompanionConfig {
+            bind_addr: addr,
+            ..config
+        });
+        let volume_mgr = Arc::new(volume_mgr);
 
         tokio::spawn(async move {
-            let _ = server.run().await;
+            if let Ok((stream, peer_addr)) = listener.accept().await {
+                let (tx_sub, _) = broadcast::channel(16);
+                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx_sub.subscribe()).await;
+            }
         });
 
         let url = format!("ws://{}", addr);
@@ -404,10 +450,13 @@ mod tests {
         };
         let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
         let (tx, _) = broadcast::channel(16);
-        let server = CompanionServer::new_with_mgr(config, volume_mgr, tx);
+        let server_config = Arc::new(config);
+        let volume_mgr = Arc::new(volume_mgr);
 
         tokio::spawn(async move {
-            let _ = server.run().await;
+            if let Ok((stream, peer_addr)) = listener.accept().await {
+                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx.subscribe()).await;
+            }
         });
 
         let url = format!("ws://{}", addr);
@@ -428,7 +477,7 @@ mod tests {
     #[tokio::test]
     async fn test_lan_binding_without_token_fails() {
         let config = CompanionConfig {
-            bind_addr: "0.0.0.0:8893".parse().unwrap(),
+            bind_addr: "0.0.0.0:0".parse().unwrap(),
             auth_token: None,
             ..Default::default()
         };
@@ -439,7 +488,7 @@ mod tests {
     #[tokio::test]
     async fn test_lan_binding_with_empty_token_fails() {
         let config = CompanionConfig {
-            bind_addr: "0.0.0.0:8893".parse().unwrap(),
+            bind_addr: "0.0.0.0:0".parse().unwrap(),
             auth_token: Some(String::new()),
             ..Default::default()
         };
@@ -459,10 +508,13 @@ mod tests {
         };
         let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
         let (tx, _) = broadcast::channel(16);
-        let server = CompanionServer::new_with_mgr(config, volume_mgr, tx);
+        let server_config = Arc::new(config);
+        let volume_mgr = Arc::new(volume_mgr);
 
         tokio::spawn(async move {
-            let _ = server.run().await;
+            if let Ok((stream, peer_addr)) = listener.accept().await {
+                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx.subscribe()).await;
+            }
         });
 
         let url = format!("ws://{addr}/?token=a%2Bb+%26%2F%25");

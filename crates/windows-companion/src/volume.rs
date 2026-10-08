@@ -111,7 +111,7 @@ mod windows_impl {
 
     pub struct WindowsAudioBackend {
         volume: IAudioEndpointVolume,
-        _tx: broadcast::Sender<VolumeStatePayload>,
+        callback: IAudioEndpointVolumeCallback,
     }
 
     unsafe impl Send for WindowsAudioBackend {}
@@ -154,12 +154,20 @@ mod windows_impl {
                     .Activate(CLSCTX_ALL, None)
                     .map_err(|e| format!("Failed to activate IAudioEndpointVolume: {e}"))?;
 
-                let callback: IAudioEndpointVolumeCallback = VolumeCallback { tx: tx.clone() }.into();
+                let callback: IAudioEndpointVolumeCallback = VolumeCallback { tx }.into();
                 volume
                     .RegisterControlChangeNotify(&callback)
                     .map_err(|e| format!("Failed to register volume notification callback: {e}"))?;
 
-                Ok(Self { volume, _tx: tx })
+                Ok(Self { volume, callback })
+            }
+        }
+    }
+
+    impl Drop for WindowsAudioBackend {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = self.volume.UnregisterControlChangeNotify(&self.callback);
             }
         }
     }
@@ -228,16 +236,19 @@ impl VolumeManager {
         (Self { backend }, rx)
     }
 
-    pub fn new_auto() -> (Self, broadcast::Receiver<VolumeStatePayload>) {
+    pub fn try_new_auto() -> Result<(Self, broadcast::Receiver<VolumeStatePayload>), String> {
         let (tx, rx) = broadcast::channel(16);
         #[cfg(target_os = "windows")]
         {
-            if let Ok(win_backend) = windows_impl::WindowsAudioBackend::new(tx.clone()) {
-                return (Self { backend: Arc::new(win_backend) }, rx);
-            }
+            let win_backend = windows_impl::WindowsAudioBackend::new(tx.clone())?;
+            return Ok((Self { backend: Arc::new(win_backend) }, rx));
         }
-        let backend = Arc::new(MockAudioBackend::new(75, false, tx));
-        (Self { backend }, rx)
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let backend = Arc::new(MockAudioBackend::new(75, false, tx));
+            Ok((Self { backend }, rx))
+        }
     }
 
     pub fn get_state(&self) -> Result<VolumeStatePayload, String> {
@@ -261,6 +272,8 @@ impl VolumeManager {
                 if let Some(p) = payload {
                     if let Some(target_mute) = extract_bool_mute(p) {
                         return self.backend.set_mute(target_mute);
+                    } else if !p.is_null() && p.as_object().map_or(true, |o| !o.is_empty()) {
+                        return Err("Invalid boolean value for muted".to_string());
                     }
                 }
                 self.backend.toggle_mute()
@@ -363,6 +376,9 @@ mod tests {
 
         // String payload instead of integer rejected
         assert!(mgr.handle_action("volume.set", Some(&json!({ "volumePercent": "80" }))).is_err());
+
+        // Malformed explicit mute payload rejected
+        assert!(mgr.handle_action("volume.toggleMute", Some(&json!({ "muted": "invalid" }))).is_err());
 
         // Missing payload rejected
         assert!(mgr.handle_action("volume.set", None).is_err());
