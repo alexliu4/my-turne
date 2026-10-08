@@ -84,16 +84,33 @@ impl CompanionServer {
         }
     }
 
-    pub fn new_with_mgr(
+    pub fn new_with_mock(
         config: CompanionConfig,
         volume_mgr: VolumeManager,
-        event_tx: broadcast::Sender<VolumeStatePayload>,
-    ) -> Self {
-        Self {
+        rx: broadcast::Receiver<VolumeStatePayload>,
+    ) -> (Self, Arc<VolumeManager>) {
+        let (tx_chan, _) = broadcast::channel(16);
+        let tx_clone = tx_chan.clone();
+        let mut rx_event = rx;
+        tokio::spawn(async move {
+            loop {
+                match rx_event.recv().await {
+                    Ok(state) => {
+                        let _ = tx_clone.send(state);
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+
+        let mgr_arc = Arc::new(volume_mgr);
+        let server = Self {
             config: Arc::new(config),
-            volume_mgr: Some(Arc::new(volume_mgr)),
-            volume_rx: event_tx,
-        }
+            volume_mgr: Some(mgr_arc.clone()),
+            volume_rx: tx_chan,
+        };
+        (server, mgr_arc)
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -368,36 +385,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_companion_server_handshake() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
         let config = CompanionConfig {
-            bind_addr: "127.0.0.1:0".parse().unwrap(),
+            bind_addr: addr,
             auth_token: None,
             host_name: "Test-PC".to_string(),
             capabilities: vec![HostCapability::Volume],
             protocol_version: 1,
         };
         let (volume_mgr, rx) = VolumeManager::new_mock(50, false);
-        let (tx, _) = broadcast::channel(16);
-        let tx_clone = tx.clone();
-        let mut rx_event = rx;
-        tokio::spawn(async move {
-            while let Ok(st) = rx_event.recv().await {
-                let _ = tx_clone.send(st);
-            }
-        });
-
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let addr = listener.local_addr()?;
-        let server_config = Arc::new(CompanionConfig {
-            bind_addr: addr,
-            ..config
-        });
-        let volume_mgr = Arc::new(volume_mgr);
+        let (server, _mgr) = CompanionServer::new_with_mock(config, volume_mgr, rx);
 
         tokio::spawn(async move {
-            if let Ok((stream, peer_addr)) = listener.accept().await {
-                let (tx_sub, _) = broadcast::channel(16);
-                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx_sub.subscribe()).await;
-            }
+            let _ = server.run().await;
         });
 
         let url = format!("ws://{}", addr);
@@ -441,23 +442,18 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
 
-        let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
-        let (tx, _) = broadcast::channel(16);
-        let event_tx = tx.clone();
-
-        let server_config = Arc::new(CompanionConfig {
+        let (volume_mgr, rx) = VolumeManager::new_mock(50, false);
+        let config = CompanionConfig {
             bind_addr: addr,
             auth_token: None,
             host_name: "Test-PC".to_string(),
             capabilities: vec![HostCapability::Volume],
             protocol_version: 1,
-        });
-        let volume_mgr_arc = Arc::new(volume_mgr);
+        };
+        let (server, mgr_arc) = CompanionServer::new_with_mock(config, volume_mgr, rx);
 
         tokio::spawn(async move {
-            if let Ok((stream, peer_addr)) = listener.accept().await {
-                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr_arc), tx.subscribe()).await;
-            }
+            let _ = server.run().await;
         });
 
         let url = format!("ws://{}", addr);
@@ -476,18 +472,16 @@ mod tests {
         let _hello = ws_stream.next().await;
         let _init_vol = ws_stream.next().await;
 
-        // Trigger external volume change broadcast
-        let external_state = VolumeStatePayload::new(88, true);
-        event_tx.send(external_state)?;
+        // Trigger volume action on volume_mgr to exercise the actual forwarding channel
+        let _ = mgr_arc.handle_action("volume.set", Some(&serde_json::json!({ "volumePercent": 88 })));
 
-        // Verify WebSocket client receives volume.state update
+        // Verify WebSocket client receives volume.state update via the forwarding path
         if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
             let msg: HostMessage = serde_json::from_str(&text)?;
             if let HostMessage::Action(action) = msg {
                 assert_eq!(action.action, "volume.state");
                 let payload = action.payload.unwrap();
                 assert_eq!(payload["volumePercent"], 88);
-                assert_eq!(payload["muted"], true);
             } else {
                 panic!("Expected volume.state broadcast message");
             }
@@ -511,15 +505,11 @@ mod tests {
             capabilities: vec![],
             protocol_version: 1,
         };
-        let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
-        let (tx, _) = broadcast::channel(16);
-        let server_config = Arc::new(config);
-        let volume_mgr = Arc::new(volume_mgr);
+        let (volume_mgr, rx) = VolumeManager::new_mock(50, false);
+        let (server, _mgr) = CompanionServer::new_with_mock(config, volume_mgr, rx);
 
         tokio::spawn(async move {
-            if let Ok((stream, peer_addr)) = listener.accept().await {
-                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx.subscribe()).await;
-            }
+            let _ = server.run().await;
         });
 
         let url = format!("ws://{}", addr);
@@ -569,15 +559,11 @@ mod tests {
             capabilities: vec![],
             protocol_version: 1,
         };
-        let (volume_mgr, _rx) = VolumeManager::new_mock(50, false);
-        let (tx, _) = broadcast::channel(16);
-        let server_config = Arc::new(config);
-        let volume_mgr = Arc::new(volume_mgr);
+        let (volume_mgr, rx) = VolumeManager::new_mock(50, false);
+        let (server, _mgr) = CompanionServer::new_with_mock(config, volume_mgr, rx);
 
         tokio::spawn(async move {
-            if let Ok((stream, peer_addr)) = listener.accept().await {
-                let _ = handle_connection(stream, peer_addr, server_config, Some(volume_mgr), tx.subscribe()).await;
-            }
+            let _ = server.run().await;
         });
 
         let url = format!("ws://{addr}/?token=a%2Bb+%26%2F%25");

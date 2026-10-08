@@ -112,13 +112,30 @@ mod windows_impl {
     pub struct WindowsAudioBackend {
         volume: IAudioEndpointVolume,
         callback: IAudioEndpointVolumeCallback,
-        com_initialized: bool,
     }
 
-    // IAudioEndpointVolume and IAudioEndpointVolumeCallback COM interfaces
-    // in Windows Core Audio are free-threaded (MTA) and safe to call across threads.
+    // Windows Core Audio interfaces (IAudioEndpointVolume, IAudioEndpointVolumeCallback)
+    // belong to the Multithreaded Apartment (MTA) model and safely support concurrent
+    // calls across threads.
     unsafe impl Send for WindowsAudioBackend {}
     unsafe impl Sync for WindowsAudioBackend {}
+
+    struct ComThreadGuard;
+    impl ComThreadGuard {
+        fn new() -> Self {
+            unsafe {
+                CoInitializeEx(None, COINIT_MULTITHREADED).ok();
+            }
+            Self
+        }
+    }
+    impl Drop for ComThreadGuard {
+        fn drop(&mut self) {
+            unsafe {
+                CoUninitialize();
+            }
+        }
+    }
 
     #[implement(IAudioEndpointVolumeCallback)]
     struct VolumeCallback {
@@ -127,6 +144,7 @@ mod windows_impl {
 
     impl IAudioEndpointVolumeCallback_Impl for VolumeCallback_Impl {
         fn OnNotify(&self, pnotifydata: *mut AUDIO_VOLUME_NOTIFICATION_DATA) -> Result<()> {
+            let _com = ComThreadGuard::new();
             unsafe {
                 if !pnotifydata.is_null() {
                     let data = &*pnotifydata;
@@ -142,49 +160,43 @@ mod windows_impl {
 
     impl WindowsAudioBackend {
         pub fn new(tx: broadcast::Sender<VolumeStatePayload>) -> std::result::Result<Self, String> {
+            let _com = ComThreadGuard::new();
             unsafe {
-                let com_res = CoInitializeEx(None, COINIT_MULTITHREADED);
-                let com_initialized = com_res.is_ok();
+                let setup = || -> Result<(IAudioEndpointVolume, IAudioEndpointVolumeCallback)> {
+                    let enumerator: IMMDeviceEnumerator =
+                        CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+                    let device: IMMDevice = enumerator
+                        .GetDefaultAudioEndpoint(eRender, eMultimedia)?;
+                    let volume: IAudioEndpointVolume = device
+                        .Activate(CLSCTX_ALL, None)?;
+                    let callback: IAudioEndpointVolumeCallback = VolumeCallback { tx }.into();
+                    volume.RegisterControlChangeNotify(&callback)?;
+                    Ok((volume, callback))
+                };
 
-                let enumerator: IMMDeviceEnumerator =
-                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-                        .map_err(|e| format!("Failed to create MMDeviceEnumerator: {e}"))?;
-
-                let device: IMMDevice = enumerator
-                    .GetDefaultAudioEndpoint(eRender, eMultimedia)
-                    .map_err(|e| format!("Failed to get default audio endpoint: {e}"))?;
-
-                let volume: IAudioEndpointVolume = device
-                    .Activate(CLSCTX_ALL, None)
-                    .map_err(|e| format!("Failed to activate IAudioEndpointVolume: {e}"))?;
-
-                let callback: IAudioEndpointVolumeCallback = VolumeCallback { tx }.into();
-                volume
-                    .RegisterControlChangeNotify(&callback)
-                    .map_err(|e| format!("Failed to register volume notification callback: {e}"))?;
-
-                Ok(Self {
-                    volume,
-                    callback,
-                    com_initialized,
-                })
+                match setup() {
+                    Ok((volume, callback)) => Ok(Self {
+                        volume,
+                        callback,
+                    }),
+                    Err(err) => Err(format!("Failed to initialize Windows Core Audio volume backend: {err}")),
+                }
             }
         }
     }
 
     impl Drop for WindowsAudioBackend {
         fn drop(&mut self) {
+            let _com = ComThreadGuard::new();
             unsafe {
                 let _ = self.volume.UnregisterControlChangeNotify(&self.callback);
-                if self.com_initialized {
-                    CoUninitialize();
-                }
             }
         }
     }
 
     impl AudioBackend for WindowsAudioBackend {
         fn get_state(&self) -> std::result::Result<VolumeStatePayload, String> {
+            let _com = ComThreadGuard::new();
             unsafe {
                 let level = self
                     .volume
@@ -201,6 +213,7 @@ mod windows_impl {
         }
 
         fn set_volume(&self, percent: u8) -> std::result::Result<VolumeStatePayload, String> {
+            let _com = ComThreadGuard::new();
             unsafe {
                 let scalar = (percent.min(100) as f32) / 100.0;
                 self.volume
@@ -217,6 +230,7 @@ mod windows_impl {
         }
 
         fn set_mute(&self, muted: bool) -> std::result::Result<VolumeStatePayload, String> {
+            let _com = ComThreadGuard::new();
             unsafe {
                 self.volume
                     .SetMute(muted, std::ptr::null())
