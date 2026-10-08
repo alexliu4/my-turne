@@ -14,12 +14,18 @@ export interface HostBridgeOptions {
   heartbeatIntervalMs?: number;
   heartbeatTimeoutMs?: number;
 }
+export interface HostBridgeVolumeState {
+  volume: number | null;
+  volumePercent: number | null;
+  muted: boolean | null;
+}
 export interface HostBridgeState {
   connectionState: ConnectionState;
   hostName: string | null;
   protocolVersion: number | null;
   capabilities: HostCapability[];
   lastError: string | null;
+  volumeState: HostBridgeVolumeState;
 }
 
 const knownCapabilities = new Set<HostCapability>([
@@ -52,6 +58,11 @@ let state: HostBridgeState = {
   protocolVersion: null,
   capabilities: [],
   lastError: null,
+  volumeState: {
+    volume: null,
+    volumePercent: null,
+    muted: null,
+  },
 };
 const listeners = new Set<() => void>();
 
@@ -73,6 +84,11 @@ function offline(error?: string | null) {
     protocolVersion: null,
     capabilities: [],
     lastError: error === undefined ? state.lastError : error,
+    volumeState: {
+      volume: null,
+      volumePercent: null,
+      muted: null,
+    },
   });
 }
 function retry() {
@@ -111,6 +127,22 @@ function validHello(value: unknown): value is {
   );
 }
 
+function updateVolumeFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return;
+  const p = payload as Record<string, unknown>;
+  const vol = typeof p.volume === "number" ? p.volume : typeof p.volumePercent === "number" ? p.volumePercent : state.volumeState.volume;
+  const volPct = typeof p.volumePercent === "number" ? p.volumePercent : typeof p.volume === "number" ? p.volume : state.volumeState.volumePercent;
+  const muted = typeof p.muted === "boolean" ? p.muted : state.volumeState.muted;
+
+  updateState({
+    volumeState: {
+      volume: vol,
+      volumePercent: volPct,
+      muted,
+    },
+  });
+}
+
 export function getHostBridgeState(): HostBridgeState {
   return state;
 }
@@ -129,6 +161,46 @@ export function sendHostMessage(message: HostMessage): boolean {
   socket.send(JSON.stringify(message));
   return true;
 }
+
+export function setHostVolume(volumePercent: number): boolean {
+  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+  return sendHostMessage({
+    type: "host.action",
+    requestId: reqId,
+    action: "volume.set",
+    payload: { volumePercent },
+  });
+}
+
+export function adjustHostVolume(delta: number): boolean {
+  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+  return sendHostMessage({
+    type: "host.action",
+    requestId: reqId,
+    action: "volume.adjust",
+    payload: { delta },
+  });
+}
+
+export function toggleHostMute(muted?: boolean): boolean {
+  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+  return sendHostMessage({
+    type: "host.action",
+    requestId: reqId,
+    action: "volume.toggleMute",
+    payload: muted !== undefined ? { muted } : undefined,
+  });
+}
+
+export function getHostVolume(): boolean {
+  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+  return sendHostMessage({
+    type: "host.action",
+    requestId: reqId,
+    action: "volume.get",
+  });
+}
+
 export function disconnectHostBridge() {
   manuallyDisconnected = true;
   clearTimers();
@@ -166,6 +238,11 @@ export function connectHostBridge(options: HostBridgeOptions = {}) {
     protocolVersion: null,
     capabilities: [],
     lastError: null,
+    volumeState: {
+      volume: null,
+      volumePercent: null,
+      muted: null,
+    },
   });
   try {
     const ws = new WebSocket(url.toString());
@@ -236,6 +313,11 @@ export function connectHostBridge(options: HostBridgeOptions = {}) {
         if (payload.type === "host.pong") pendingPingAt = null;
         else if (payload.type === "host.status" && payload.connected === false)
           fail(ws, "Host unavailable");
+        else if (payload.type === "host.action" && payload.action === "volume.state") {
+          updateVolumeFromPayload(payload.payload);
+        } else if (payload.type === "host.actionResult" && payload.success === true) {
+          updateVolumeFromPayload(payload.payload);
+        }
       }
     };
     ws.onerror = () => {
@@ -275,6 +357,10 @@ export function useHostBridge(options?: HostBridgeOptions) {
     connect: connectHostBridge,
     disconnect: disconnectHostBridge,
     sendHostMessage,
+    setVolume: setHostVolume,
+    adjustVolume: adjustHostVolume,
+    toggleMute: toggleHostMute,
+    getVolume: getHostVolume,
     hasCapability: (cap: HostCapability) => snapshot.capabilities.includes(cap),
   };
 }

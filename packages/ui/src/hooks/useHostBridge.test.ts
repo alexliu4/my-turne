@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  adjustHostVolume,
   configureHostBridge,
   connectHostBridge,
   disconnectHostBridge,
   getHostBridgeState,
   sendHostMessage,
+  setHostVolume,
   subscribeHostBridgeState,
+  toggleHostMute,
 } from "./useHostBridge";
 
 class MockWebSocket {
@@ -34,12 +37,12 @@ class MockWebSocket {
   message(value: unknown) {
     this.onmessage?.({ data: JSON.stringify(value) });
   }
-  hello() {
+  hello(capabilities: ("media" | "volume")[] = []) {
     this.message({
       type: "host.hello",
       protocolVersion: 1,
       hostName: "Windows-PC",
-      capabilities: [],
+      capabilities,
     });
   }
 }
@@ -122,6 +125,63 @@ describe("HostBridge", () => {
     });
     expect(MockWebSocket.instances).toHaveLength(1);
     unsubscribe();
+  });
+
+  test("volume state events and action responses update volumeState", () => {
+    connectHostBridge({ url: "ws://192.168.1.50:8893" });
+    const ws = MockWebSocket.instances[0];
+    ws.open();
+    ws.hello(["volume"]);
+
+    expect(getHostBridgeState().volumeState).toEqual({
+      volume: null,
+      volumePercent: null,
+      muted: null,
+    });
+
+    // Receive volume.state event
+    ws.message({
+      type: "host.action",
+      requestId: "init",
+      action: "volume.state",
+      payload: { volumePercent: 75, muted: false },
+    });
+
+    expect(getHostBridgeState().volumeState).toEqual({
+      volume: 75,
+      volumePercent: 75,
+      muted: false,
+    });
+
+    // Trigger setHostVolume
+    setHostVolume(80);
+    expect(
+      ws.sentMessages.some((m) => m.includes("volume.set") && m.includes("80")),
+    ).toBe(true);
+
+    // Receive actionResult
+    ws.message({
+      type: "host.actionResult",
+      requestId: "vol-1",
+      success: true,
+      payload: { volumePercent: 80, muted: false },
+    });
+
+    expect(getHostBridgeState().volumeState).toEqual({
+      volume: 80,
+      volumePercent: 80,
+      muted: false,
+    });
+
+    // Trigger adjustHostVolume and toggleHostMute
+    adjustHostVolume(-10);
+    toggleHostMute(true);
+    expect(
+      ws.sentMessages.some((m) => m.includes("volume.adjust") && m.includes("-10")),
+    ).toBe(true);
+    expect(
+      ws.sentMessages.some((m) => m.includes("volume.toggleMute") && m.includes("true")),
+    ).toBe(true);
   });
 
   test("manual disconnect cancels automatic reconnect", async () => {

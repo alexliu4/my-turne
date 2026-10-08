@@ -12,10 +12,19 @@ const ALL_CAPABILITIES: { key: HostCapability; label: string }[] = [
 ];
 
 export default function HostStatus() {
-  const { connectionState, hostName, capabilities, lastError } = useHostBridge();
+  const {
+    connectionState,
+    hostName,
+    capabilities,
+    lastError,
+    volumeState,
+    adjustVolume,
+    toggleMute,
+  } = useHostBridge();
 
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
+  const hasVolumeCap = isConnected && capabilities.includes("volume");
 
   const statusText = isConnected
     ? "Connected"
@@ -49,6 +58,49 @@ export default function HostStatus() {
           </p>
         </div>
       </div>
+
+      {hasVolumeCap && (
+        <div className="bg-white/10 rounded-xl p-5 border border-white/10 space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[28px] font-[580] text-white tracking-tight">
+              Windows Volume
+            </span>
+            <span className="text-[28px] font-[580] text-emerald-400 tracking-tight">
+              {volumeState.muted
+                ? "Muted"
+                : `${volumeState.volumePercent ?? 0}%`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => adjustVolume(-5)}
+              className="flex-1 bg-white/10 hover:bg-white/20 text-white font-[580] text-[24px] py-3 rounded-lg border border-white/10 active:scale-[0.98] transition-all"
+            >
+              - 5%
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleMute()}
+              className={`flex-1 font-[580] text-[24px] py-3 rounded-lg border active:scale-[0.98] transition-all ${
+                volumeState.muted
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  : "bg-white/10 text-white border-white/10 hover:bg-white/20"
+              }`}
+            >
+              {volumeState.muted ? "Unmute" : "Mute"}
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustVolume(5)}
+              className="flex-1 bg-white/10 hover:bg-white/20 text-white font-[580] text-[24px] py-3 rounded-lg border border-white/10 active:scale-[0.98] transition-all"
+            >
+              + 5%
+            </button>
+          </div>
+        </div>
+      )}
 
       {lastError && !isConnected && (
         <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20 text-red-300 text-[24px] font-[560]">

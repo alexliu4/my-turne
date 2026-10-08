@@ -1,6 +1,8 @@
+mod volume;
+
 use anyhow::{bail, Context, Result};
 use futures::{SinkExt, StreamExt};
-use libnocturne::{HostCapability, HostHello, HostMessage, HostStatus};
+use libnocturne::{HostAction, HostActionResult, HostCapability, HostHello, HostMessage, HostStatus};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,6 +11,7 @@ use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
+use volume::VolumeManager;
 
 pub struct CompanionConfig {
     pub bind_addr: SocketAddr,
@@ -28,7 +31,7 @@ impl Default for CompanionConfig {
             bind_addr: "127.0.0.1:8893".parse().unwrap(),
             auth_token: None,
             host_name,
-            capabilities: vec![],
+            capabilities: vec![HostCapability::Volume],
             protocol_version: 1,
         }
     }
@@ -36,12 +39,14 @@ impl Default for CompanionConfig {
 
 pub struct CompanionServer {
     config: Arc<CompanionConfig>,
+    volume_mgr: Arc<VolumeManager>,
 }
 
 impl CompanionServer {
     pub fn new(config: CompanionConfig) -> Self {
         Self {
             config: Arc::new(config),
+            volume_mgr: Arc::new(VolumeManager::default()),
         }
     }
 
@@ -62,9 +67,10 @@ impl CompanionServer {
             let (stream, peer_addr) = listener.accept().await?;
             info!("Incoming connection from {}", peer_addr);
             let config = Arc::clone(&self.config);
+            let volume_mgr = Arc::clone(&self.volume_mgr);
 
             tokio::spawn(async move {
-                if let Err(e) = handle_connection(stream, peer_addr, config).await {
+                if let Err(e) = handle_connection(stream, peer_addr, config, volume_mgr).await {
                     warn!("Connection error with {}: {:?}", peer_addr, e);
                 }
             });
@@ -76,6 +82,7 @@ pub async fn handle_connection(
     stream: TcpStream,
     peer_addr: SocketAddr,
     config: Arc<CompanionConfig>,
+    volume_mgr: Arc<VolumeManager>,
 ) -> Result<()> {
     let mut authed = config.auth_token.is_none();
     let token_expected = config.auth_token.clone();
@@ -147,6 +154,18 @@ pub async fn handle_connection(
     let hello_json = serde_json::to_string(&hello)?;
     ws_stream.send(Message::Text(hello_json.into())).await?;
 
+    // Send initial volume state event if Volume capability enabled
+    if config.capabilities.contains(&HostCapability::Volume) {
+        let initial_vol = volume_mgr.get_state();
+        let initial_vol_event = HostMessage::Action(HostAction {
+            request_id: "init".to_string(),
+            action: "volume.state".to_string(),
+            payload: Some(initial_vol.to_json()),
+        });
+        let vol_json = serde_json::to_string(&initial_vol_event)?;
+        ws_stream.send(Message::Text(vol_json.into())).await?;
+    }
+
     while let Some(msg) = ws_stream.next().await {
         let msg = msg?;
         match msg {
@@ -162,8 +181,47 @@ pub async fn handle_connection(
                         let pong_json = serde_json::to_string(&pong)?;
                         ws_stream.send(Message::Text(pong_json.into())).await?;
                     }
-                    Ok(HostMessage::Action(_)) => {
-                        warn!("Ignoring unsupported host action from {}", peer_addr);
+                    Ok(HostMessage::Action(action)) => {
+                        if action.action.starts_with("volume.") {
+                            match volume_mgr.handle_action(&action.action, action.payload.as_ref()) {
+                                Ok(new_state) => {
+                                    let state_value = new_state.to_json();
+                                    let result = HostMessage::ActionResult(HostActionResult {
+                                        request_id: action.request_id.clone(),
+                                        success: true,
+                                        payload: Some(state_value.clone()),
+                                        error: None,
+                                    });
+                                    ws_stream.send(Message::Text(serde_json::to_string(&result)?.into())).await?;
+
+                                    // Broadcast updated state event
+                                    let state_event = HostMessage::Action(HostAction {
+                                        request_id: action.request_id,
+                                        action: "volume.state".to_string(),
+                                        payload: Some(state_value),
+                                    });
+                                    ws_stream.send(Message::Text(serde_json::to_string(&state_event)?.into())).await?;
+                                }
+                                Err(err_msg) => {
+                                    let result = HostMessage::ActionResult(HostActionResult {
+                                        request_id: action.request_id,
+                                        success: false,
+                                        payload: None,
+                                        error: Some(err_msg),
+                                    });
+                                    ws_stream.send(Message::Text(serde_json::to_string(&result)?.into())).await?;
+                                }
+                            }
+                        } else {
+                            warn!("Ignoring unsupported host action '{}' from {}", action.action, peer_addr);
+                            let result = HostMessage::ActionResult(HostActionResult {
+                                request_id: action.request_id,
+                                success: false,
+                                payload: None,
+                                error: Some(format!("Unsupported action: {}", action.action)),
+                            });
+                            ws_stream.send(Message::Text(serde_json::to_string(&result)?.into())).await?;
+                        }
                     }
                     Ok(HostMessage::Status(status)) => {
                         info!("Received host status update: connected={}", status.connected);
@@ -237,13 +295,14 @@ mod tests {
             bind_addr: addr,
             auth_token: None,
             host_name: "Test-PC".to_string(),
-            capabilities: vec![],
+            capabilities: vec![HostCapability::Volume],
             protocol_version: 1,
         });
+        let volume_mgr = Arc::new(VolumeManager::default());
 
         tokio::spawn(async move {
             if let Ok((stream, peer_addr)) = listener.accept().await {
-                let _ = handle_connection(stream, peer_addr, config).await;
+                let _ = handle_connection(stream, peer_addr, config, volume_mgr).await;
             }
         });
 
@@ -266,9 +325,21 @@ mod tests {
             if let HostMessage::Hello(hello) = msg {
                 assert_eq!(hello.host_name, "Test-PC");
                 assert_eq!(hello.protocol_version, 1);
-                assert_eq!(hello.capabilities, Vec::<HostCapability>::new());
+                assert_eq!(hello.capabilities, vec![HostCapability::Volume]);
             } else {
                 panic!("Expected HostMessage::Hello");
+            }
+        } else {
+            panic!("Expected text message");
+        }
+
+        // Initial volume event
+        if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
+            let msg: HostMessage = serde_json::from_str(&text)?;
+            if let HostMessage::Action(action) = msg {
+                assert_eq!(action.action, "volume.state");
+            } else {
+                panic!("Expected volume.state initial action event");
             }
         } else {
             panic!("Expected text message");
@@ -291,6 +362,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_companion_volume_action() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+
+        let config = Arc::new(CompanionConfig {
+            bind_addr: addr,
+            auth_token: None,
+            host_name: "Test-PC".to_string(),
+            capabilities: vec![HostCapability::Volume],
+            protocol_version: 1,
+        });
+        let volume_mgr = Arc::new(VolumeManager::new(50, false));
+
+        tokio::spawn(async move {
+            if let Ok((stream, peer_addr)) = listener.accept().await {
+                let _ = handle_connection(stream, peer_addr, config, volume_mgr).await;
+            }
+        });
+
+        let url = format!("ws://{}", addr);
+        let (mut ws_stream, _) = connect_async(&url).await?;
+        let client_hello = HostMessage::Hello(HostHello {
+            protocol_version: 1,
+            host_name: "CarThing".to_string(),
+            capabilities: vec![],
+        });
+        ws_stream
+            .send(Message::Text(serde_json::to_string(&client_hello)?.into()))
+            .await?;
+
+        let _hello = ws_stream.next().await;
+        let _init_vol = ws_stream.next().await;
+
+        // Send volume.set action
+        let set_action = HostMessage::Action(HostAction {
+            request_id: "req1".to_string(),
+            action: "volume.set".to_string(),
+            payload: Some(serde_json::json!({ "volume": 85 })),
+        });
+        ws_stream.send(Message::Text(serde_json::to_string(&set_action)?.into())).await?;
+
+        // Should receive ActionResult
+        if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
+            let msg: HostMessage = serde_json::from_str(&text)?;
+            if let HostMessage::ActionResult(res) = msg {
+                assert_eq!(res.request_id, "req1");
+                assert!(res.success);
+            } else {
+                panic!("Expected HostMessage::ActionResult");
+            }
+        }
+
+        // Should receive volume.state broadcast
+        if let Some(Ok(Message::Text(text))) = ws_stream.next().await {
+            let msg: HostMessage = serde_json::from_str(&text)?;
+            if let HostMessage::Action(action) = msg {
+                assert_eq!(action.action, "volume.state");
+                let payload = action.payload.unwrap();
+                assert_eq!(payload["volume"], 85);
+            } else {
+                panic!("Expected volume.state broadcast");
+            }
+        }
+
+        ws_stream.close(None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_companion_server_auth_failure() -> Result<()> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -302,10 +442,11 @@ mod tests {
             capabilities: vec![],
             protocol_version: 1,
         });
+        let volume_mgr = Arc::new(VolumeManager::default());
 
         tokio::spawn(async move {
             if let Ok((stream, peer_addr)) = listener.accept().await {
-                let _ = handle_connection(stream, peer_addr, config).await;
+                let _ = handle_connection(stream, peer_addr, config, volume_mgr).await;
             }
         });
 
@@ -364,12 +505,14 @@ mod tests {
             capabilities: vec![],
             protocol_version: 1,
         });
+        let volume_mgr = Arc::new(VolumeManager::default());
         tokio::spawn(async move {
             for _ in 0..2 {
                 let (stream, peer_addr) = listener.accept().await.unwrap();
                 let config = Arc::clone(&config);
+                let volume_mgr = Arc::clone(&volume_mgr);
                 tokio::spawn(async move {
-                    let _ = handle_connection(stream, peer_addr, config).await;
+                    let _ = handle_connection(stream, peer_addr, config, volume_mgr).await;
                 });
             }
         });

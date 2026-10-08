@@ -407,11 +407,11 @@ Implement the first real host feature.
 
 Add:
 
-- get current master volume
-- set master volume
-- adjust volume up/down
-- mute/unmute
-- report volume changes back to Car Thing
+- [x] get current master volume
+- [x] set master volume
+- [x] adjust volume up/down
+- [x] mute/unmute
+- [x] report volume changes back to Car Thing
 
 Use native Windows APIs where practical.
 
@@ -442,10 +442,10 @@ Add a test path from a UI control first.
 
 From Car Thing over LAN:
 
-- display Windows volume
-- increase/decrease volume
-- toggle mute
-- receive updated state
+- [x] display Windows volume
+- [x] increase/decrease volume
+- [x] toggle mute
+- [x] receive updated state
 
 No USB data cable required.
 
