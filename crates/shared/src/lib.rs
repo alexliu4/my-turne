@@ -1,10 +1,8 @@
-mod host;
 mod shared;
 
 pub mod client;
 pub mod gateway;
 pub mod generated;
-pub use host::*;
 
 #[cfg(feature = "protocol")]
 pub mod protocol;

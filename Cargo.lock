@@ -1971,21 +1971,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nocturne-windows-companion"
-version = "2.1.0"
-dependencies = [
- "anyhow",
- "futures",
- "libnocturne",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "nocturned"
 version = "2.1.0"
 dependencies = [
