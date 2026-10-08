@@ -15,7 +15,6 @@ export interface HostBridgeOptions {
   heartbeatTimeoutMs?: number;
 }
 export interface HostBridgeVolumeState {
-  volume: number | null;
   volumePercent: number | null;
   muted: boolean | null;
 }
@@ -52,6 +51,8 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let pendingPingAt: number | null = null;
 let reconnectAttempt = 0;
 let manuallyDisconnected = false;
+const pendingVolumeRequests = new Set<string>();
+
 let state: HostBridgeState = {
   connectionState: "disconnected",
   hostName: null,
@@ -59,7 +60,6 @@ let state: HostBridgeState = {
   capabilities: [],
   lastError: null,
   volumeState: {
-    volume: null,
     volumePercent: null,
     muted: null,
   },
@@ -78,6 +78,7 @@ function clearTimers() {
   pendingPingAt = null;
 }
 function offline(error?: string | null) {
+  pendingVolumeRequests.clear();
   updateState({
     connectionState: "disconnected",
     hostName: null,
@@ -85,7 +86,6 @@ function offline(error?: string | null) {
     capabilities: [],
     lastError: error === undefined ? state.lastError : error,
     volumeState: {
-      volume: null,
       volumePercent: null,
       muted: null,
     },
@@ -130,13 +130,15 @@ function validHello(value: unknown): value is {
 function updateVolumeFromPayload(payload: unknown) {
   if (!payload || typeof payload !== "object") return;
   const p = payload as Record<string, unknown>;
-  const vol = typeof p.volume === "number" ? p.volume : typeof p.volumePercent === "number" ? p.volumePercent : state.volumeState.volume;
   const volPct = typeof p.volumePercent === "number" ? p.volumePercent : typeof p.volume === "number" ? p.volume : state.volumeState.volumePercent;
   const muted = typeof p.muted === "boolean" ? p.muted : state.volumeState.muted;
 
+  if (state.volumeState.volumePercent === volPct && state.volumeState.muted === muted) {
+    return;
+  }
+
   updateState({
     volumeState: {
-      volume: vol,
       volumePercent: volPct,
       muted,
     },
@@ -162,8 +164,9 @@ export function sendHostMessage(message: HostMessage): boolean {
   return true;
 }
 
-export function setHostVolume(volumePercent: number): boolean {
-  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+export function setHostVolume(volumePercent: number, requestId?: string): boolean {
+  const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
+  pendingVolumeRequests.add(reqId);
   return sendHostMessage({
     type: "host.action",
     requestId: reqId,
@@ -172,8 +175,9 @@ export function setHostVolume(volumePercent: number): boolean {
   });
 }
 
-export function adjustHostVolume(delta: number): boolean {
-  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+export function adjustHostVolume(delta: number, requestId?: string): boolean {
+  const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
+  pendingVolumeRequests.add(reqId);
   return sendHostMessage({
     type: "host.action",
     requestId: reqId,
@@ -182,8 +186,9 @@ export function adjustHostVolume(delta: number): boolean {
   });
 }
 
-export function toggleHostMute(muted?: boolean): boolean {
-  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+export function toggleHostMute(muted?: boolean, requestId?: string): boolean {
+  const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
+  pendingVolumeRequests.add(reqId);
   return sendHostMessage({
     type: "host.action",
     requestId: reqId,
@@ -192,8 +197,9 @@ export function toggleHostMute(muted?: boolean): boolean {
   });
 }
 
-export function getHostVolume(): boolean {
-  const reqId = "vol-" + Math.random().toString(36).substring(2, 9);
+export function getHostVolume(requestId?: string): boolean {
+  const reqId = requestId || "vol-" + Math.random().toString(36).substring(2, 9);
+  pendingVolumeRequests.add(reqId);
   return sendHostMessage({
     type: "host.action",
     requestId: reqId,
@@ -239,7 +245,6 @@ export function connectHostBridge(options: HostBridgeOptions = {}) {
     capabilities: [],
     lastError: null,
     volumeState: {
-      volume: null,
       volumePercent: null,
       muted: null,
     },
@@ -315,8 +320,14 @@ export function connectHostBridge(options: HostBridgeOptions = {}) {
           fail(ws, "Host unavailable");
         else if (payload.type === "host.action" && payload.action === "volume.state") {
           updateVolumeFromPayload(payload.payload);
-        } else if (payload.type === "host.actionResult" && payload.success === true) {
-          updateVolumeFromPayload(payload.payload);
+        } else if (payload.type === "host.actionResult") {
+          const reqId = String(payload.requestId);
+          if (pendingVolumeRequests.has(reqId)) {
+            pendingVolumeRequests.delete(reqId);
+            if (payload.success === true) {
+              updateVolumeFromPayload(payload.payload);
+            }
+          }
         }
       }
     };

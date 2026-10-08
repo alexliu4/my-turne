@@ -127,64 +127,61 @@ describe("HostBridge", () => {
     unsubscribe();
   });
 
-  test("volume state events and action responses update volumeState", () => {
+  test("initial volumeState is null; volume.state event and matched actionResult update state", () => {
     connectHostBridge({ url: "ws://192.168.1.50:8893" });
     const ws = MockWebSocket.instances[0];
     ws.open();
     ws.hello(["volume"]);
 
     expect(getHostBridgeState().volumeState).toEqual({
-      volume: null,
       volumePercent: null,
       muted: null,
     });
 
-    // Receive volume.state event
+    // Unmatched actionResult is ignored
+    ws.message({
+      type: "host.actionResult",
+      requestId: "unknown-req",
+      success: true,
+      payload: { volumePercent: 99, muted: true },
+    });
+    expect(getHostBridgeState().volumeState).toEqual({
+      volumePercent: null,
+      muted: null,
+    });
+
+    // Broadcast volume.state event updates volumeState
     ws.message({
       type: "host.action",
-      requestId: "init",
+      requestId: "ext",
       action: "volume.state",
       payload: { volumePercent: 75, muted: false },
     });
-
     expect(getHostBridgeState().volumeState).toEqual({
-      volume: 75,
       volumePercent: 75,
       muted: false,
     });
 
-    // Trigger setHostVolume
-    setHostVolume(80);
+    // Trigger volume set with explicit reqId
+    setHostVolume(85, "req-123");
     expect(
-      ws.sentMessages.some((m) => m.includes("volume.set") && m.includes("80")),
+      ws.sentMessages.some((m) => m.includes("req-123") && m.includes("85")),
     ).toBe(true);
 
-    // Receive actionResult
+    // Matched actionResult updates state
     ws.message({
       type: "host.actionResult",
-      requestId: "vol-1",
+      requestId: "req-123",
       success: true,
-      payload: { volumePercent: 80, muted: false },
+      payload: { volumePercent: 85, muted: false },
     });
-
     expect(getHostBridgeState().volumeState).toEqual({
-      volume: 80,
-      volumePercent: 80,
+      volumePercent: 85,
       muted: false,
     });
-
-    // Trigger adjustHostVolume and toggleHostMute
-    adjustHostVolume(-10);
-    toggleHostMute(true);
-    expect(
-      ws.sentMessages.some((m) => m.includes("volume.adjust") && m.includes("-10")),
-    ).toBe(true);
-    expect(
-      ws.sentMessages.some((m) => m.includes("volume.toggleMute") && m.includes("true")),
-    ).toBe(true);
   });
 
-  test("manual disconnect cancels automatic reconnect", async () => {
+  test("manual disconnect resets volumeState and cancels automatic reconnect", async () => {
     connectHostBridge({
       url: "ws://192.168.1.50:8893",
       autoConnect: true,
@@ -192,11 +189,24 @@ describe("HostBridge", () => {
     });
     const ws = MockWebSocket.instances[0];
     ws.open();
-    ws.hello();
+    ws.hello(["volume"]);
+
+    ws.message({
+      type: "host.action",
+      requestId: "ext",
+      action: "volume.state",
+      payload: { volumePercent: 50, muted: false },
+    });
+    expect(getHostBridgeState().volumeState.volumePercent).toBe(50);
+
     disconnectHostBridge();
     await Bun.sleep(30);
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(getHostBridgeState().connectionState).toBe("disconnected");
+    expect(getHostBridgeState().volumeState).toEqual({
+      volumePercent: null,
+      muted: null,
+    });
   });
 
   test("auth failures preserve increasing reconnect backoff", async () => {

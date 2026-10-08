@@ -66,9 +66,11 @@ export default function HostStatus() {
               Windows Volume
             </span>
             <span className="text-[28px] font-[580] text-emerald-400 tracking-tight">
-              {volumeState.muted
-                ? "Muted"
-                : `${volumeState.volumePercent ?? 0}%`}
+              {volumeState.volumePercent === null
+                ? "--"
+                : volumeState.muted
+                  ? "Muted"
+                  : `${volumeState.volumePercent}%`}
             </span>
           </div>
 
