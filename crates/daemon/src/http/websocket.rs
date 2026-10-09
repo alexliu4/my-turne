@@ -115,7 +115,11 @@ pub(crate) fn canonical_music_request(
     let Some(canonical_method) = canonical_music_method(method) else {
         return Ok(None);
     };
-    let params = normalize_music_params(canonical_method, params);
+    let params = if canonical_method.starts_with("volume.") {
+        params
+    } else {
+        normalize_music_params(canonical_method, params)
+    };
     let data = match canonical_method {
         "spotify.album.get" => typed::<SpotifyAlbumGetRequest>(params),
         "spotify.album.tracks" => typed::<SpotifyAlbumTracksRequest>(params),
@@ -2206,7 +2210,12 @@ mod tests {
                 "volume.toggleMute",
                 "volume.toggle_mute",
             ] {
-                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": {}}).to_string()).await.unwrap();
+                let params = match method {
+                    "volume.set" => serde_json::json!({ "volumePercent": 42 }),
+                    "volume.adjust" => serde_json::json!({ "delta": -5 }),
+                    _ => serde_json::json!({}),
+                };
+                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": params}).to_string()).await.unwrap();
                 if connector == "windows" && route.is_some() {
                     // Promotion after acceptance must not change this request's target.
                     server.clear_app_ready_for_route("spp:owner").await;
@@ -2221,6 +2230,7 @@ mod tests {
                     let forwarded = app_rx.try_recv().unwrap();
                     let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
                     assert_eq!(data["_targetConnection"], "spp:owner");
+                    assert_eq!(data["params"], params);
                     assert_eq!(
                         data["method"],
                         if method == "volume.toggle_mute" {
