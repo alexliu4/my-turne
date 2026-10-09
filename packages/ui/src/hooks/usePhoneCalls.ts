@@ -36,6 +36,7 @@ export type PhoneCallState = {
 
 type PhoneCallStateAction =
   | { type: "replace"; calls: PhoneCall[] }
+  | { type: "replaceDevice"; device: string; calls: PhoneCall[] }
   | { type: "upsert"; call: PhoneCall }
   | { type: "remove"; callId: string; device: string }
   | { type: "clear" };
@@ -91,6 +92,18 @@ export const phoneCallReducer = (
   action: PhoneCallStateAction,
 ): PhoneCallState => {
   if (action.type === "clear") return EMPTY_STATE;
+
+  if (action.type === "replaceDevice") {
+    return phoneCallReducer(state, {
+      type: "replace",
+      calls: [
+        ...state.order
+          .map((key) => state.calls[key])
+          .filter((call) => call.device !== action.device),
+        ...action.calls,
+      ],
+    });
+  }
 
   if (action.type === "replace") {
     const calls: Record<string, PhoneCall> = {};
@@ -149,9 +162,17 @@ export const isCurrentPhoneCallAction = (
 ) => current === candidate;
 
 export const shouldRefreshPhoneCallSnapshot = (message: WsMessage) => {
-  if (message.type !== "event" || message.topic !== "app.ready") return false;
+  if (message.type !== "event") return false;
+  if (message.topic !== "app.ready" && message.topic !== "phone.session.ready")
+    return false;
   const ready = asRecord(message.data);
-  const platform = ready ? readString(ready, "platform") : null;
+  if (
+    !ready ||
+    ready.connectorPlatform !== undefined ||
+    ready.connector_platform !== undefined
+  )
+    return false;
+  const platform = readString(ready, "platform");
   return platform === "android" || platform === "ios";
 };
 
@@ -162,6 +183,61 @@ const normalizeSnapshot = (response: PhoneCallsGetResponse | unknown) => {
   return calls
     .map(normalizePhoneCall)
     .filter((call): call is PhoneCall => call !== null);
+};
+
+// Each device's revision gate covers snapshot requests and live call updates. A new
+// readiness always refreshes, including a reconnect while an older read is pending.
+export const createPhoneCallSnapshotRefresher = (
+  request: (device: string) => Promise<unknown>,
+  apply: (calls: PhoneCall[], device: string) => void,
+  legacyDevice: () => string | null,
+) => {
+  let revision = 0;
+  const currentRequests = new Map<string, number>();
+  let modernReadiness = false;
+  let legacyPendingDevice: string | null = null;
+  return {
+    invalidate: (device?: string) => {
+      if (device) currentRequests.delete(device);
+      else currentRequests.clear();
+      legacyPendingDevice = null;
+    },
+    reset: () => {
+      currentRequests.clear();
+      modernReadiness = false;
+      legacyPendingDevice = null;
+    },
+    onMessage: async (message: WsMessage) => {
+      if (!shouldRefreshPhoneCallSnapshot(message)) return;
+      const ready = asRecord(message.data);
+      const modern = message.topic === "phone.session.ready";
+      if (!modern && modernReadiness) return;
+      const device = ready ? readString(ready, "device") : null;
+      const target = modern ? device : device || legacyDevice();
+      if (!target) return;
+      if (modern) modernReadiness = true;
+      else if (legacyPendingDevice === target) return;
+      if (!modern) legacyPendingDevice = target;
+      const current = ++revision;
+      currentRequests.set(target, current);
+      try {
+        const response = await request(target);
+        if (currentRequests.get(target) !== current) return;
+        const snapshot = asRecord(response);
+        if (!Array.isArray(snapshot?.calls)) return;
+        apply(
+          normalizeSnapshot(response).filter((call) => call.device === target),
+          target,
+        );
+      } catch (error) {
+        // A failed read must never erase valid calls, including another phone's.
+        console.warn("Failed to refresh phone calls", error);
+      } finally {
+        if (!modern && currentRequests.get(target) === current)
+          legacyPendingDevice = null;
+      }
+    },
+  };
 };
 
 export function usePhoneCalls() {
@@ -192,18 +268,13 @@ export function usePhoneCalls() {
     updatePending(null);
   }, [clearSettleTimer, updatePending]);
 
-  const requestSnapshot = useCallback(
-    async (device: string) => {
-      const response = await sendNocturneWsRequest<PhoneCallsGetResponse>(
-        "phone.calls.get",
-        { device },
-        { timeoutMs: ACTION_REQUEST_TIMEOUT_MS },
-      );
-      const calls = normalizeSnapshot(response);
-      dispatch({ type: "replace", calls });
+  const applySnapshot = useCallback(
+    (calls: PhoneCall[], device: string) => {
+      dispatch({ type: "replaceDevice", calls, device });
       const pending = pendingRef.current;
       if (
         pending &&
+        pending.callKey.startsWith(`${device}:`) &&
         !calls.some(
           (call) =>
             phoneCallKey(call) === pending.callKey && call.status === "ringing",
@@ -223,16 +294,20 @@ export function usePhoneCalls() {
   );
 
   useEffect(() => {
-    const requestCurrentDevice = () => {
-      const device = localStorage.getItem("lastConnectedBluetoothDevice");
-      if (!device) return;
-      requestSnapshot(device).catch(() => {
-        dispatch({ type: "clear" });
-      });
-    };
+    const snapshots = createPhoneCallSnapshotRefresher(
+      (device) =>
+        sendNocturneWsRequest<PhoneCallsGetResponse>(
+          "phone.calls.get",
+          { device },
+          { timeoutMs: ACTION_REQUEST_TIMEOUT_MS },
+        ),
+      applySnapshot,
+      () => localStorage.getItem("lastConnectedBluetoothDevice"),
+    );
 
     const removeListener = addGlobalWsListener("native-phone-calls", {
       onClose: () => {
+        snapshots.reset();
         clearPending();
         setError(null);
         dispatch({ type: "clear" });
@@ -241,7 +316,7 @@ export function usePhoneCalls() {
         if (message.type !== "event") return;
 
         if (shouldRefreshPhoneCallSnapshot(message)) {
-          requestCurrentDevice();
+          void snapshots.onMessage(message);
           return;
         }
 
@@ -251,6 +326,7 @@ export function usePhoneCalls() {
         ) {
           const call = normalizePhoneCall(message.data);
           if (!call) return;
+          snapshots.invalidate(call.device);
           if (message.topic === "phone.call.started") setError(null);
           dispatch({ type: "upsert", call });
           if (
@@ -268,6 +344,7 @@ export function usePhoneCalls() {
           const callId = readString(ended, "callId", "call_id");
           const device = readString(ended, "device");
           if (!callId || !device) return;
+          snapshots.invalidate(device);
           dispatch({ type: "remove", callId, device });
           if (pendingRef.current?.callKey === `${device}:${callId}`) {
             clearPending();
@@ -278,10 +355,11 @@ export function usePhoneCalls() {
     });
 
     return () => {
+      snapshots.reset();
       removeListener();
       clearSettleTimer();
     };
-  }, [clearPending, clearSettleTimer, requestSnapshot]);
+  }, [clearPending, clearSettleTimer, applySnapshot]);
 
   const incomingCall = useMemo(() => {
     const pendingCall = pendingAction

@@ -71,6 +71,7 @@ pub struct PhoneCallsGetResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "event", content = "data")]
 pub enum PhoneEvent {
+    PhoneSessionReady(PhoneSessionReadyEvent),
     PhoneCallStarted(PhoneCallStartedEvent),
     PhoneCallUpdated(PhoneCallUpdatedEvent),
     PhoneCallEnded(PhoneCallEndedEvent),
@@ -82,4 +83,10 @@ pub enum PhoneMethod {
     PhoneCallsGet(PhoneCallsGetRequest),
     PhoneCallAccept(PhoneCallAcceptRequest),
     PhoneCallDecline(PhoneCallDeclineRequest),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PhoneSessionReadyEvent {
+    pub device: String,
+    pub platform: String,
 }

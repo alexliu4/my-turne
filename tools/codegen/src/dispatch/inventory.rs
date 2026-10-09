@@ -2992,6 +2992,31 @@ pub const EVENT_INVENTORY: &[Event] = &[
         "Broadcast after BT device.volume.update call.",
     ),
     event(
+        "phone.session.ready",
+        Family::Phone,
+        "phone.session.ready",
+        &[],
+        payload(
+            &[
+                f(
+                    "device",
+                    FieldKind::String,
+                    true,
+                    "Daemon-observed Bluetooth peer address.",
+                ),
+                f(
+                    "platform",
+                    FieldKind::String,
+                    true,
+                    "Phone platform: android or ios.",
+                ),
+            ],
+            r#"{"device":"AA:BB:CC:DD:EE:FF","platform":"android"}"#,
+            "A scoped phone companion is ready for phone snapshot requests.",
+        ),
+        "Broadcast after phone app.ready registration, independently of desktop ownership.",
+    ),
+    event(
         "phone.call.started",
         Family::Phone,
         "phone.call.started",
