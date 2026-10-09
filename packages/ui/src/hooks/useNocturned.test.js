@@ -1,8 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import deviceWireSnapshot from "../../test/wire_snapshots/device.json";
 import {
   completePendingBtReconnectOnAppReady,
+  addGlobalWsListener,
+  cleanupGlobalWebSocket,
   createBluetoothDiscoveryCoordinator,
+  getAppReadyState,
+  getGlobalWebSocket,
   getBtReconnectState,
   getWsRequestError,
   getBluetoothPairingUiUpdate,
@@ -21,6 +25,7 @@ import {
   scheduleInitialBtReconnect,
   shouldAutomaticallyReconnectPlatform,
   stopBtReconnect,
+  subscribeAppReadyState,
 } from "./useNocturned";
 
 const deferred = () => {
@@ -32,6 +37,193 @@ const deferred = () => {
   });
   return { promise, resolve, reject };
 };
+
+describe("WebSocket app.ready async ordering", () => {
+  class ControlledWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+    readyState = ControlledWebSocket.CONNECTING;
+    timeRequests = [];
+
+    open() {
+      this.readyState = ControlledWebSocket.OPEN;
+      this.onopen();
+    }
+
+    receive(message) {
+      this.onmessage({ data: JSON.stringify(message) });
+    }
+
+    ready(data) {
+      this.receive({ type: "event", topic: "app.ready", data });
+    }
+
+    send(raw) {
+      const request = JSON.parse(raw);
+      if (request.method === "device.time.get") {
+        this.timeRequests.push(request);
+      } else {
+        this.receive({
+          type: "response",
+          id: request.id,
+          result: { status: "requested" },
+        });
+      }
+    }
+
+    async completeTimeSync(index) {
+      const request = this.timeRequests[index];
+      expect(request?.method).toBe("device.time.get");
+      this.receive({ type: "response", id: request.id, result: {} });
+      // The real request promise's continuation runs before this checkpoint.
+      await Promise.resolve();
+    }
+
+    close(code = 1000) {
+      if (this.readyState === ControlledWebSocket.CLOSED) return;
+      this.readyState = ControlledWebSocket.CLOSED;
+      this.onclose({ code });
+    }
+  }
+
+  let socket;
+  let published;
+  let restoreGlobals;
+  let removeListener;
+  let unsubscribe;
+
+  const connect = () => {
+    removeListener?.();
+    removeListener = addGlobalWsListener("app-ready-race-test", {});
+    socket = getGlobalWebSocket();
+    socket.open();
+    return socket;
+  };
+
+  beforeEach(() => {
+    const replacements = {
+      WebSocket: ControlledWebSocket,
+      localStorage: { getItem: () => null, setItem: () => {} },
+      window: { dispatchEvent: () => {} },
+    };
+    const descriptors = Object.keys(replacements).map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key),
+    ]);
+    restoreGlobals = () => {
+      for (const [key, descriptor] of descriptors) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else delete globalThis[key];
+      }
+    };
+    for (const [key, value] of Object.entries(replacements)) {
+      Object.defineProperty(globalThis, key, {
+        configurable: true,
+        writable: true,
+        value,
+      });
+    }
+    cleanupGlobalWebSocket();
+    published = [];
+    unsubscribe = subscribeAppReadyState((state) => published.push(state));
+    connect();
+  });
+
+  afterEach(() => {
+    unsubscribe();
+    removeListener();
+    cleanupGlobalWebSocket();
+    restoreGlobals();
+  });
+
+  it.each([
+    ["Mac first", [1, 0]],
+    ["Windows first", [0, 1]],
+  ])(
+    "keeps the newest readiness with time sync completing %s",
+    async (_, order) => {
+      const initial = getAppReadyState();
+      socket.ready({ platform: "web", connectorPlatform: "windows" });
+      socket.ready({ platform: "web", connector_platform: "macos" });
+      expect(socket.timeRequests).toHaveLength(2);
+
+      await socket.completeTimeSync(order[0]);
+      if (order[0] === 0) expect(getAppReadyState()).toEqual(initial);
+      else expect(getAppReadyState().connectorPlatform).toBe("macos");
+
+      await socket.completeTimeSync(order[1]);
+      expect(getAppReadyState()).toEqual({
+        ready: true,
+        platform: "web",
+        connectorPlatform: "macos",
+        generation: initial.generation + 1,
+      });
+      expect(published).toEqual([initial, getAppReadyState()]);
+    },
+  );
+
+  it.each(["offline event", "socket closure"])(
+    "cancels pending readiness on %s and accepts a new session",
+    async (cancellation) => {
+      socket.ready({ platform: "web", connectorPlatform: "windows" });
+      await socket.completeTimeSync(0);
+      expect(getAppReadyState().connectorPlatform).toBe("windows");
+
+      socket.ready({ platform: "web", connectorPlatform: "windows" });
+      const oldSocket = socket;
+      if (cancellation === "offline event") socket.ready({ ready: false });
+      else socket.close();
+      const cancelled = getAppReadyState();
+      const publishedCount = published.length;
+      expect(cancelled).toMatchObject({
+        ready: false,
+        platform: null,
+        connectorPlatform: null,
+      });
+
+      // Deliver the held reply even after closure to exercise stale completion.
+      await oldSocket.completeTimeSync(1);
+      expect(getAppReadyState()).toEqual(cancelled);
+      expect(published).toHaveLength(publishedCount);
+
+      if (cancellation === "socket closure") {
+        cleanupGlobalWebSocket();
+        connect();
+      }
+      socket.ready({ ready: true, platform: "macos" });
+      await socket.completeTimeSync(cancellation === "socket closure" ? 0 : 2);
+      expect(getAppReadyState()).toEqual({
+        ready: true,
+        platform: "macos",
+        connectorPlatform: null,
+        generation: cancelled.generation + 1,
+      });
+      expect(published.at(-1)).toEqual(getAppReadyState());
+    },
+  );
+
+  it.each(["ios", "android", "web", "macos"])(
+    "accepts legacy %s readiness that omits ready and connectorPlatform",
+    async (platform) => {
+      socket.ready({ platform });
+      await socket.completeTimeSync(0);
+      expect(getAppReadyState()).toMatchObject({
+        ready: true,
+        platform,
+        connectorPlatform: null,
+      });
+      socket.ready({ ready: false, platform, connector_platform: "windows" });
+      expect(getAppReadyState()).toMatchObject({
+        ready: false,
+        platform: null,
+        connectorPlatform: null,
+      });
+      expect(socket.timeRequests).toHaveLength(1);
+    },
+  );
+});
 
 describe("phone network status", () => {
   it("normalizes explicit phone connectivity states", () => {

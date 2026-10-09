@@ -2330,6 +2330,19 @@ pub const EVENT_INVENTORY: &[Event] = &[
         payload(
             &[
                 f(
+                    "ready",
+                    FieldKind::Bool,
+                    false,
+                    "False when the last active route disappears; omitted by legacy ready events.",
+                ),
+                fs(
+                    "connector_platform",
+                    "connectorPlatform",
+                    FieldKind::String,
+                    false,
+                    "Desktop companion platform identifier (windows or macos).",
+                ),
+                f(
                     "datetime",
                     FieldKind::String,
                     false,

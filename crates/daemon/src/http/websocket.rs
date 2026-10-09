@@ -1883,6 +1883,20 @@ impl WebSocketServer {
             );
             self.send_event_to_clients("app.ready".to_string(), active_app.data)
                 .await;
+        } else {
+            info!(
+                route,
+                "No surviving app connection after active route closed"
+            );
+            self.send_event_to_clients(
+                "app.ready".to_string(),
+                serde_json::json!({
+                    "ready": false,
+                    "platform": serde_json::Value::Null,
+                    "connector_platform": serde_json::Value::Null,
+                }),
+            )
+            .await;
         }
     }
 
@@ -2774,5 +2788,84 @@ mod tests {
             ws_rx.try_recv().is_err(),
             "inactive media event must be suppressed when Windows is active"
         );
+    }
+
+    #[tokio::test]
+    async fn windows_disconnect_emits_surviving_mac_or_explicit_offline_event() {
+        let (app_tx, _app_rx) = mpsc::unbounded_channel();
+        let server = Arc::new(WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        ));
+
+        let (ws_tx, mut ws_rx) = mpsc::channel(10);
+        let disconnect = CancellationToken::new();
+        server.connections.write().await.insert(
+            "ws-1".to_string(),
+            WebSocketConnection {
+                id: "ws-1".to_string(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx: ws_tx,
+                disconnect,
+            },
+        );
+
+        async fn receive_ready(rx: &mut mpsc::Receiver<WebSocketMessage>) -> serde_json::Value {
+            let message = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+                .await
+                .expect("app.ready reception timed out")
+                .expect("WebSocket event channel closed");
+            let WebSocketMessage::Event { topic, data, .. } = message else {
+                panic!("expected app.ready event");
+            };
+            assert_eq!(topic, "app.ready");
+            data
+        }
+
+        for (route, peer, platform) in [
+            ("spp:mac", "50:F2:65:EB:36:E1", "macos"),
+            ("spp:win", "11:22:33:44:55:66", "windows"),
+        ] {
+            server
+                .broadcast_event_from_route(
+                    "app.ready".to_string(),
+                    serde_json::json!({ "platform": "web", "connectorPlatform": platform }),
+                    Some(route),
+                    Some(peer),
+                )
+                .await;
+            let ready = receive_ready(&mut ws_rx).await;
+            assert_eq!(ready["connectorPlatform"], platform);
+            assert_ne!(ready["ready"], false);
+            let active = server.app_ready_registry.read().await.active().unwrap();
+            assert_eq!(active.route.as_deref(), Some(route));
+            assert!(matches!(
+                ws_rx.try_recv(),
+                Err(mpsc::error::TryRecvError::Empty)
+            ));
+        }
+
+        server.clear_app_ready_for_route("spp:win").await;
+        let ready = receive_ready(&mut ws_rx).await;
+        assert_eq!(ready["connectorPlatform"], "macos");
+        assert_ne!(ready["ready"], false);
+        let active = server.app_ready_registry.read().await.active().unwrap();
+        assert_eq!(active.route.as_deref(), Some("spp:mac"));
+        assert!(
+            matches!(ws_rx.try_recv(), Err(mpsc::error::TryRecvError::Empty)),
+            "fallback must emit only Mac readiness, with no intermediate offline event"
+        );
+
+        server.clear_app_ready_for_route("spp:mac").await;
+        let offline = receive_ready(&mut ws_rx).await;
+        assert_eq!(offline["ready"], false);
+        assert!(offline["platform"].is_null());
+        assert!(offline["connector_platform"].is_null());
+        assert!(server.app_ready_registry.read().await.active().is_none());
+        assert!(matches!(
+            ws_rx.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
     }
 }

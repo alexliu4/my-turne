@@ -14,6 +14,8 @@ data class AmbientLightUpdateEvent(
 
 @Serializable
 data class AppReadyEvent(
+  @SerialName("ready") val ready: Boolean? = null,
+  @SerialName("connector_platform") val connectorPlatform: String? = null,
   @SerialName("datetime") val datetime: String? = null,
   @SerialName("timestamp") val timestamp: ULong? = null,
   @SerialName("timezone") val timezone: Value? = null,

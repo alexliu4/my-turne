@@ -11,6 +11,8 @@ pub struct AmbientLightUpdateEvent {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AppReadyEvent {
+    pub ready: Option<bool>,
+    pub connector_platform: Option<String>,
     pub datetime: Option<String>,
     pub timestamp: Option<u64>,
     pub timezone: Option<serde_json::Value>,
