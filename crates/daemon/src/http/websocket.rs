@@ -161,6 +161,7 @@ pub(crate) fn canonical_music_request(
         "spotify.show.episodes" => typed::<SpotifyShowEpisodesRequest>(params),
         "spotify.show.get" => typed::<SpotifyShowGetRequest>(params),
         "spotify.track.lyrics" => typed::<SpotifyTrackLyricsRequest>(params),
+        "volume.get" | "volume.set" | "volume.adjust" | "volume.toggle_mute" => Ok(params),
         _ => unreachable!("canonical music method table drifted"),
     }?;
     Ok(Some((canonical_method.to_string(), data)))
@@ -197,6 +198,7 @@ fn companion_music_request(
         "spotify.me.top_artists" => "spotify.me.topArtists",
         "spotify.me.top_tracks" => "spotify.me.topTracks",
         "spotify.radio.top_mix" => "spotify.radio.topMix",
+        "volume.toggle_mute" => "volume.toggleMute",
         _ => canonical_method.as_str(),
     };
 
@@ -265,6 +267,10 @@ fn canonical_music_method(method: &str) -> Option<&'static str> {
         "spotify.show.episodes" => "spotify.show.episodes",
         "spotify.show.get" => "spotify.show.get",
         "spotify.track.lyrics" => "spotify.track.lyrics",
+        "volume.get" => "volume.get",
+        "volume.set" => "volume.set",
+        "volume.adjust" => "volume.adjust",
+        "volume.toggleMute" | "volume.toggle_mute" => "volume.toggle_mute",
         _ => return None,
     })
 }
@@ -2867,5 +2873,22 @@ mod tests {
             ws_rx.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    #[test]
+    fn canonical_music_method_maps_volume_rpcs() {
+        assert_eq!(canonical_music_method("volume.get"), Some("volume.get"));
+        assert_eq!(canonical_music_method("volume.set"), Some("volume.set"));
+        assert_eq!(canonical_music_method("volume.adjust"), Some("volume.adjust"));
+        assert_eq!(canonical_music_method("volume.toggleMute"), Some("volume.toggle_mute"));
+        assert_eq!(canonical_music_method("volume.toggle_mute"), Some("volume.toggle_mute"));
+    }
+
+    #[test]
+    fn companion_music_request_translates_volume_toggle_mute_for_web_connector() {
+        let (method, _) = companion_music_request("volume.toggle_mute", serde_json::json!({}), Some("web"))
+            .expect("volume.toggle_mute should decode")
+            .expect("volume.toggle_mute should be recognized");
+        assert_eq!(method, "volume.toggleMute");
     }
 }
