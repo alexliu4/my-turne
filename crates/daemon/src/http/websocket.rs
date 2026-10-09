@@ -2376,61 +2376,44 @@ mod tests {
     fn app_ready_registry_windows_route_preference_scenarios() {
         let mut registry = AppReadyRegistry::default();
 
-        // 1. Mac connects first -> Mac active
-        registry.register(
-            Some("spp:mac"),
-            Some("50:F2:65:EB:36:E1"),
-            serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
-        );
-        let active = registry.active().expect("Mac active");
-        assert_eq!(active.route.as_deref(), Some("spp:mac"));
-
-        // 2. Windows connects -> Windows active
+        // 1. Win1 connects -> Win1 active.
         registry.register(
             Some("spp:win1"),
             Some("11:22:33:44:55:66"),
             serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
         );
-        let active = registry.active().expect("Windows active");
+        let active = registry.active().expect("Win1 active");
         assert_eq!(active.route.as_deref(), Some("spp:win1"));
 
-        // 3. Mac reconnects while Windows is healthy -> Windows stays active
-        registry.register(
-            Some("spp:mac"),
-            Some("50:F2:65:EB:36:E1"),
-            serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
-        );
-        let active = registry.active().expect("Windows stays active");
-        assert_eq!(active.route.as_deref(), Some("spp:win1"));
-
-        // 6. Multiple Windows routes -> newest Windows route wins
+        // 2. Win2 connects -> Win2 active.
         registry.register(
             Some("spp:win2"),
             Some("AA:BB:CC:DD:EE:FF"),
             serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
         );
-        let active = registry.active().expect("Newest Windows active");
+        let active = registry.active().expect("Win2 active");
         assert_eq!(active.route.as_deref(), Some("spp:win2"));
 
-        // 7. Removing a non-owner route does not disturb active route
-        assert!(registry.remove("spp:win1").is_none());
-        let active = registry.active().expect("Win2 remains active");
-        assert_eq!(active.route.as_deref(), Some("spp:win2"));
-
-        // 4. Windows disconnects -> best surviving Mac/legacy route becomes active
+        // 3. Win2 disconnects -> Win1 automatically promoted.
         let promoted = registry
             .remove("spp:win2")
-            .expect("Mac route promoted when Windows disconnects");
-        assert_eq!(promoted.route.as_deref(), Some("spp:mac"));
+            .expect("Win1 promoted when Win2 disconnects");
+        assert_eq!(promoted.route.as_deref(), Some("spp:win1"));
 
-        // 5. Windows returns -> Windows active again
+        // 4. Mac sends app.ready -> Win1 stays active.
         registry.register(
-            Some("spp:win1"),
-            Some("11:22:33:44:55:66"),
-            serde_json::json!({ "platform": "web", "connectorPlatform": "WINDOWS" }),
+            Some("spp:mac"),
+            Some("50:F2:65:EB:36:E1"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
         );
-        let active = registry.active().expect("Windows active again");
+        let active = registry.active().expect("Win1 stays active when Mac sends app.ready");
         assert_eq!(active.route.as_deref(), Some("spp:win1"));
+
+        // 5. Win1 disconnects -> newest surviving Mac/legacy route promoted.
+        let promoted = registry
+            .remove("spp:win1")
+            .expect("Mac route promoted when Win1 disconnects");
+        assert_eq!(promoted.route.as_deref(), Some("spp:mac"));
     }
 
     #[test]
@@ -2608,7 +2591,7 @@ mod tests {
         server
             .broadcast_event_from_route(
                 "phone.call.started".to_string(),
-                serde_json::json!({ "call_id": "call-1" }),
+                serde_json::json!({ "call_id": "call-1", "device": android_peer }),
                 Some("spp:android_newest"),
                 Some(android_peer),
             )

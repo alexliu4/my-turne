@@ -61,7 +61,7 @@ describe("phone call normalization", () => {
 });
 
 describe("phone call lifecycle", () => {
-  test("refreshes snapshots when a phone companion becomes ready", () => {
+  test("refreshes snapshots when a phone companion becomes ready or connects over Bluetooth", () => {
     expect(
       shouldRefreshPhoneCallSnapshot({
         type: "event",
@@ -81,6 +81,27 @@ describe("phone call lifecycle", () => {
         type: "event",
         topic: "app.ready",
         data: { platform: "web" },
+      }),
+    ).toBe(false);
+    expect(
+      shouldRefreshPhoneCallSnapshot({
+        type: "event",
+        topic: "bluetooth.connection",
+        data: { event: "connection_established", connection_type: "spp" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldRefreshPhoneCallSnapshot({
+        type: "event",
+        topic: "bluetooth.connection",
+        data: { event: "connection_established", connection_type: "iap2" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldRefreshPhoneCallSnapshot({
+        type: "event",
+        topic: "bluetooth.connection",
+        data: { event: "connection_established", connection_type: "macos_connector" },
       }),
     ).toBe(false);
     expect(

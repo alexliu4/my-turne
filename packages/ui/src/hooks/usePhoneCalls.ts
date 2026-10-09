@@ -149,10 +149,22 @@ export const isCurrentPhoneCallAction = (
 ) => current === candidate;
 
 export const shouldRefreshPhoneCallSnapshot = (message: WsMessage) => {
-  if (message.type !== "event" || message.topic !== "app.ready") return false;
-  const ready = asRecord(message.data);
-  const platform = ready ? readString(ready, "platform") : null;
-  return platform === "android" || platform === "ios";
+  if (message.type !== "event") return false;
+
+  if (message.topic === "app.ready") {
+    const ready = asRecord(message.data);
+    const platform = ready ? readString(ready, "platform") : null;
+    return platform === "android" || platform === "ios";
+  }
+
+  if (message.topic === "bluetooth.connection") {
+    const connection = asRecord(message.data);
+    if (connection?.event !== "connection_established") return false;
+    const connectionType = readString(connection, "connectionType", "connection_type");
+    return connectionType === "spp" || connectionType === "iap2";
+  }
+
+  return false;
 };
 
 const normalizeSnapshot = (response: PhoneCallsGetResponse | unknown) => {
