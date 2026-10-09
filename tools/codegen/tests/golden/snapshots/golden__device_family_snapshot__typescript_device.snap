@@ -45,6 +45,10 @@ export interface AmbientLightUpdateEventMessage {
  */
 export interface AppReadyEvent {
   /**
+   * False when the last active route disappears; omitted by legacy ready events. Inventory field `ready` emits as `ready`.
+   */
+  ready?: boolean;
+  /**
    * Desktop companion platform identifier (windows or macos). Inventory field `connector_platform` emits as `connectorPlatform`. Current source key: `connectorPlatform`.
    */
   connectorPlatform?: string;

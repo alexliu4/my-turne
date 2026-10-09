@@ -69,6 +69,7 @@ Normalize Spotify context identities with `src/utils/spotifyContext.ts` before b
 ## CONVENTIONS
 
 - **Standalone exports alongside hooks**: Large hooks export both `useXxx()` hooks and `getXxxState()`/`subscribeXxxState()` standalone functions for use outside React components
+- **Connector readiness ordering**: `useNocturned.test.js` drives the actual WebSocket message handler with held `device.time.get` replies. Only the newest readiness may publish after time sync; explicit `ready: false`, socket closure, and cleanup invalidate pending completions. Legacy events without `ready` remain valid when they identify a platform, and both connector platform casings are accepted.
 - **UUID-correlated requests**: All WebSocket requests use UUID message IDs with pending request maps for response matching
 - **Retry with backoff**: Data fetching uses `MAX_RETRIES` + `RETRY_DELAY` constants, WebSocket reconnects use exponential backoff capped at 30s
 - **Asynchronous Bluetooth handoffs**: Treat `waiting_for_ios`, `waiting_for_android`, and `waiting_for_macos_connector` as pending success states. They mean the daemon accepted the handoff and is waiting for the platform transport, so the reconnect watchdog must settle instead of immediately issuing another connect request.

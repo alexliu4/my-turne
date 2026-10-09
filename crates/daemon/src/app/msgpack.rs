@@ -190,6 +190,7 @@ fn i64_field(data: &serde_json::Value, snake: &str, camel: &str) -> Option<i64> 
 fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
     let connector_platform = string_field(&data, "connector_platform", "connectorPlatform");
     let event = AppReadyEvent {
+        ready: bool_field(&data, "ready", "ready"),
         connector_platform: connector_platform.clone(),
         datetime: string_field(&data, "datetime", "datetime"),
         timestamp: u64_field(&data, "timestamp", "timestamp"),
@@ -2851,12 +2852,29 @@ mod tests {
 
         assert_eq!(normalized["platform"], "web");
         assert_eq!(normalized["connectorPlatform"], "windows");
+        assert_eq!(normalized["connector_platform"], "windows");
+        assert!(normalized["ready"].is_null());
 
         let normalized_snake = normalize_app_ready_event(serde_json::json!({
             "platform": "web",
             "connector_platform": "windows",
         }));
         assert_eq!(normalized_snake["connectorPlatform"], "windows");
+        assert_eq!(normalized_snake["connector_platform"], "windows");
+
+        let offline = normalize_app_ready_event(serde_json::json!({ "ready": false }));
+        assert_eq!(offline["ready"], false);
+        assert!(offline["platform"].is_null());
+        assert!(offline["connector_platform"].is_null());
+
+        let ready = normalize_app_ready_event(serde_json::json!({
+            "ready": true,
+            "platform": "macos",
+            "connector_platform": "macos",
+        }));
+        assert_eq!(ready["ready"], true);
+        assert_eq!(ready["connectorPlatform"], "macos");
+        assert_eq!(ready["connector_platform"], "macos");
     }
 
     #[test]

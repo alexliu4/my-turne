@@ -2,6 +2,22 @@ use libnocturne::generated::device::*;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 
+#[test]
+fn app_ready_accepts_legacy_readiness_and_explicit_offline() {
+    for (payload, expected) in [
+        (json!({ "platform": "ios" }), None),
+        (json!({ "platform": "web", "ready": true }), Some(true)),
+        (json!({ "ready": false }), Some(false)),
+    ] {
+        let event: AppReadyEvent = serde_json::from_value(payload).unwrap();
+        assert_eq!(event.ready, expected);
+        assert_eq!(
+            serde_json::to_value(event).unwrap()["ready"],
+            json!(expected)
+        );
+    }
+}
+
 fn payload<'a>(snapshot: &'a Value, key: &str, kind: &str) -> &'a Value {
     snapshot
         .get(key)

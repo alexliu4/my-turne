@@ -1165,7 +1165,10 @@ const setupGlobalWebSocket = async () => {
           /** @type {AppReadyEvent | undefined} */
           const readyData = data.data;
 
-          if (readyData?.ready === false || (!readyData?.platform && !readyData?.ready)) {
+          if (
+            readyData?.ready === false ||
+            (!readyData?.platform && !readyData?.ready)
+          ) {
             appReady = false;
             appReadyPlatform = null;
             appReadyConnectorPlatform = null;

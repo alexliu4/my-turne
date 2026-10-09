@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  getWindowsConnectorState,
-} from "./useWindowsConnector";
+import { getWindowsConnectorState } from "./useWindowsConnector";
 
 describe("getWindowsConnectorState", () => {
   it("detects active Windows Connector", () => {
@@ -171,8 +169,18 @@ describe("Windows connector state transition scenarios", () => {
   it("Scenario 3: Windows -> Mac promotion -> Mac active without false offline state", () => {
     const history = [];
     const events = [
-      { ready: true, platform: "web", connectorPlatform: "windows", generation: 1 },
-      { ready: true, platform: "web", connectorPlatform: "macos", generation: 2 },
+      {
+        ready: true,
+        platform: "web",
+        connectorPlatform: "windows",
+        generation: 1,
+      },
+      {
+        ready: true,
+        platform: "web",
+        connectorPlatform: "macos",
+        generation: 2,
+      },
     ];
 
     events.forEach((event) => {
@@ -196,7 +204,12 @@ describe("Windows connector state transition scenarios", () => {
   it("Scenario 4: Windows -> no surviving Connector -> offline state", () => {
     const history = [];
     const events = [
-      { ready: true, platform: "web", connectorPlatform: "windows", generation: 1 },
+      {
+        ready: true,
+        platform: "web",
+        connectorPlatform: "windows",
+        generation: 1,
+      },
       { ready: false, platform: null, connectorPlatform: null, generation: 2 },
     ];
 

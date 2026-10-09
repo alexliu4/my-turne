@@ -22,6 +22,7 @@ public struct AmbientLightUpdateEvent: Codable, Sendable {
 }
 
 public struct AppReadyEvent: Codable, Sendable {
+  public let ready: Bool?
   public let connectorPlatform: String?
   public let datetime: String?
   public let timestamp: UInt64?
@@ -36,6 +37,7 @@ public struct AppReadyEvent: Codable, Sendable {
   public let spotifyInstalled: Bool?
 
   public init(
+    ready: Bool?,
     connectorPlatform: String?,
     datetime: String?,
     timestamp: UInt64?,
@@ -49,6 +51,7 @@ public struct AppReadyEvent: Codable, Sendable {
     spotifySkipped: Bool?,
     spotifyInstalled: Bool?
   ) {
+    self.ready = ready
     self.connectorPlatform = connectorPlatform
     self.datetime = datetime
     self.timestamp = timestamp
@@ -64,6 +67,7 @@ public struct AppReadyEvent: Codable, Sendable {
   }
 
   private enum CodingKeys: String, CodingKey {
+    case ready = "ready"
     case connectorPlatform = "connector_platform"
     case datetime = "datetime"
     case timestamp = "timestamp"
