@@ -364,6 +364,37 @@ struct AppReadyRegistry {
 }
 
 impl AppReadyRegistry {
+    fn is_windows_entry(entry: &AppReadyEntry) -> bool {
+        entry
+            .data
+            .get("connectorPlatform")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|platform| platform.eq_ignore_ascii_case("windows"))
+    }
+
+    fn recompute_active_route(&mut self) {
+        if self.entries.is_empty() {
+            self.active_route = None;
+            return;
+        }
+
+        let newest_windows = self
+            .entries
+            .iter()
+            .filter(|(_, entry)| Self::is_windows_entry(entry))
+            .max_by_key(|(_, entry)| entry.generation);
+
+        if let Some((route, _)) = newest_windows {
+            self.active_route = Some(route.clone());
+        } else {
+            self.active_route = self
+                .entries
+                .iter()
+                .max_by_key(|(_, entry)| entry.generation)
+                .map(|(route, _)| route.clone());
+        }
+    }
+
     fn register(
         &mut self,
         route: Option<&str>,
@@ -380,7 +411,7 @@ impl AppReadyRegistry {
                 generation: self.next_generation,
             },
         );
-        self.active_route = Some(route);
+        self.recompute_active_route();
     }
 
     fn active(&self) -> Option<ActiveAppReady> {
@@ -429,11 +460,7 @@ impl AppReadyRegistry {
             return None;
         }
 
-        self.active_route = self
-            .entries
-            .iter()
-            .max_by_key(|(_, entry)| entry.generation)
-            .map(|(route, _)| route.clone());
+        self.recompute_active_route();
         self.active()
     }
 }
@@ -1804,10 +1831,14 @@ impl WebSocketServer {
         source_peer: Option<&str>,
     ) {
         if topic == "app.ready" {
-            self.app_ready_registry
-                .write()
-                .await
-                .register(route, source_peer, data.clone());
+            let mut registry = self.app_ready_registry.write().await;
+            registry.register(route, source_peer, data.clone());
+            if let Some(route) = route {
+                if !registry.is_active(route) {
+                    debug!(route, "Ignoring app.ready from non-active app connection");
+                    return;
+                }
+            }
         } else if let Some(route) = route {
             let registry = self.app_ready_registry.read().await;
             if registry.active_route.is_some() && !registry.is_active(route) {
@@ -2323,5 +2354,66 @@ mod tests {
         });
 
         assert_eq!(playback_active_from_now_playing(&data), Some(true));
+    }
+
+    #[test]
+    fn app_ready_registry_windows_route_preference_scenarios() {
+        let mut registry = AppReadyRegistry::default();
+
+        // 1. Mac connects first -> Mac active
+        registry.register(
+            Some("spp:mac"),
+            Some("50:F2:65:EB:36:E1"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
+        );
+        let active = registry.active().expect("Mac active");
+        assert_eq!(active.route.as_deref(), Some("spp:mac"));
+
+        // 2. Windows connects -> Windows active
+        registry.register(
+            Some("spp:win1"),
+            Some("11:22:33:44:55:66"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
+        );
+        let active = registry.active().expect("Windows active");
+        assert_eq!(active.route.as_deref(), Some("spp:win1"));
+
+        // 3. Mac reconnects while Windows is healthy -> Windows stays active
+        registry.register(
+            Some("spp:mac"),
+            Some("50:F2:65:EB:36:E1"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
+        );
+        let active = registry.active().expect("Windows stays active");
+        assert_eq!(active.route.as_deref(), Some("spp:win1"));
+
+        // 6. Multiple Windows routes -> newest Windows route wins
+        registry.register(
+            Some("spp:win2"),
+            Some("AA:BB:CC:DD:EE:FF"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
+        );
+        let active = registry.active().expect("Newest Windows active");
+        assert_eq!(active.route.as_deref(), Some("spp:win2"));
+
+        // 7. Removing a non-owner route does not disturb active route
+        assert!(registry.remove("spp:win1").is_none());
+        let active = registry.active().expect("Win2 remains active");
+        assert_eq!(active.route.as_deref(), Some("spp:win2"));
+
+        // 4. Windows disconnects -> best surviving Mac/legacy route becomes active
+        let promoted = registry
+            .remove("spp:win2")
+            .expect("Mac route promoted when Windows disconnects");
+        assert_eq!(promoted.route.as_deref(), Some("spp:mac"));
+
+        // 5. Windows returns -> Windows active again
+        registry.register(
+            Some("spp:win1"),
+            Some("11:22:33:44:55:66"),
+            serde_json::json!({ "platform": "web", "connectorPlatform": "WINDOWS" }),
+        );
+        let active = registry.active().expect("Windows active again");
+        assert_eq!(active.route.as_deref(), Some("spp:win1"));
     }
 }
