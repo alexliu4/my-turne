@@ -210,6 +210,7 @@ public struct PhoneCallsGetResponse: Codable, Sendable {
 }
 
 public enum PhoneEvent: Codable, Sendable {
+  case phoneSessionReady(PhoneSessionReadyEvent)
   case phoneCallStarted(PhoneCallStartedEvent)
   case phoneCallUpdated(PhoneCallUpdatedEvent)
   case phoneCallEnded(PhoneCallEndedEvent)
@@ -219,5 +220,23 @@ public enum PhoneMethod: Codable, Sendable {
   case phoneCallsGet(PhoneCallsGetRequest)
   case phoneCallAccept(PhoneCallAcceptRequest)
   case phoneCallDecline(PhoneCallDeclineRequest)
+}
+
+public struct PhoneSessionReadyEvent: Codable, Sendable {
+  public let device: String
+  public let platform: String
+
+  public init(
+    device: String,
+    platform: String
+  ) {
+    self.device = device
+    self.platform = platform
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case device = "device"
+    case platform = "platform"
+  }
 }
 

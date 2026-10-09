@@ -73,6 +73,8 @@ data class PhoneCallsGetResponse(
 
 @Serializable
 enum class PhoneEvent {
+  @SerialName("phone_session_ready")
+  PHONE_SESSION_READY,
   @SerialName("phone_call_started")
   PHONE_CALL_STARTED,
   @SerialName("phone_call_updated")
@@ -90,4 +92,10 @@ enum class PhoneMethod {
   @SerialName("phone_call_decline")
   PHONE_CALL_DECLINE,
 }
+
+@Serializable
+data class PhoneSessionReadyEvent(
+  @SerialName("device") val device: String,
+  @SerialName("platform") val platform: String,
+)
 

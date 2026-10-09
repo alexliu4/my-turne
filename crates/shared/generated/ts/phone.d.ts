@@ -340,6 +340,7 @@ export interface PhoneCallsGetResponseCalls {
  * Inventory: `EVENT_INVENTORY` entries grouped by `Family`.
  */
 export type PhoneEvent =
+  | PhoneSessionReadyEventMessage
   | PhoneCallStartedEventMessage
   | PhoneCallUpdatedEventMessage
   | PhoneCallEndedEventMessage
@@ -364,4 +365,35 @@ export type PhoneMethodResponse =
   | PhoneCallAcceptMethodResponseMessage
   | PhoneCallDeclineMethodResponseMessage
 ;
+
+/**
+ * Event payload for `phone.session.ready`.
+ * A scoped phone companion is ready for phone snapshot requests.
+ * Inventory: `EVENT_INVENTORY` entry `phone.session.ready` payload.
+ */
+export interface PhoneSessionReadyEvent {
+  /**
+   * Daemon-observed Bluetooth peer address. Inventory field `device` emits as `device`.
+   */
+  device: string;
+  /**
+   * Phone platform: android or ios. Inventory field `platform` emits as `platform`.
+   */
+  platform: string;
+}
+
+/**
+ * Event envelope for `phone.session.ready` in the `phone` event union.
+ * Inventory: `EVENT_INVENTORY` entry `phone.session.ready`.
+ */
+export interface PhoneSessionReadyEventMessage {
+  /**
+   * Discriminator from the inventory `event` tag.
+   */
+  event: "phone.session.ready";
+  /**
+   * Payload carried by this inventory variant.
+   */
+  data: PhoneSessionReadyEvent;
+}
 

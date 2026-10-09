@@ -204,7 +204,10 @@ fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
     };
     let mut payload = bt_only_payload(event);
     if let (Some(cp), Some(obj)) = (connector_platform, payload.as_object_mut()) {
-        obj.insert("connectorPlatform".to_string(), serde_json::Value::String(cp));
+        obj.insert(
+            "connectorPlatform".to_string(),
+            serde_json::Value::String(cp),
+        );
     }
     payload
 }
@@ -2966,16 +2969,13 @@ mod tests {
             "phone.call.updated",
             "phone.call.ended",
         ] {
-            let data = attach_phone_source(
-                topic,
-                serde_json::json!({
-                    "call_id": "call-1",
-                    "device": "02:00:00:00:00:00",
-                }),
-                Some(peer),
-            );
-
-            assert_eq!(data["device"], peer.to_string());
+            for payload in [
+                serde_json::json!({ "call_id": "call-1" }),
+                serde_json::json!({ "call_id": "call-1", "device": "02:00:00:00:00:00" }),
+            ] {
+                let data = attach_phone_source(topic, payload, Some(peer));
+                assert_eq!(data["device"], peer.to_string());
+            }
         }
     }
 

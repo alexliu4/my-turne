@@ -8,6 +8,7 @@ use futures::{Sink, SinkExt, StreamExt};
 use libnocturne::generated::bluetooth::*;
 use libnocturne::generated::device::*;
 use libnocturne::generated::media_control::MediaNowPlayingUpdateEvent;
+use libnocturne::generated::phone::PhoneSessionReadyEvent;
 use libnocturne::generated::spotify::*;
 use libnocturne::generated::voice::VoiceWakewordStateEvent;
 use serde::{Deserialize, Serialize};
@@ -428,6 +429,22 @@ impl AppReadyRegistry {
         self.active_route.as_deref() == Some(route)
     }
 
+    fn phone_readiness_snapshots(&self) -> Vec<serde_json::Value> {
+        let mut entries: Vec<_> = self.entries.iter().collect();
+        entries.sort_by_key(|(_, entry)| std::cmp::Reverse(entry.generation));
+        let mut peers = HashSet::new();
+        entries
+            .into_iter()
+            .filter_map(|(route, entry)| {
+                let ready =
+                    phone_session_ready(&entry.data, Some(route), entry.source_peer.as_deref())?;
+                peers
+                    .insert(ready["device"].as_str()?.to_string())
+                    .then_some(ready)
+            })
+            .collect()
+    }
+
     fn update_active(&mut self, update: &serde_json::Value) {
         let Some(route) = self.active_route.as_ref() else {
             return;
@@ -512,6 +529,29 @@ impl AppReadyRegistry {
                 platform.eq_ignore_ascii_case("android") || platform.eq_ignore_ascii_case("ios")
             })
     }
+}
+
+// Only scoped phone app sessions establish snapshot readiness. The peer is
+// supplied by the transport, never by the companion payload.
+fn phone_session_ready(
+    data: &serde_json::Value,
+    route: Option<&str>,
+    source_peer: Option<&str>,
+) -> Option<serde_json::Value> {
+    let route = route?;
+    let peer: bluer::Address = source_peer?.parse().ok()?;
+    let platform = data.get("platform")?.as_str()?.to_ascii_lowercase();
+    if !((platform == "android" && route.starts_with("spp:"))
+        || (platform == "ios" && route.starts_with("iap2:")))
+        || data.get("connectorPlatform").is_some()
+        || data.get("connector_platform").is_some()
+    {
+        return None;
+    }
+    Some(serde_json::json!(PhoneSessionReadyEvent {
+        device: peer.to_string(),
+        platform,
+    }))
 }
 
 fn is_phone_call_event(topic: &str) -> bool {
@@ -721,6 +761,21 @@ impl WebSocketServer {
         {
             let mut connections = self.connections.write().await;
             connections.insert(connection_id.clone(), connection);
+        }
+
+        for ready in self
+            .app_ready_registry
+            .read()
+            .await
+            .phone_readiness_snapshots()
+        {
+            if let Some(conn) = self.connections.read().await.get(&connection_id) {
+                conn.enqueue(WebSocketMessage::Event {
+                    topic: "phone.session.ready".to_string(),
+                    data: ready,
+                    server_timestamp_ms: None,
+                });
+            }
         }
 
         if let Some(active_app) = self.app_ready_registry.read().await.active() {
@@ -1855,8 +1910,17 @@ impl WebSocketServer {
             let mut registry = self.app_ready_registry.write().await;
             registry.register(route, source_peer, data.clone());
             let route_key = route.unwrap_or(UNSCOPED_APP_ROUTE);
-            if !registry.is_active(route_key) {
-                debug!(route = route_key, "Ignoring app.ready from non-active app connection");
+            let is_active = registry.is_active(route_key);
+            drop(registry);
+            if let Some(ready) = phone_session_ready(&data, route, source_peer) {
+                self.send_event_to_clients("phone.session.ready".to_string(), ready)
+                    .await;
+            }
+            if !is_active {
+                debug!(
+                    route = route_key,
+                    "Ignoring app.ready from non-active app connection"
+                );
                 return;
             }
         } else if let Some(route) = route {
@@ -2373,6 +2437,32 @@ mod tests {
     }
 
     #[test]
+    fn phone_readiness_requires_scoped_phone_identity() {
+        let phone = serde_json::json!({ "platform": "android", "device": "spoofed" });
+        let peer = "D8:3A:DD:31:B0:49";
+        assert_eq!(
+            phone_session_ready(&phone, Some("spp:phone"), Some(peer)),
+            Some(serde_json::json!({ "device": peer, "platform": "android" }))
+        );
+        for (route, source) in [
+            (None, Some(peer)),
+            (Some(UNSCOPED_APP_ROUTE), Some(peer)),
+            (Some("spp:phone"), None),
+            (Some("spp:phone"), Some("")),
+            (Some("spp:phone"), Some("invalid")),
+        ] {
+            assert!(phone_session_ready(&phone, route, source).is_none());
+        }
+        for platform in ["windows", "macos"] {
+            let connector = serde_json::json!({ "platform": "web", "connectorPlatform": platform });
+            assert!(phone_session_ready(&connector, Some("spp:desktop"), Some(peer)).is_none());
+            let mislabeled =
+                serde_json::json!({ "platform": "android", "connectorPlatform": platform });
+            assert!(phone_session_ready(&mislabeled, Some("spp:desktop"), Some(peer)).is_none());
+        }
+    }
+
+    #[test]
     fn app_ready_registry_windows_route_preference_scenarios() {
         let mut registry = AppReadyRegistry::default();
 
@@ -2406,7 +2496,9 @@ mod tests {
             Some("50:F2:65:EB:36:E1"),
             serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
         );
-        let active = registry.active().expect("Win1 stays active when Mac sends app.ready");
+        let active = registry
+            .active()
+            .expect("Win1 stays active when Mac sends app.ready");
         assert_eq!(active.route.as_deref(), Some("spp:win1"));
 
         // 5. Win1 disconnects -> newest surviving Mac/legacy route promoted.
@@ -2559,6 +2651,27 @@ mod tests {
             )
             .await;
 
+        for _ in 0..2 {
+            let WebSocketMessage::Event { topic, data, .. } = ws_rx.recv().await.unwrap() else {
+                panic!("expected phone readiness");
+            };
+            assert_eq!(topic, "phone.session.ready");
+            assert_eq!(
+                data,
+                serde_json::json!({ "device": android_peer, "platform": "android" })
+            );
+        }
+
+        assert_eq!(
+            server
+                .app_ready_registry
+                .read()
+                .await
+                .phone_readiness_snapshots()
+                .len(),
+            1
+        );
+
         // Test 1: Windows active + Android connected -> phone RPC targets Android SPP route
         // Test 4: Multiple Android SPP routes -> newest valid route selected
         {
@@ -2586,6 +2699,15 @@ mod tests {
                 "iap2:A8:AB:B5:AB:02:ED"
             );
         }
+
+        let WebSocketMessage::Event { topic, data, .. } = ws_rx.recv().await.unwrap() else {
+            panic!("expected iOS readiness");
+        };
+        assert_eq!(topic, "phone.session.ready");
+        assert_eq!(
+            data,
+            serde_json::json!({ "device": ios_peer, "platform": "ios" })
+        );
 
         // Test 3: Windows active + Android/iOS phone-call events -> events reach UI without changing active Windows ownership
         server
