@@ -2786,4 +2786,79 @@ mod tests {
             "inactive media event must be suppressed when Windows is active"
         );
     }
+
+    #[tokio::test]
+    async fn windows_disconnect_emits_surviving_mac_or_explicit_offline_event() {
+        let (app_tx, _app_rx) = mpsc::unbounded_channel();
+        let server = Arc::new(WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        ));
+
+        let (ws_tx, mut ws_rx) = mpsc::channel(10);
+        let disconnect = CancellationToken::new();
+        server.connections.write().await.insert(
+            "ws-1".to_string(),
+            WebSocketConnection {
+                id: "ws-1".to_string(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx: ws_tx,
+                disconnect,
+            },
+        );
+
+        // 1. Register Mac route
+        server
+            .broadcast_event_from_route(
+                "app.ready".to_string(),
+                serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
+                Some("spp:mac"),
+                Some("50:F2:65:EB:36:E1"),
+            )
+            .await;
+        let msg = ws_rx.recv().await.expect("Mac app.ready received");
+        if let WebSocketMessage::Event { topic, data, .. } = msg {
+            assert_eq!(topic, "app.ready");
+            assert_eq!(data["connectorPlatform"], "macos");
+        }
+
+        // 2. Register Windows route -> Windows becomes active
+        server
+            .broadcast_event_from_route(
+                "app.ready".to_string(),
+                serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
+                Some("spp:win"),
+                Some("11:22:33:44:55:66"),
+            )
+            .await;
+        let msg = ws_rx.recv().await.expect("Windows app.ready received");
+        if let WebSocketMessage::Event { topic, data, .. } = msg {
+            assert_eq!(topic, "app.ready");
+            assert_eq!(data["connectorPlatform"], "windows");
+        }
+
+        // 3. Disconnect Windows -> Mac promoted directly without intermediate offline event
+        server.clear_app_ready_for_route("spp:win").await;
+        let msg = ws_rx
+            .recv()
+            .await
+            .expect("Mac promoted app.ready received");
+        if let WebSocketMessage::Event { topic, data, .. } = msg {
+            assert_eq!(topic, "app.ready");
+            assert_eq!(data["connectorPlatform"], "macos");
+        } else {
+            panic!("expected Mac app.ready event");
+        }
+
+        // 4. Disconnect Mac -> explicit offline event (ready: false) emitted
+        server.clear_app_ready_for_route("spp:mac").await;
+        let msg = ws_rx.recv().await.expect("offline app.ready received");
+        if let WebSocketMessage::Event { topic, data, .. } = msg {
+            assert_eq!(topic, "app.ready");
+            assert_eq!(data["ready"], false);
+        } else {
+            panic!("expected offline app.ready event");
+        }
+    }
 }
