@@ -335,6 +335,12 @@ volumePercent
 muted
 ```
 
+- Windows-only RPCs reject Mac/phone ownership.
+- Windows volume events never alter phone/Spotify volume state.
+- Only active Windows routes can publish Windows volume.
+- Unknown/unsupported/malformed responses cannot create fake state.
+- Stale, overlapping, or disconnected-session RPC results cannot overwrite current volume/mute state.
+
 ## First UI
 
 Start with a small Windows Volume screen or test control.
@@ -348,6 +354,8 @@ Show:
 - increase
 - mute/unmute
 - unavailable/offline state
+
+Ensure the screen is accessible with functioning back navigation.
 
 ## Behavior
 
@@ -364,13 +372,15 @@ When Windows becomes active again:
 
 ## Acceptance Criteria
 
-From Car Thing:
-
-- read Windows volume
-- change Windows volume
-- mute/unmute
-- receive external Windows volume changes
-- recover cleanly across Windows disconnect/reconnect
+- Windows-only RPCs reject Mac/phone ownership.
+- Windows volume events never alter phone/Spotify volume state.
+- Only active Windows routes can publish Windows volume.
+- Unknown/unsupported/malformed responses cannot create fake state.
+- Stale, overlapping, or disconnected-session RPC results cannot overwrite current volume/mute state.
+- Screen is accessible with functioning back navigation.
+- Automated tests cover actual routing, RPC lifecycle, and UI state.
+- Physical validation verifies external Windows volume changes, mute, and reconnect.
+- From Car Thing: read Windows volume, change Windows volume, mute/unmute, receive external Windows volume changes, and recover cleanly across Windows disconnect/reconnect.
 
 ---
 
@@ -385,6 +395,14 @@ The active Windows Connector must expose stable Windows system-media state/event
 Create a dedicated Windows Media experience on Car Thing.
 
 Do not replace Spotify Now Playing.
+
+## Requirements & Behavior
+
+- Keep Windows GSMTC media independent of Spotify/phone Now Playing.
+- Verify linked versus unlinked/skipped Spotify behavior.
+- Clear stale sessions, metadata, artwork, and timeline on source loss.
+- Safely handle unavailable artwork and unsupported controls.
+- Test browser media, native player media, and reconnection.
 
 ## Display
 
@@ -408,8 +426,6 @@ Use available RPC for:
 
 Only add controls supported reliably by the Connector.
 
-## Behavior
-
 When Windows becomes unavailable:
 
 ```text
@@ -421,11 +437,12 @@ Do not crash or fall back to fake data.
 
 ## Acceptance Criteria
 
-Works with at least:
-
-- browser media
-- a Windows media player
-- supported Spotify desktop/system-media behavior
+- Keep Windows GSMTC media independent of Spotify/phone Now Playing.
+- Verify linked versus unlinked/skipped Spotify behavior.
+- Clear stale sessions, metadata, artwork, and timeline on source loss.
+- Handle unavailable artwork and unsupported controls safely.
+- Test browser media, native player media, and reconnection.
+- Works with at least browser media, a Windows media player, and supported Spotify desktop/system-media behavior.
 
 ---
 
@@ -433,13 +450,21 @@ Works with at least:
 
 ## Prerequisite
 
-Connector capability metadata must be available.
+Connector capability metadata must be available. Note that Connector exposes `connector.capabilities`, but current daemon `app.ready` normalization drops its `capabilities` field.
 
 ## Goal
 
 Restore the useful parts of the old Host Status UI using native Connector state.
 
 Do not restore HostBridge.
+
+## Requirements
+
+- Require a verified device-side capability contract, preferably querying the authoritative Connector RPC and preserving handshake metadata only if needed.
+- Refresh when ownership or actual availability changes.
+- Unknown and unsupported features are never falsely advertised as available.
+- Offline/fallback status clears stale Windows capabilities.
+- Consume existing daemon/Connector metadata without direct network connection.
 
 ## Display
 
@@ -466,16 +491,13 @@ Offline
 Using fallback Connector
 ```
 
-## Requirements
-
-- consume existing daemon/Connector metadata
-- no direct network connection
-- no fake capabilities
-- only mark capabilities available when advertised
-
 ## Acceptance Criteria
 
-Status updates correctly as Windows connects, disconnects, or gains additional supported features.
+- Connector exposes `connector.capabilities`, but current daemon `app.ready` normalization drops its `capabilities` field; require a verified device-side capability contract, preferably querying the authoritative Connector RPC and preserving handshake metadata only if needed.
+- Refresh when ownership or actual availability changes.
+- Unknown and unsupported are never falsely advertised as available.
+- Offline/fallback status clears stale Windows capabilities.
+- Status updates correctly as Windows connects, disconnects, or gains additional supported features.
 
 ---
 
@@ -540,15 +562,21 @@ windows.media.next
 
 ## Requirements
 
-- preserve existing Nocturne defaults
-- mappings are explicit/configurable
-- unavailable Windows actions fail gracefully
-- no arbitrary remote shell commands
-- do not globally change knob behavior until mappings exist
+- Explicit configurable actions with safe defaults and persistence.
+- Defined handling for conflicting assignments.
+- Preserve original physical controls unless deliberately remapped.
+- Windows actions do not execute against fallback routes.
+- Unavailable Windows actions fail gracefully.
+- No arbitrary remote shell commands.
+- Do not globally change knob behavior until mappings exist.
 
 ## Acceptance Criteria
 
-At least one device action and one Windows action can be mapped safely.
+- Explicit configurable actions with safe defaults and persistence.
+- Defined handling for conflicting assignments.
+- Preserve original physical controls unless deliberately remapped.
+- Windows actions do not execute against fallback routes.
+- At least one device action and one Windows action can be mapped safely.
 
 ---
 
@@ -556,7 +584,7 @@ At least one device action and one Windows action can be mapped safely.
 
 ## Prerequisite
 
-Connector Discord RPC/state must already be stable.
+Connector Discord RPC/state must already be stable. Note that Connector currently reports `state_known: false`, with nullable mute/deafen.
 
 ## Goal
 
@@ -579,13 +607,19 @@ Initial controls:
 
 ## Requirements
 
-- consume Connector-provided state only
-- Discord unavailable must not affect other Windows features
-- reconnect cleanly when Discord restarts
+- Connector currently reports `state_known: false`, with nullable mute/deafen.
+- The UI must never fabricate actual mute/deafen state.
+- Toggle actions communicate unknown outcomes appropriately.
+- Discord failure/restart cannot affect other functions.
+- Consume Connector-provided state only.
+- Reconnect cleanly when Discord restarts.
 
 ## Acceptance Criteria
 
-Discord controls work without affecting Spotify, media, volume, or Connector routing.
+- Connector currently reports `state_known: false`, with nullable mute/deafen; the UI must never fabricate actual mute/deafen state.
+- Toggle actions communicate unknown outcomes appropriately.
+- Discord failure/restart cannot affect other functions.
+- Discord controls work without affecting Spotify, media, volume, or Connector routing.
 
 ---
 
@@ -675,6 +709,7 @@ Test:
 - Windows feature RPC returning unsupported
 - malformed responses/events
 - active capability disappearing
+- mixed Connector/daemon versions, failed RPCs, malformed events, rapid handoffs, clean reboot, and redeployment
 
 ## Core Invariant
 
@@ -685,6 +720,12 @@ core Nocturne failure
 ```
 
 Spotify and device-native functionality must remain usable whenever an appropriate fallback Connector exists.
+
+## Acceptance Criteria
+
+- Test matrix includes mixed Connector/daemon versions, failed RPCs, malformed events, rapid handoffs, clean reboot, and redeployment.
+- Confirm Spotify, phone, and core Nocturne functionality remain intact.
+- Require a final no-USB physical end-to-end regression.
 
 ---
 
@@ -737,7 +778,7 @@ Do not skip ahead when a later sprint depends on device-side state or RPC introd
 
 ---
 
-# Jules Rules
+# General Rules & Jules Rules
 
 For every My-Turne sprint:
 
@@ -753,3 +794,5 @@ For every My-Turne sprint:
 10. If a required Connector RPC does not exist yet, stop that sprint rather than implementing it in this repo.
 11. Do not create placeholder/fake Windows data.
 12. Keep each PR easy to review and merge independently.
+13. Each feature sprint must verify its real cross-repository RPC/event contract and include focused tests for ownership, unavailable state, and reconnect behavior. Physical hardware validation is required where relevant.
+14. Do not mark any sprint complete without verified evidence. Keep AC concise and measurable.
