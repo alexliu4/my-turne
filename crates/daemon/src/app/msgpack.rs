@@ -2035,27 +2035,54 @@ impl MsgPackProtocolHandler {
                 }
 
                 if method == "device.volume.update" {
-                    let request = DeviceVolumeUpdateRequest {
-                        volume_percent: params
-                            .get("volume_percent")
-                            .or_else(|| params.get("volumePercent"))
-                            .and_then(|v| v.as_u64())
-                            .and_then(|v| u8::try_from(v).ok())
-                            .unwrap_or(0),
-                    };
+                    let volume_percent = params
+                        .get("volume_percent")
+                        .or_else(|| params.get("volumePercent"))
+                        .and_then(|v| v.as_u64())
+                        .and_then(|v| u8::try_from(v).ok())
+                        .unwrap_or(0);
 
-                    info!("Received phone volume update: {}%", request.volume_percent);
+                    let muted = params.get("muted").and_then(|v| v.as_bool());
+
+                    info!("Received volume update: {}% (muted={:?})", volume_percent, muted);
 
                     if let Some(ws_server) = &self.websocket_server {
-                        let volume_data = media_control_payload(phone_volume_update_event(
-                            request.volume_percent,
+                        let route = self.connection_route.as_deref();
+                        let source_peer = self.connection_peer.map(|peer| peer.to_string());
+
+                        let phone_volume_data = media_control_payload(phone_volume_update_event(
+                            volume_percent,
                         ));
+
+                        let mut win_volume_data = serde_json::json!({
+                            "volume_percent": volume_percent,
+                            "volumePercent": volume_percent,
+                        });
+                        if let Some(m) = muted {
+                            win_volume_data["muted"] = serde_json::Value::Bool(m);
+                        }
 
                         tokio::spawn({
                             let ws_server = Arc::clone(ws_server);
+                            let route = route.map(ToOwned::to_owned);
+                            let source_peer = source_peer.clone();
                             async move {
                                 ws_server
-                                    .broadcast_event("phone.volume.update".to_string(), volume_data)
+                                    .broadcast_event_from_route(
+                                        "phone.volume.update".to_string(),
+                                        phone_volume_data,
+                                        route.as_deref(),
+                                        source_peer.as_deref(),
+                                    )
+                                    .await;
+
+                                ws_server
+                                    .broadcast_event_from_route(
+                                        "volume.update".to_string(),
+                                        win_volume_data,
+                                        route.as_deref(),
+                                        source_peer.as_deref(),
+                                    )
                                     .await;
                             }
                         });

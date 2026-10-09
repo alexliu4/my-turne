@@ -34,7 +34,7 @@ import {
 } from "../../hooks/useNocturned";
 import { useSubscription } from "../../hooks/useSubscription";
 
-type SettingAction = "factoryReset" | "signOut" | "openDonation";
+type SettingAction = "factoryReset" | "signOut" | "openDonation" | "openWindowsVolume";
 interface SettingBase {
   id: string;
   title?: string;
@@ -174,6 +174,13 @@ const settingsStructure: Record<string, SettingsSection> = {
         storageKey: "nativeNotificationsEnabled",
         defaultValue: true,
         requiresDirectPhone: true,
+      },
+      {
+        id: "windows-volume-screen",
+        title: "Windows Volume",
+        type: "action",
+        description: "Control desktop Windows system volume and mute state.",
+        action: "openWindowsVolume",
       },
       {
         id: "factory-reset",
@@ -425,6 +432,9 @@ export default function Settings({
         break;
       case "openDonation":
         onOpenDonationModal();
+        break;
+      case "openWindowsVolume":
+        setActiveSection("windowsVolume");
         break;
     }
   };

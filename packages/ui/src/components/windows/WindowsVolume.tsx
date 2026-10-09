@@ -68,7 +68,11 @@ export function WindowsVolume({
               <VolumeLoudIcon className="w-10 h-10 text-green-400" />
             )}
             <span className="text-5xl font-extrabold tracking-tight">
-              {muted ? "Muted" : `${volumePercent}%`}
+              {muted
+                ? "Muted"
+                : volumePercent !== null && volumePercent !== undefined
+                ? `${volumePercent}%`
+                : "--%"}
             </span>
           </div>
 
@@ -77,7 +81,9 @@ export function WindowsVolume({
               className={`h-full transition-all duration-150 ${
                 muted ? "bg-red-500/50" : "bg-green-500"
               }`}
-              style={{ width: `${volumePercent}%` }}
+              style={{
+                width: `${volumePercent !== null && volumePercent !== undefined ? volumePercent : 0}%`,
+              }}
             />
           </div>
 
