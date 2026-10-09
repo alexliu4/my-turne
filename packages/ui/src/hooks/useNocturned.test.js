@@ -3,6 +3,7 @@ import deviceWireSnapshot from "../../test/wire_snapshots/device.json";
 import {
   completePendingBtReconnectOnAppReady,
   createBluetoothDiscoveryCoordinator,
+  getAppReadyState,
   getBtReconnectState,
   getWsRequestError,
   getBluetoothPairingUiUpdate,
@@ -32,6 +33,13 @@ const deferred = () => {
   });
   return { promise, resolve, reject };
 };
+
+describe("AppReadyState connector platform", () => {
+  it("includes connectorPlatform in initial AppReadyState", () => {
+    const state = getAppReadyState();
+    expect(state).toHaveProperty("connectorPlatform");
+  });
+});
 
 describe("phone network status", () => {
   it("normalizes explicit phone connectivity states", () => {

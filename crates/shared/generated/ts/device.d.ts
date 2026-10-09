@@ -41,6 +41,10 @@ export interface AmbientLightUpdateEventMessage {
  */
 export interface AppReadyEvent {
   /**
+   * Desktop companion platform identifier (windows or macos). Inventory field `connector_platform` emits as `connectorPlatform`. Current source key: `connectorPlatform`.
+   */
+  connectorPlatform?: string;
+  /**
    * Phone datetime for daemon time sync. Inventory field `datetime` emits as `datetime`.
    */
   datetime?: string;

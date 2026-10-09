@@ -4,9 +4,10 @@ import { getErrorMessage } from "../utils/helpers";
 import type { BluetoothDevice, PairingRequest, WsMessage } from "../types";
 
 type Listener<T> = (state: T) => void;
-type AppReadyState = {
+export type AppReadyState = {
   ready: boolean;
   platform: string | null;
+  connectorPlatform: string | null;
   generation: number;
 };
 type SubscribedState = {
@@ -387,6 +388,7 @@ let wsInitialized = false;
 const pendingWsRequests = new Map<string, PendingWsRequest>();
 let appReady = false;
 let appReadyPlatform: string | null = null; // ios, android, web, or macos
+let appReadyConnectorPlatform: string | null = null; // windows, macos, or null
 let appReadyGeneration = 0;
 const appReadySubscribers = new Set<Listener<AppReadyState>>();
 let appSubscribed = true;
@@ -689,9 +691,10 @@ export const resetReconnectionExhausted = () => {
   reconnectionExhausted = false;
 };
 
-export const getAppReadyState = () => ({
+export const getAppReadyState = (): AppReadyState => ({
   ready: appReady,
   platform: appReadyPlatform,
+  connectorPlatform: appReadyConnectorPlatform,
   generation: appReadyGeneration,
 });
 
@@ -701,6 +704,7 @@ const emitAppReadyState = () => {
       listener({
         ready: appReady,
         platform: appReadyPlatform,
+        connectorPlatform: appReadyConnectorPlatform,
         generation: appReadyGeneration,
       });
     } catch (err) {
@@ -718,6 +722,7 @@ export const subscribeAppReadyState = (listener: Listener<AppReadyState>) => {
   listener({
     ready: appReady,
     platform: appReadyPlatform,
+    connectorPlatform: appReadyConnectorPlatform,
     generation: appReadyGeneration,
   });
 
@@ -1113,6 +1118,7 @@ const setupGlobalWebSocket = async () => {
 
       appReady = false;
       appReadyPlatform = null;
+      appReadyConnectorPlatform = null;
       emitAppReadyState();
       setPhoneNetworkStatus("unknown");
 
@@ -1150,6 +1156,12 @@ const setupGlobalWebSocket = async () => {
           /** @type {AppReadyEvent | undefined} */
           const readyData = data.data;
           const pendingPlatform = readyData?.platform || null;
+          const pendingConnectorPlatform =
+            typeof readyData?.connectorPlatform === "string"
+              ? readyData.connectorPlatform
+              : typeof readyData?.connector_platform === "string"
+                ? readyData.connector_platform
+                : null;
 
           setPhoneNetworkStatus("unknown");
 
@@ -1205,6 +1217,7 @@ const setupGlobalWebSocket = async () => {
             rememberActiveDevicePlatform(pendingPlatform);
             appReady = true;
             appReadyPlatform = pendingPlatform;
+            appReadyConnectorPlatform = pendingConnectorPlatform;
             appReadyGeneration += 1;
             emitAppReadyState();
           };
