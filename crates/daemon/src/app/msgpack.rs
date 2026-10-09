@@ -190,6 +190,7 @@ fn i64_field(data: &serde_json::Value, snake: &str, camel: &str) -> Option<i64> 
 fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
     let connector_platform = string_field(&data, "connector_platform", "connectorPlatform");
     let event = AppReadyEvent {
+        connector_platform: connector_platform.clone(),
         datetime: string_field(&data, "datetime", "datetime"),
         timestamp: u64_field(&data, "timestamp", "timestamp"),
         timezone: data.get("timezone").cloned(),

@@ -390,6 +390,7 @@ let appReady = false;
 let appReadyPlatform: string | null = null; // ios, android, web, or macos
 let appReadyConnectorPlatform: string | null = null; // windows, macos, or null
 let appReadyGeneration = 0;
+let latestAppReadyEventId = 0;
 const appReadySubscribers = new Set<Listener<AppReadyState>>();
 let appSubscribed = true;
 let appSubscriptionStatus: string | null = null;
@@ -910,6 +911,10 @@ export const cleanupGlobalWebSocket = () => {
   clearBtReconnectSettle();
   resetBtReconnectCycle();
   setPhoneNetworkStatus("unknown");
+  latestAppReadyEventId += 1;
+  appReady = false;
+  appReadyPlatform = null;
+  appReadyConnectorPlatform = null;
   if (globalWsRef) {
     globalWsRef.close(1000);
     globalWsRef = null;
@@ -1116,6 +1121,7 @@ const setupGlobalWebSocket = async () => {
       console.log("Disconnected from WebSocket");
       bluetoothDiscoveryCoordinator.disconnected();
 
+      latestAppReadyEventId += 1;
       appReady = false;
       appReadyPlatform = null;
       appReadyConnectorPlatform = null;
@@ -1153,8 +1159,21 @@ const setupGlobalWebSocket = async () => {
         const data = JSON.parse(event.data);
 
         if (data && data.type === "event" && data.topic === "app.ready") {
+          latestAppReadyEventId += 1;
+          const currentEventId = latestAppReadyEventId;
+
           /** @type {AppReadyEvent | undefined} */
           const readyData = data.data;
+
+          if (readyData?.ready === false || (!readyData?.platform && !readyData?.ready)) {
+            appReady = false;
+            appReadyPlatform = null;
+            appReadyConnectorPlatform = null;
+            appReadyGeneration += 1;
+            emitAppReadyState();
+            return;
+          }
+
           const pendingPlatform = readyData?.platform || null;
           const pendingConnectorPlatform =
             typeof readyData?.connectorPlatform === "string"
@@ -1199,6 +1218,9 @@ const setupGlobalWebSocket = async () => {
 
           const syncDeviceTime = async () => {
             while (true) {
+              if (latestAppReadyEventId !== currentEventId) {
+                return;
+              }
               try {
                 /** @type {import("@schema/device").DeviceTimeGetRequest} */
                 const request = {};
@@ -1207,11 +1229,18 @@ const setupGlobalWebSocket = async () => {
                 });
                 break;
               } catch (err) {
+                if (latestAppReadyEventId !== currentEventId) {
+                  return;
+                }
                 console.error("Failed to sync device time, retrying...", err);
                 await new Promise((resolve) =>
                   setTimeout(resolve, DEVICE_TIME_SYNC_RETRY_DELAY_MS),
                 );
               }
+            }
+
+            if (latestAppReadyEventId !== currentEventId) {
+              return;
             }
 
             rememberActiveDevicePlatform(pendingPlatform);

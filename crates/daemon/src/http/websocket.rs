@@ -1883,6 +1883,17 @@ impl WebSocketServer {
             );
             self.send_event_to_clients("app.ready".to_string(), active_app.data)
                 .await;
+        } else {
+            info!(route, "No surviving app connection after active route closed");
+            self.send_event_to_clients(
+                "app.ready".to_string(),
+                serde_json::json!({
+                    "ready": false,
+                    "platform": serde_json::Value::Null,
+                    "connectorPlatform": serde_json::Value::Null,
+                }),
+            )
+            .await;
         }
     }
 
