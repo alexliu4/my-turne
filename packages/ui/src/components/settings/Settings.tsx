@@ -34,7 +34,11 @@ import {
 } from "../../hooks/useNocturned";
 import { useSubscription } from "../../hooks/useSubscription";
 
-type SettingAction = "factoryReset" | "signOut" | "openDonation" | "openWindowsVolume";
+type SettingAction =
+  | "factoryReset"
+  | "signOut"
+  | "openDonation"
+  | "openWindowsVolume";
 interface SettingBase {
   id: string;
   title?: string;

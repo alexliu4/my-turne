@@ -372,9 +372,12 @@ struct AppReadyRegistry {
 
 impl AppReadyRegistry {
     fn is_windows_entry(entry: &AppReadyEntry) -> bool {
-        entry
-            .data
-            .get("connectorPlatform")
+        Self::is_windows_data(&entry.data)
+    }
+
+    fn is_windows_data(data: &serde_json::Value) -> bool {
+        data.get("connector_platform")
+            .or_else(|| data.get("connectorPlatform"))
             .and_then(serde_json::Value::as_str)
             .is_some_and(|platform| platform.eq_ignore_ascii_case("windows"))
     }
@@ -1793,6 +1796,16 @@ impl WebSocketServer {
                         .await;
                     return Ok(());
                 };
+                if matches!(
+                    canonical_music_method(&method),
+                    Some("volume.get" | "volume.set" | "volume.adjust" | "volume.toggle_mute")
+                ) && (active_app.route.is_none()
+                    || !AppReadyRegistry::is_windows_data(&active_app.data))
+                {
+                    self.send_error(id, "Windows volume control unavailable".to_string())
+                        .await;
+                    return Ok(());
+                }
                 let companion_platform = active_app
                     .data
                     .get("platform")
@@ -1926,6 +1939,54 @@ impl WebSocketServer {
         route: Option<&str>,
         source_peer: Option<&str>,
     ) {
+        let (topic, data) = if matches!(
+            topic.as_str(),
+            "device.volume.update" | "volume.update" | "volume.state" | "phone.volume.update"
+        ) {
+            let registry = self.app_ready_registry.read().await;
+            let route_key = route.unwrap_or(UNSCOPED_APP_ROUTE);
+            let Some(entry) = registry.entries.get(route_key) else {
+                return;
+            };
+            if !registry.is_active(route_key) {
+                return;
+            }
+            let windows = AppReadyRegistry::is_windows_entry(entry);
+            // Never let Windows events reach phone/Spotify subscribers or vice versa.
+            if (topic == "phone.volume.update" && windows)
+                || (matches!(topic.as_str(), "volume.update" | "volume.state") && !windows)
+            {
+                return;
+            }
+            if topic == "device.volume.update" {
+                let Some(volume) = data
+                    .get("volume_percent")
+                    .or_else(|| data.get("volumePercent"))
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|volume| *volume <= 100)
+                else {
+                    return;
+                };
+                let mut payload = serde_json::json!({ "volume_percent": volume });
+                if let Some(muted) = data.get("muted").and_then(serde_json::Value::as_bool) {
+                    payload["muted"] = serde_json::json!(muted);
+                }
+                (
+                    if windows {
+                        "volume.update"
+                    } else {
+                        "phone.volume.update"
+                    }
+                    .to_string(),
+                    payload,
+                )
+            } else {
+                (topic, data)
+            }
+        } else {
+            (topic, data)
+        };
+
         if topic == "app.ready" {
             let mut registry = self.app_ready_registry.write().await;
             registry.register(route, source_peer, data.clone());
@@ -2004,6 +2065,189 @@ impl WebSocketServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn volume_events_follow_registered_owner_through_msgpack() {
+        use crate::app::msgpack::{MsgPackMessage, MsgPackProtocolHandler};
+        let (app_tx, _) = mpsc::unbounded_channel();
+        let server = Arc::new(WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        ));
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        for (platform, connector, expected) in [
+            ("web", "windows", "volume.update"),
+            ("android", "", "phone.volume.update"),
+            ("ios", "", "phone.volume.update"),
+            ("web", "macos", "phone.volume.update"),
+            ("web", "", "phone.volume.update"),
+        ] {
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
+                    Some("spp:inactive"),
+                    None,
+                )
+                .await;
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connector_platform": connector,
+                    }),
+                    Some("spp:owner"),
+                    Some("11:22:33:44:55:66"),
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            for route in ["spp:owner", "spp:inactive", "spp:stale"] {
+                let mut handler = MsgPackProtocolHandler::new(Some(Arc::clone(&server)));
+                handler.set_connection_route(route.into());
+                let call = MsgPackMessage::Call {
+                    id: "volume".into(),
+                    method: "device.volume.update".into(),
+                    params: serde_json::json!({"volumePercent": 42, "muted": true}),
+                };
+                for chunk in
+                    MsgPackProtocolHandler::create_chunks(&rmp_serde::to_vec_named(&call).unwrap())
+                        .unwrap()
+                {
+                    handler
+                        .handle_message(AppMessage {
+                            id: "volume".into(),
+                            protocol: "com.usenocturne.daemon".into(),
+                            session_id: 1,
+                            priority: AppMessagePriority::Normal,
+                            data: chunk,
+                        })
+                        .await
+                        .unwrap();
+                }
+                if route == "spp:owner" {
+                    let WebSocketMessage::Event { topic, data, .. } = rx.try_recv().unwrap() else {
+                        panic!("expected event")
+                    };
+                    assert_eq!(topic, expected);
+                    assert_eq!(data["volume_percent"], 42);
+                    assert_eq!(data["muted"], true);
+                }
+                assert!(rx.try_recv().is_err(), "No duplicate or stale volume event");
+            }
+        }
+        server.clear_app_ready_for_route("spp:inactive").await;
+        server.clear_app_ready_for_route("spp:owner").await;
+        while rx.try_recv().is_ok() {}
+        server
+            .broadcast_event_from_route(
+                "device.volume.update".into(),
+                serde_json::json!({"volumePercent": 20}),
+                Some("spp:owner"),
+                None,
+            )
+            .await;
+        assert!(
+            rx.try_recv().is_err(),
+            "Closed route cannot publish after the last owner disconnects"
+        );
+    }
+
+    #[tokio::test]
+    async fn volume_rpcs_require_windows_and_pin_the_accepted_route() {
+        let (app_tx, mut app_rx) = mpsc::unbounded_channel();
+        let server = WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        );
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        for (platform, connector, route) in [
+            ("web", "macos", Some("spp:owner")),
+            ("android", "", Some("spp:owner")),
+            ("ios", "", Some("spp:owner")),
+            ("web", "windows", None),
+            ("web", "windows", Some("spp:owner")),
+        ] {
+            *server.app_ready_registry.write().await = AppReadyRegistry::default();
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connectorPlatform": connector,
+                    }),
+                    route,
+                    None,
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            for method in [
+                "volume.get",
+                "volume.set",
+                "volume.adjust",
+                "volume.toggleMute",
+                "volume.toggle_mute",
+            ] {
+                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": {}}).to_string()).await.unwrap();
+                if connector == "windows" && route.is_some() {
+                    // Promotion after acceptance must not change this request's target.
+                    server.clear_app_ready_for_route("spp:owner").await;
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "macos"}),
+                            Some("spp:mac"),
+                            None,
+                        )
+                        .await;
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                    assert_eq!(
+                        data["method"],
+                        if method == "volume.toggle_mute" {
+                            "volume.toggleMute"
+                        } else {
+                            method
+                        }
+                    );
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "windows"}),
+                            route,
+                            None,
+                        )
+                        .await;
+                    while rx.try_recv().is_ok() {}
+                } else {
+                    assert!(app_rx.try_recv().is_err());
+                    assert!(matches!(
+                        rx.try_recv().unwrap(),
+                        WebSocketMessage::Error { .. }
+                    ));
+                }
+            }
+        }
+    }
 
     #[tokio::test]
     async fn full_client_queue_disconnects_only_the_slow_client_and_preserves_order() {
@@ -2879,16 +3123,26 @@ mod tests {
     fn canonical_music_method_maps_volume_rpcs() {
         assert_eq!(canonical_music_method("volume.get"), Some("volume.get"));
         assert_eq!(canonical_music_method("volume.set"), Some("volume.set"));
-        assert_eq!(canonical_music_method("volume.adjust"), Some("volume.adjust"));
-        assert_eq!(canonical_music_method("volume.toggleMute"), Some("volume.toggle_mute"));
-        assert_eq!(canonical_music_method("volume.toggle_mute"), Some("volume.toggle_mute"));
+        assert_eq!(
+            canonical_music_method("volume.adjust"),
+            Some("volume.adjust")
+        );
+        assert_eq!(
+            canonical_music_method("volume.toggleMute"),
+            Some("volume.toggle_mute")
+        );
+        assert_eq!(
+            canonical_music_method("volume.toggle_mute"),
+            Some("volume.toggle_mute")
+        );
     }
 
     #[test]
     fn companion_music_request_translates_volume_toggle_mute_for_web_connector() {
-        let (method, _) = companion_music_request("volume.toggle_mute", serde_json::json!({}), Some("web"))
-            .expect("volume.toggle_mute should decode")
-            .expect("volume.toggle_mute should be recognized");
+        let (method, _) =
+            companion_music_request("volume.toggle_mute", serde_json::json!({}), Some("web"))
+                .expect("volume.toggle_mute should decode")
+                .expect("volume.toggle_mute should be recognized");
         assert_eq!(method, "volume.toggleMute");
     }
 }

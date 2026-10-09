@@ -534,7 +534,11 @@ fn normalize_media_control_event(
                             .min(100) as u8,
                     )
                 });
-            (topic, media_control_payload(event))
+            let mut payload = media_control_payload(event);
+            if let Some(muted) = data.get("muted").and_then(serde_json::Value::as_bool) {
+                payload["muted"] = serde_json::json!(muted);
+            }
+            (topic, payload)
         }
         _ => (topic, data),
     }
@@ -1790,7 +1794,10 @@ impl MsgPackProtocolHandler {
         if actual_checksum != expected_checksum {
             warn!(
                 "Chunk {}/{} checksum mismatch: expected 0x{:08x}, got 0x{:08x}, requesting retransmission",
-                chunk_idx + 1, total_chunks, expected_checksum, actual_checksum
+                chunk_idx + 1,
+                total_chunks,
+                expected_checksum,
+                actual_checksum
             );
             self.request_chunk_retransmission(&message_id, chunk_idx)
                 .await?;
@@ -2035,57 +2042,17 @@ impl MsgPackProtocolHandler {
                 }
 
                 if method == "device.volume.update" {
-                    let volume_percent = params
-                        .get("volume_percent")
-                        .or_else(|| params.get("volumePercent"))
-                        .and_then(|v| v.as_u64())
-                        .and_then(|v| u8::try_from(v).ok())
-                        .unwrap_or(0);
-
-                    let muted = params.get("muted").and_then(|v| v.as_bool());
-
-                    info!("Received volume update: {}% (muted={:?})", volume_percent, muted);
-
+                    // The route registry, not companion-supplied metadata, owns classification.
                     if let Some(ws_server) = &self.websocket_server {
-                        let route = self.connection_route.as_deref();
                         let source_peer = self.connection_peer.map(|peer| peer.to_string());
-
-                        let phone_volume_data = media_control_payload(phone_volume_update_event(
-                            volume_percent,
-                        ));
-
-                        let mut win_volume_data = serde_json::json!({
-                            "volume_percent": volume_percent,
-                            "volumePercent": volume_percent,
-                        });
-                        if let Some(m) = muted {
-                            win_volume_data["muted"] = serde_json::Value::Bool(m);
-                        }
-
-                        tokio::spawn({
-                            let ws_server = Arc::clone(ws_server);
-                            let route = route.map(ToOwned::to_owned);
-                            let source_peer = source_peer.clone();
-                            async move {
-                                ws_server
-                                    .broadcast_event_from_route(
-                                        "phone.volume.update".to_string(),
-                                        phone_volume_data,
-                                        route.as_deref(),
-                                        source_peer.as_deref(),
-                                    )
-                                    .await;
-
-                                ws_server
-                                    .broadcast_event_from_route(
-                                        "volume.update".to_string(),
-                                        win_volume_data,
-                                        route.as_deref(),
-                                        source_peer.as_deref(),
-                                    )
-                                    .await;
-                            }
-                        });
+                        ws_server
+                            .broadcast_event_from_route(
+                                "device.volume.update".to_string(),
+                                params,
+                                self.connection_route.as_deref(),
+                                source_peer.as_deref(),
+                            )
+                            .await;
                     }
 
                     return Ok(Some(MsgPackMessage::Result {
@@ -2170,7 +2137,10 @@ impl MsgPackProtocolHandler {
                                         url_clone, e
                                     );
                                 } else {
-                                    info!("IMAGE_RESPONSE: Successfully cached image for {} ({} bytes base64)", url_clone, data_len);
+                                    info!(
+                                        "IMAGE_RESPONSE: Successfully cached image for {} ({} bytes base64)",
+                                        url_clone, data_len
+                                    );
                                 }
                             });
                         } else {
@@ -2178,7 +2148,10 @@ impl MsgPackProtocolHandler {
                         }
                     }
                 } else if !id.is_empty() && result.get("data").is_some() {
-                    warn!("IMAGE_RESPONSE: Received result with 'data' field but request {} not tracked as image request!", id);
+                    warn!(
+                        "IMAGE_RESPONSE: Received result with 'data' field but request {} not tracked as image request!",
+                        id
+                    );
                 }
 
                 if self.websocket_message_ids.contains(&id) {
@@ -2191,7 +2164,10 @@ impl MsgPackProtocolHandler {
                             let ws_server = Arc::clone(ws_server);
                             let request_id = id.clone();
                             async move {
-                                info!("ROUTE_TO_WEBSOCKET: Sending response for request {} to WebSocket clients", request_id);
+                                info!(
+                                    "ROUTE_TO_WEBSOCKET: Sending response for request {} to WebSocket clients",
+                                    request_id
+                                );
                                 ws_server.send_response(request_id, result).await;
                             }
                         });

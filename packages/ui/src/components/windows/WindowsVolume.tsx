@@ -13,9 +13,18 @@ export function WindowsVolume({
     muted,
     isLoading,
     error,
+    isUnsupported,
+    refreshVolume,
     adjustVolume,
     toggleMute,
   } = useWindowsVolume();
+
+  const unavailable =
+    isLoading ||
+    isUnsupported ||
+    error !== null ||
+    volumePercent === null ||
+    muted === null;
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 select-none p-6 relative overflow-hidden rounded-2xl">
@@ -56,7 +65,8 @@ export function WindowsVolume({
             Windows Inactive
           </h2>
           <p className="text-sm text-zinc-400 max-w-sm">
-            Windows PC is offline or not selected as active Connector. Controls are safely disabled.
+            Windows PC is offline or not selected as active Connector. Controls
+            are safely disabled.
           </p>
         </div>
       ) : (
@@ -71,8 +81,8 @@ export function WindowsVolume({
               {muted
                 ? "Muted"
                 : volumePercent !== null && volumePercent !== undefined
-                ? `${volumePercent}%`
-                : "--%"}
+                  ? `${volumePercent}%`
+                  : "--%"}
             </span>
           </div>
 
@@ -91,7 +101,7 @@ export function WindowsVolume({
             <button
               type="button"
               onClick={() => adjustVolume(-5)}
-              disabled={isLoading}
+              disabled={unavailable}
               className="px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 font-semibold text-lg transition disabled:opacity-50"
               aria-label="Decrease Volume"
             >
@@ -101,7 +111,7 @@ export function WindowsVolume({
             <button
               type="button"
               onClick={toggleMute}
-              disabled={isLoading}
+              disabled={unavailable}
               className={`px-6 py-3 rounded-xl font-semibold text-lg transition border border-zinc-700 disabled:opacity-50 ${
                 muted
                   ? "bg-red-600/30 text-red-200 hover:bg-red-600/40"
@@ -115,7 +125,7 @@ export function WindowsVolume({
             <button
               type="button"
               onClick={() => adjustVolume(5)}
-              disabled={isLoading}
+              disabled={unavailable}
               className="px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 font-semibold text-lg transition disabled:opacity-50"
               aria-label="Increase Volume"
             >
@@ -123,10 +133,29 @@ export function WindowsVolume({
             </button>
           </div>
 
-          {error && (
-            <p className="mt-4 text-xs text-red-400 font-medium">
-              {error}
+          {isUnsupported && (
+            <p className="mt-4 text-sm text-zinc-400">
+              Volume control is unsupported.
             </p>
+          )}
+          {!isUnsupported && !error && volumePercent === null && (
+            <p className="mt-4 text-sm text-zinc-400">
+              {isLoading ? "Loading volume..." : "Volume unknown"}
+            </p>
+          )}
+          {error && (
+            <p className="mt-4 text-xs text-red-400 font-medium">{error}</p>
+          )}
+          {(error || isUnsupported) && (
+            <button
+              type="button"
+              onClick={refreshVolume}
+              disabled={isLoading}
+              className="mt-4 p-2"
+              aria-label="Retry volume"
+            >
+              Retry
+            </button>
           )}
         </div>
       )}

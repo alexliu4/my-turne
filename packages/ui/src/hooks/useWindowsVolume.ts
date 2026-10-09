@@ -1,354 +1,170 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useWindowsConnector } from "./useWindowsConnector";
+import { getWindowsConnectorState } from "./useWindowsConnector";
 import {
   sendNocturneWsRequest,
   addGlobalWsListener,
   getAppReadyState,
+  subscribeAppReadyState,
 } from "./useNocturned";
 
 export type WindowsVolumeState = {
-  /**
-   * Confirmed volume percentage 0..100, or null when unknown/unconfirmed.
-   */
   volumePercent: number | null;
-  /**
-   * Confirmed mute status, or null when unknown/unconfirmed.
-   */
   muted: boolean | null;
-  /** True when a volume RPC request is currently in-flight. */
   isLoading: boolean;
-  /** True when the active Connector reports volume control as unsupported. */
   isUnsupported: boolean;
-  /** Human-readable error string if the last operation failed. */
   error: string | null;
 };
 
-export function parseVolumeUpdate(payload: unknown): {
-  volumePercent?: number;
-  muted?: boolean;
-  status?: string;
-  isUnsupported?: boolean;
-} {
-  if (!payload || typeof payload !== "object") return {};
+const unknownState: WindowsVolumeState = {
+  volumePercent: null,
+  muted: null,
+  isLoading: false,
+  isUnsupported: false,
+  error: null,
+};
+
+function confirmedVolume(payload: unknown, action = false) {
+  if (!payload || typeof payload !== "object") return null;
   const obj = payload as Record<string, unknown>;
-
-  const status = typeof obj.status === "string" ? obj.status.toLowerCase() : undefined;
-  const isUnsupported = status === "unsupported" || obj.error === "unsupported";
-
-  const rawVol = obj.volumePercent ?? obj.volume_percent;
-  let volumePercent: number | undefined;
-  if (typeof rawVol === "number" && Number.isFinite(rawVol)) {
-    volumePercent = Math.max(0, Math.min(100, Math.round(rawVol)));
-  }
-
-  const muted = typeof obj.muted === "boolean" ? obj.muted : undefined;
-
-  return { volumePercent, muted, status, isUnsupported };
+  const volume = obj.volumePercent ?? obj.volume_percent;
+  if (
+    obj.error != null ||
+    (action
+      ? obj.status !== "ok"
+      : obj.status != null && obj.status !== "ok") ||
+    typeof volume !== "number" ||
+    !Number.isFinite(volume) ||
+    volume < 0 ||
+    volume > 100 ||
+    typeof obj.muted !== "boolean"
+  )
+    return null;
+  return { volumePercent: volume, muted: obj.muted };
 }
 
 export function useWindowsVolume() {
-  const { isWindowsActive } = useWindowsConnector();
+  const [appReady, setAppReady] = useState(getAppReadyState);
+  const { isWindowsActive } = getWindowsConnectorState(appReady);
+  const [state, setState] = useState(unknownState);
+  const revision = useRef(0);
+  const pending = useRef<{ generation: number; revision: number } | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-  const [volumeState, setVolumeState] = useState<WindowsVolumeState>({
-    volumePercent: null,
-    muted: null,
-    isLoading: false,
-    isUnsupported: false,
-    error: null,
-  });
+  useEffect(() => subscribeAppReadyState(setAppReady), []);
 
-  const isWindowsActiveRef = useRef(isWindowsActive);
-  useEffect(() => {
-    isWindowsActiveRef.current = isWindowsActive;
-  }, [isWindowsActive]);
-
-  // Generation counter to discard stale RPC responses across route changes / disconnects
-  const currentGenerationRef = useRef<number>(getAppReadyState().generation);
-
-  const refreshVolume = useCallback(async () => {
-    const currentGen = getAppReadyState().generation;
-    currentGenerationRef.current = currentGen;
-
-    if (!isWindowsActiveRef.current) return;
-
-    setVolumeState((prev) => ({
-      ...prev,
-      isLoading: true,
-      error: null,
-    }));
-
-    try {
-      const response = await sendNocturneWsRequest<Record<string, unknown>>(
-        "volume.get",
-        {},
-        { timeoutMs: 3000 }
-      );
-
-      // Verify active session generation hasn't changed while request was in-flight
+  const request = useCallback(
+    async (method: string, params: Record<string, unknown>) => {
+      const ready = getAppReadyState();
+      if (!getWindowsConnectorState(ready).isWindowsActive || pending.current)
+        return;
       if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
+        method !== "volume.get" &&
+        (stateRef.current.volumePercent === null ||
+          stateRef.current.muted === null ||
+          stateRef.current.isUnsupported ||
+          stateRef.current.error)
+      )
         return;
-      }
 
-      const parsed = parseVolumeUpdate(response);
-
-      if (parsed.isUnsupported) {
-        setVolumeState((prev) => ({
-          ...prev,
-          isLoading: false,
-          isUnsupported: true,
-          error: null,
-        }));
-        return;
-      }
-
-      setVolumeState((prev) => ({
-        ...prev,
-        volumePercent: parsed.volumePercent ?? prev.volumePercent,
-        muted: parsed.muted ?? prev.muted,
-        isLoading: false,
-        isUnsupported: false,
-        error: null,
-      }));
-    } catch (err: unknown) {
-      if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
-        return;
-      }
-
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      const isUnsupported = errorMsg.toLowerCase().includes("unsupported");
-
-      setVolumeState((prev) => ({
-        ...prev,
-        isLoading: false,
-        isUnsupported,
-        error: isUnsupported ? null : errorMsg,
-      }));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isWindowsActive) {
-      refreshVolume();
-    } else {
-      setVolumeState({
-        volumePercent: null,
-        muted: null,
-        isLoading: false,
-        isUnsupported: false,
-        error: null,
-      });
-    }
-  }, [isWindowsActive, refreshVolume]);
-
-  useEffect(() => {
-    const removeListener = addGlobalWsListener("windows-volume-listener", {
-      onMessage: (message) => {
-        if (!isWindowsActiveRef.current) return;
-        if (
-          message.type === "event" &&
-          (message.topic === "volume.update" ||
-            message.topic === "volume.state" ||
-            message.topic === "device.volume.update")
-        ) {
-          const parsed = parseVolumeUpdate(message.data);
-          if (parsed.volumePercent !== undefined || parsed.muted !== undefined) {
-            setVolumeState((prev) => ({
-              ...prev,
-              volumePercent: parsed.volumePercent ?? prev.volumePercent,
-              muted: parsed.muted ?? prev.muted,
-              isUnsupported: false,
-            }));
-          }
-        }
-      },
-    });
-    return () => {
-      removeListener();
-    };
-  }, []);
-
-  const setVolume = useCallback(
-    async (targetPercent: number) => {
-      if (!isWindowsActiveRef.current) return;
-      if (!Number.isFinite(targetPercent)) return;
-
-      const currentGen = getAppReadyState().generation;
-      const clamped = Math.max(0, Math.min(100, Math.round(targetPercent)));
-
-      setVolumeState((prev) => ({ ...prev, isLoading: true }));
-
+      const operation = {
+        generation: ready.generation,
+        revision: revision.current,
+      };
+      pending.current = operation;
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      const isCurrent = () =>
+        pending.current === operation &&
+        getAppReadyState().generation === operation.generation &&
+        getWindowsConnectorState(getAppReadyState()).isWindowsActive;
       try {
-        const response = await sendNocturneWsRequest<Record<string, unknown>>(
-          "volume.set",
-          { volumePercent: clamped },
-          { timeoutMs: 3000 }
-        );
-
-        if (
-          !isWindowsActiveRef.current ||
-          getAppReadyState().generation !== currentGen
-        ) {
+        const response = await sendNocturneWsRequest<unknown>(method, params, {
+          timeoutMs: 3000,
+        });
+        if (!isCurrent() || revision.current !== operation.revision) return;
+        const obj =
+          response && typeof response === "object"
+            ? (response as Record<string, unknown>)
+            : null;
+        if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+          setState({ ...unknownState, isUnsupported: true });
           return;
         }
-
-        const parsed = parseVolumeUpdate(response);
-
-        if (parsed.isUnsupported) {
-          setVolumeState((prev) => ({
-            ...prev,
-            isLoading: false,
-            isUnsupported: true,
-          }));
-          return;
+        const confirmed = confirmedVolume(response, method !== "volume.get");
+        if (!confirmed)
+          throw new Error("Windows volume response is invalid or unavailable");
+        setState({ ...unknownState, ...confirmed });
+      } catch (error: unknown) {
+        if (!isCurrent() || revision.current !== operation.revision) return;
+        const message = error instanceof Error ? error.message : String(error);
+        const unsupported = message.toLowerCase().includes("unsupported");
+        setState({
+          ...unknownState,
+          isUnsupported: unsupported,
+          error: unsupported ? null : message,
+        });
+      } finally {
+        if (pending.current === operation) {
+          pending.current = null;
+          setState((prev) => ({ ...prev, isLoading: false }));
         }
-
-        setVolumeState((prev) => ({
-          ...prev,
-          volumePercent: parsed.volumePercent ?? clamped,
-          muted: parsed.muted ?? prev.muted,
-          isLoading: false,
-          isUnsupported: false,
-          error: null,
-        }));
-      } catch (err: unknown) {
-        if (
-          !isWindowsActiveRef.current ||
-          getAppReadyState().generation !== currentGen
-        ) {
-          return;
-        }
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        setVolumeState((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: errorMsg,
-        }));
       }
     },
-    []
+    [],
   );
 
-  const adjustVolume = useCallback(async (delta: number) => {
-    if (!isWindowsActiveRef.current) return;
-    if (!Number.isFinite(delta)) return;
+  const refreshVolume = useCallback(() => request("volume.get", {}), [request]);
 
-    const currentGen = getAppReadyState().generation;
-
-    setVolumeState((prev) => ({ ...prev, isLoading: true }));
-
-    try {
-      const response = await sendNocturneWsRequest<Record<string, unknown>>(
-        "volume.adjust",
-        { delta },
-        { timeoutMs: 3000 }
-      );
-
-      if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
-        return;
-      }
-
-      const parsed = parseVolumeUpdate(response);
-
-      if (parsed.isUnsupported) {
-        setVolumeState((prev) => ({
-          ...prev,
-          isLoading: false,
-          isUnsupported: true,
+  useEffect(() => {
+    setState(unknownState);
+    const generation = appReady.generation;
+    const removeListener = addGlobalWsListener("windows-volume-listener", {
+      onMessage: (message) => {
+        if (!isWindowsActive || getAppReadyState().generation !== generation)
+          return;
+        if (message.type !== "event" || message.topic !== "volume.update")
+          return;
+        const confirmed = confirmedVolume(message.data);
+        if (!confirmed) return;
+        revision.current++;
+        setState((prev) => ({
+          ...unknownState,
+          ...confirmed,
+          isLoading: prev.isLoading,
         }));
-        return;
-      }
+      },
+    });
+    if (isWindowsActive) void refreshVolume();
+    return () => {
+      removeListener();
+      revision.current++;
+      pending.current = null;
+    };
+  }, [appReady.generation, isWindowsActive, refreshVolume]);
 
-      setVolumeState((prev) => ({
-        ...prev,
-        volumePercent: parsed.volumePercent ?? prev.volumePercent,
-        muted: parsed.muted ?? prev.muted,
-        isLoading: false,
-        isUnsupported: false,
-        error: null,
-      }));
-    } catch (err: unknown) {
-      if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
-        return;
-      }
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setVolumeState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: errorMsg,
-      }));
-    }
-  }, []);
-
-  const toggleMute = useCallback(async () => {
-    if (!isWindowsActiveRef.current) return;
-
-    const currentGen = getAppReadyState().generation;
-
-    setVolumeState((prev) => ({ ...prev, isLoading: true }));
-
-    try {
-      const response = await sendNocturneWsRequest<Record<string, unknown>>(
-        "volume.toggleMute",
-        {},
-        { timeoutMs: 3000 }
-      );
-
-      if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
-        return;
-      }
-
-      const parsed = parseVolumeUpdate(response);
-
-      if (parsed.isUnsupported) {
-        setVolumeState((prev) => ({
-          ...prev,
-          isLoading: false,
-          isUnsupported: true,
-        }));
-        return;
-      }
-
-      setVolumeState((prev) => ({
-        ...prev,
-        volumePercent: parsed.volumePercent ?? prev.volumePercent,
-        muted: parsed.muted ?? (prev.muted !== null ? !prev.muted : null),
-        isLoading: false,
-        isUnsupported: false,
-        error: null,
-      }));
-    } catch (err: unknown) {
-      if (
-        !isWindowsActiveRef.current ||
-        getAppReadyState().generation !== currentGen
-      ) {
-        return;
-      }
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setVolumeState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: errorMsg,
-      }));
-    }
-  }, []);
+  const setVolume = useCallback(
+    (target: number) => {
+      if (!Number.isFinite(target)) return Promise.resolve();
+      return request("volume.set", {
+        volumePercent: Math.max(0, Math.min(100, Math.round(target))),
+      });
+    },
+    [request],
+  );
+  const adjustVolume = useCallback(
+    (delta: number) => {
+      if (!Number.isFinite(delta)) return Promise.resolve();
+      return request("volume.adjust", { delta });
+    },
+    [request],
+  );
+  const toggleMute = useCallback(
+    () => request("volume.toggleMute", {}),
+    [request],
+  );
 
   return {
-    ...volumeState,
+    ...state,
     isWindowsActive,
     refreshVolume,
     setVolume,
