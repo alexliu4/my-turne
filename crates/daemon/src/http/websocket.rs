@@ -1833,11 +1833,10 @@ impl WebSocketServer {
         if topic == "app.ready" {
             let mut registry = self.app_ready_registry.write().await;
             registry.register(route, source_peer, data.clone());
-            if let Some(route) = route {
-                if !registry.is_active(route) {
-                    debug!(route, "Ignoring app.ready from non-active app connection");
-                    return;
-                }
+            let route_key = route.unwrap_or(UNSCOPED_APP_ROUTE);
+            if !registry.is_active(route_key) {
+                debug!(route = route_key, "Ignoring app.ready from non-active app connection");
+                return;
             }
         } else if let Some(route) = route {
             let registry = self.app_ready_registry.read().await;
@@ -2415,5 +2414,97 @@ mod tests {
         );
         let active = registry.active().expect("Windows active again");
         assert_eq!(active.route.as_deref(), Some("spp:win1"));
+    }
+
+    #[test]
+    fn app_ready_registry_does_not_falsely_identify_windows_from_other_fields() {
+        let mut registry = AppReadyRegistry::default();
+
+        // Register route with platform = "windows", hostname/route = "windows", but no connectorPlatform = "windows"
+        registry.register(
+            Some("spp:windows-route"),
+            Some("windows-pc-peer"),
+            serde_json::json!({
+                "platform": "windows",
+                "hostname": "windows-desktop",
+                "connectorPlatform": "macos"
+            }),
+        );
+        let entry = registry.entries.get("spp:windows-route").unwrap();
+        assert!(!AppReadyRegistry::is_windows_entry(entry));
+
+        // Register Mac route with connectorPlatform = "macos"
+        registry.register(
+            Some("spp:mac-route"),
+            Some("mac-peer"),
+            serde_json::json!({
+                "platform": "web",
+                "connectorPlatform": "macos"
+            }),
+        );
+
+        // Active route should be the latest ready route (mac-route), NOT chosen as windows
+        let active = registry.active().expect("Mac route active");
+        assert_eq!(active.route.as_deref(), Some("spp:mac-route"));
+    }
+
+    #[tokio::test]
+    async fn mac_app_ready_while_windows_active_updates_route_without_broadcasting_to_ws() {
+        let (app_tx, _app_rx) = mpsc::unbounded_channel();
+        let server = Arc::new(WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        ));
+
+        let (ws_tx, mut ws_rx) = mpsc::channel(10);
+        let disconnect = CancellationToken::new();
+        server.connections.write().await.insert(
+            "ws-1".to_string(),
+            WebSocketConnection {
+                id: "ws-1".to_string(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx: ws_tx,
+                disconnect,
+            },
+        );
+
+        // Windows connects
+        server
+            .broadcast_event_from_route(
+                "app.ready".to_string(),
+                serde_json::json!({ "platform": "web", "connectorPlatform": "windows" }),
+                Some("spp:win"),
+                Some("11:22:33:44:55:66"),
+            )
+            .await;
+
+        let msg = ws_rx.recv().await.expect("app.ready received for Windows");
+        if let WebSocketMessage::Event { topic, data, .. } = msg {
+            assert_eq!(topic, "app.ready");
+            assert_eq!(data["connectorPlatform"], "windows");
+        } else {
+            panic!("expected app.ready event");
+        }
+
+        // Mac connects while Windows is active
+        server
+            .broadcast_event_from_route(
+                "app.ready".to_string(),
+                serde_json::json!({ "platform": "web", "connectorPlatform": "macos" }),
+                Some("spp:mac"),
+                Some("50:F2:65:EB:36:E1"),
+            )
+            .await;
+
+        // Verify no message sent to WebSocket client
+        assert!(
+            ws_rx.try_recv().is_err(),
+            "Mac app.ready while Windows active must not broadcast misleading event to WS"
+        );
+
+        // Active route remains Windows
+        let active = server.app_ready_registry.read().await.active().unwrap();
+        assert_eq!(active.route.as_deref(), Some("spp:win"));
     }
 }

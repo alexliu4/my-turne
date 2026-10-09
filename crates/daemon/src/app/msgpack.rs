@@ -188,6 +188,7 @@ fn i64_field(data: &serde_json::Value, snake: &str, camel: &str) -> Option<i64> 
 }
 
 fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
+    let connector_platform = string_field(&data, "connector_platform", "connectorPlatform");
     let event = AppReadyEvent {
         datetime: string_field(&data, "datetime", "datetime"),
         timestamp: u64_field(&data, "timestamp", "timestamp"),
@@ -201,7 +202,11 @@ fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
         spotify_skipped: bool_field(&data, "spotify_skipped", "spotifySkipped"),
         spotify_installed: bool_field(&data, "spotify_installed", "spotifyInstalled"),
     };
-    bt_only_payload(event)
+    let mut payload = bt_only_payload(event);
+    if let (Some(cp), Some(obj)) = (connector_platform, payload.as_object_mut()) {
+        obj.insert("connectorPlatform".to_string(), serde_json::Value::String(cp));
+    }
+    payload
 }
 
 fn normalize_entitlement_update_event(data: serde_json::Value) -> serde_json::Value {
@@ -2829,6 +2834,25 @@ mod tests {
 
     fn test_ota_source() -> crate::ota::OtaSource {
         crate::ota::OtaSource::new(None, Some("test-route".into()))
+    }
+
+    #[test]
+    fn normalize_app_ready_event_preserves_connector_platform() {
+        let normalized = normalize_app_ready_event(serde_json::json!({
+            "platform": "web",
+            "connectorPlatform": "windows",
+            "subscribed": true,
+            "subscriptionStatus": "active"
+        }));
+
+        assert_eq!(normalized["platform"], "web");
+        assert_eq!(normalized["connectorPlatform"], "windows");
+
+        let normalized_snake = normalize_app_ready_event(serde_json::json!({
+            "platform": "web",
+            "connector_platform": "windows",
+        }));
+        assert_eq!(normalized_snake["connectorPlatform"], "windows");
     }
 
     #[test]
