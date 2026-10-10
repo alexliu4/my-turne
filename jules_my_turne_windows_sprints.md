@@ -353,6 +353,7 @@ When Windows becomes active again:
 - Only active Windows routes publish Windows volume events.
 - Unknown/unsupported/malformed responses or stale, overlapping, or disconnected-session RPC results cannot overwrite current volume/mute state or create fake state.
 - Windows Volume screen is accessible with functioning back navigation.
+- Verification explicitly checks reading, setting/adjusting, and muting Windows volume from the Car Thing, as well as receiving external volume changes and clean reconnect across disconnects.
 - Automated tests cover actual routing, RPC lifecycle, and UI state.
 - Physical validation verifies external Windows volume changes, mute, and reconnect.
 
@@ -381,19 +382,26 @@ Display available media metadata and offer supported player controls only.
 
 ## Behavior
 
-When Windows or the media source becomes unavailable/disconnected:
+When Windows PC is offline or unavailable:
 
 ```text
 Windows Media
 PC unavailable
 ```
 
-Clear stale sessions, metadata, artwork, and timeline on source loss. Do not crash or fall back to fake data.
+When Windows PC is connected but no active media session exists:
+
+```text
+Windows Media
+No media playing
+```
+
+Neither state shows stale metadata, artwork, timeline, or fabricated state.
 
 ## Acceptance Criteria
 
 - Windows GSMTC media remains independent of Spotify/phone Now Playing with verified linked vs unlinked/skipped Spotify behavior.
-- Source loss clears stale sessions, metadata, artwork, and timeline.
+- Distinguishes Windows PC offline (`PC unavailable`) from Windows connected with no active media session (`No media playing`), showing no stale metadata, artwork, timeline, or fabricated state in either state.
 - Handles unavailable artwork and unsupported controls safely without crashing or fabricating data.
 - Automated and physical tests verify browser media, native player media, and reconnection handling.
 
@@ -428,6 +436,8 @@ Volume        Available
 Media         Available
 Discord       Unavailable
 System Stats  Unavailable
+Macros        Unavailable
+App Launch    Unavailable
 ```
 
 When Windows is inactive:
@@ -496,11 +506,14 @@ Allow physical Car Thing controls to trigger typed device or Windows actions.
 - Define explicit handling for conflicting assignments.
 - Preserve original physical controls unless deliberately remapped.
 - Windows actions do not execute against non-Windows fallback routes.
+- Prohibit arbitrary remote shell command execution from Car Thing.
+- Unavailable or invalid Windows actions fail gracefully without breaking UI.
 - Do not globally change knob behavior until mappings exist.
 
 ## Acceptance Criteria
 
 - Mappings persist across restarts with safe defaults and preserved physical controls.
+- Arbitrary remote shell commands are prohibited and unavailable Windows actions fail gracefully.
 - Defined handling prevents conflicting assignment errors.
 - Windows actions are blocked from executing against fallback routes.
 - At least one device action and one Windows action map and execute safely.
@@ -539,15 +552,16 @@ Mic: Muted
 Audio: On
 ```
 
+- Support explicit toggle-mute and optional toggle-deafen controls.
 - UI must never fabricate actual mute/deafen state.
 - Toggle actions communicate unknown or unverified outcomes appropriately.
-- Discord failure or restart cannot disrupt other Windows/Nocturne functions.
+- Discord failure or restart cannot disrupt other Windows/Nocturne functions, and reconnects cleanly when Discord restarts.
 
 ## Acceptance Criteria
 
 - UI accurately reflects `state_known: false` with unknown mute/deafen displays rather than fabricated state.
-- Toggle actions communicate unknown outcomes appropriately when unverified.
-- Discord failure/restart remains isolated and does not affect volume, media, or route handling.
+- Includes explicit toggle-mute and optional toggle-deafen controls, communicating unknown outcomes appropriately when unverified.
+- Discord failure/restart remains isolated and reconnects cleanly when Discord restarts without affecting volume, media, or route handling.
 
 ---
 
