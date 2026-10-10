@@ -38,7 +38,8 @@ type SettingAction =
   | "factoryReset"
   | "signOut"
   | "openDonation"
-  | "openWindowsVolume";
+  | "openWindowsVolume"
+  | "openWindowsMedia";
 interface SettingBase {
   id: string;
   title?: string;
@@ -178,6 +179,13 @@ const settingsStructure: Record<string, SettingsSection> = {
         storageKey: "nativeNotificationsEnabled",
         defaultValue: true,
         requiresDirectPhone: true,
+      },
+      {
+        id: "windows-media-screen",
+        title: "Windows Media",
+        type: "action",
+        description: "Display and control Windows GSMTC media playback.",
+        action: "openWindowsMedia",
       },
       {
         id: "windows-volume-screen",
@@ -436,6 +444,9 @@ export default function Settings({
         break;
       case "openDonation":
         onOpenDonationModal();
+        break;
+      case "openWindowsMedia":
+        setActiveSection("windowsMedia");
         break;
       case "openWindowsVolume":
         setActiveSection("windowsVolume");
