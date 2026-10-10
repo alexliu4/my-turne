@@ -358,6 +358,8 @@ export interface NocturneWsHandlers {
 export interface AppReadyState {
   ready: boolean;
   platform: string | null;
+  connectorPlatform?: string | null;
+  capabilities?: unknown;
   generation: number;
 }
 

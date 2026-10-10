@@ -394,6 +394,7 @@ const pendingWsRequests = new Map<string, PendingWsRequest>();
 let appReady = false;
 let appReadyPlatform: string | null = null; // ios, android, web, or macos
 let appReadyConnectorPlatform: string | null = null; // windows, macos, or null
+let appReadyCapabilities: unknown = null;
 let appReadyGeneration = 0;
 let windowsMediaEventGeneration: number | null = null;
 let latestAppReadyEventId = 0;
@@ -700,23 +701,25 @@ export const resetReconnectionExhausted = () => {
 
 export const getWindowsMediaEventGeneration = () => windowsMediaEventGeneration;
 
-export const getAppReadyState = (): AppReadyState => ({
-  ready: appReady,
-  platform: appReadyPlatform,
-  connectorPlatform: appReadyConnectorPlatform,
-  generation: appReadyGeneration,
-});
+export const getAppReadyState = (): AppReadyState => {
+  const state: AppReadyState = {
+    ready: appReady,
+    platform: appReadyPlatform,
+    connectorPlatform: appReadyConnectorPlatform,
+    generation: appReadyGeneration,
+  };
+  if (appReadyCapabilities !== null) {
+    state.capabilities = appReadyCapabilities;
+  }
+  return state;
+};
 
 const emitAppReadyState = () => {
   getWindowsMediaSnapshot(appReadyGeneration);
+  const state = getAppReadyState();
   appReadySubscribers.forEach((listener) => {
     try {
-      listener({
-        ready: appReady,
-        platform: appReadyPlatform,
-        connectorPlatform: appReadyConnectorPlatform,
-        generation: appReadyGeneration,
-      });
+      listener(state);
     } catch (err) {
       console.error("App ready listener error:", err);
     }
@@ -729,12 +732,7 @@ export const subscribeAppReadyState = (listener: Listener<AppReadyState>) => {
   }
 
   appReadySubscribers.add(listener);
-  listener({
-    ready: appReady,
-    platform: appReadyPlatform,
-    connectorPlatform: appReadyConnectorPlatform,
-    generation: appReadyGeneration,
-  });
+  listener(getAppReadyState());
 
   return () => {
     appReadySubscribers.delete(listener);
@@ -926,6 +924,7 @@ export const cleanupGlobalWebSocket = () => {
   appReady = false;
   appReadyPlatform = null;
   appReadyConnectorPlatform = null;
+  appReadyCapabilities = null;
   if (globalWsRef) {
     globalWsRef.close(1000);
     globalWsRef = null;
@@ -1138,6 +1137,7 @@ const setupGlobalWebSocket = async () => {
       appReady = false;
       appReadyPlatform = null;
       appReadyConnectorPlatform = null;
+      appReadyCapabilities = null;
       emitAppReadyState();
       setPhoneNetworkStatus("unknown");
 
@@ -1187,6 +1187,7 @@ const setupGlobalWebSocket = async () => {
             appReady = false;
             appReadyPlatform = null;
             appReadyConnectorPlatform = null;
+            appReadyCapabilities = null;
             appReadyGeneration += 1;
             emitAppReadyState();
             return;
@@ -1199,6 +1200,7 @@ const setupGlobalWebSocket = async () => {
               : typeof readyData?.connector_platform === "string"
                 ? readyData.connector_platform
                 : null;
+          const pendingCapabilities = readyData?.capabilities ?? null;
 
           windowsMediaEventGeneration =
             isConnectorPlatform(pendingPlatform) &&
@@ -1273,6 +1275,7 @@ const setupGlobalWebSocket = async () => {
             appReady = true;
             appReadyPlatform = pendingPlatform;
             appReadyConnectorPlatform = pendingConnectorPlatform;
+            appReadyCapabilities = pendingCapabilities;
             appReadyGeneration += 1;
             emitAppReadyState();
           };

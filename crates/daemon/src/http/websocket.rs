@@ -1813,6 +1813,7 @@ impl WebSocketServer {
                     return Ok(());
                 };
                 if (windows_media_only
+                    || method == "connector.capabilities"
                     || matches!(
                         canonical_music_method(&method),
                         Some("volume.get" | "volume.set" | "volume.adjust" | "volume.toggle_mute")
