@@ -317,60 +317,45 @@ Control Windows volume from the Car Thing through the existing daemon RPC path.
 
 ## Requirements
 
-Support device-side access to:
+Support device-side access to `volume.get`, `volume.set`, `volume.adjust`, and `volume.toggleMute` using methods exposed by the Connector. Receive current state (`volumePercent`, `muted`).
 
-```text
-volume.get
-volume.set
-volume.adjust
-volume.toggleMute
-```
-
-using the methods actually exposed by the Connector.
-
-Receive current state:
-
-```text
-volumePercent
-muted
-```
+- Reject execution when Mac/phone routes hold ownership.
+- Restrict publishing of Windows volume events strictly to active Windows routes.
+- Ignore malformed, unknown, unsupported, or stale/disconnected RPC results without creating fake state or overwriting volume/mute state.
 
 ## First UI
 
-Start with a small Windows Volume screen or test control.
-
-Do **not** globally remap the physical rotary knob yet.
+Start with a small Windows Volume screen or test control. Do **not** globally remap the physical rotary knob yet.
 
 Show:
-
 - current percentage
-- decrease
-- increase
+- decrease / increase
 - mute/unmute
 - unavailable/offline state
+
+Ensure the screen is accessible from navigation with functioning back navigation.
 
 ## Behavior
 
 When Windows is not active:
-
 - controls disable safely
 - no repeated error spam
 - normal Nocturne behavior remains unaffected
 
 When Windows becomes active again:
-
 - state refreshes
 - controls recover without restarting the UI
 
 ## Acceptance Criteria
 
-From Car Thing:
-
-- read Windows volume
-- change Windows volume
-- mute/unmute
-- receive external Windows volume changes
-- recover cleanly across Windows disconnect/reconnect
+- Windows-only RPCs reject Mac/phone ownership.
+- Windows volume events never alter phone/Spotify volume state; registered iOS/Android phone volume events work while Windows is active without contaminating Windows volume.
+- Only active Windows routes publish Windows volume events.
+- Unknown/unsupported/malformed responses or stale, overlapping, or disconnected-session RPC results cannot overwrite current volume/mute state or create fake state.
+- Windows Volume screen is accessible with functioning back navigation.
+- Verification explicitly checks reading, setting/adjusting, and muting Windows volume from the Car Thing, as well as receiving external volume changes and clean reconnect across disconnects.
+- Automated tests cover actual routing, RPC lifecycle, and UI state.
+- Physical validation verifies external Windows volume changes, mute, and reconnect.
 
 ---
 
@@ -378,54 +363,47 @@ From Car Thing:
 
 ## Prerequisite
 
-The active Windows Connector must expose stable Windows system-media state/events.
+The active Windows Connector must expose stable Windows system-media state/events (GSMTC).
 
 ## Goal
 
-Create a dedicated Windows Media experience on Car Thing.
+Create a dedicated Windows Media experience on Car Thing without replacing Spotify Now Playing.
 
-Do not replace Spotify Now Playing.
+## Requirements
 
-## Display
+- Keep Windows GSMTC media independent of Spotify/phone Now Playing.
+- Display source application, title, artist, album, artwork, playback state, and progress/duration when available.
+- Support available RPCs (`play/pause`, `next`, `previous`).
+- Safely handle unavailable artwork and unsupported controls.
 
-Use available data such as:
+## Display & Controls
 
-- source application
-- title
-- artist
-- album
-- artwork
-- playback state
-- progress/duration
-
-## Controls
-
-Use available RPC for:
-
-- play/pause
-- next
-- previous
-
-Only add controls supported reliably by the Connector.
+Display available media metadata and offer supported player controls only.
 
 ## Behavior
 
-When Windows becomes unavailable:
+When Windows PC is offline or unavailable:
 
 ```text
 Windows Media
 PC unavailable
 ```
 
-Do not crash or fall back to fake data.
+When Windows PC is connected but no active media session exists:
+
+```text
+Windows Media
+No media playing
+```
+
+Neither state shows stale metadata, artwork, timeline, or fabricated state.
 
 ## Acceptance Criteria
 
-Works with at least:
-
-- browser media
-- a Windows media player
-- supported Spotify desktop/system-media behavior
+- Windows GSMTC media remains independent of Spotify/phone Now Playing with verified linked vs unlinked/skipped Spotify behavior.
+- Distinguishes Windows PC offline (`PC unavailable`) from Windows connected with no active media session (`No media playing`), showing no stale metadata, artwork, timeline, or fabricated state in either state.
+- Handles unavailable artwork and unsupported controls safely without crashing or fabricating data.
+- Automated and physical tests verify browser media, native player media, and reconnection handling.
 
 ---
 
@@ -433,17 +411,22 @@ Works with at least:
 
 ## Prerequisite
 
-Connector capability metadata must be available.
+Connector capability metadata must be available. Note: Connector exposes `connector.capabilities`, but daemon `app.ready` normalization currently drops its `capabilities` field.
 
 ## Goal
 
-Restore the useful parts of the old Host Status UI using native Connector state.
+Restore useful Host Status UI details using native Connector state without reintroducing HostBridge.
 
-Do not restore HostBridge.
+## Requirements
+
+- Define a verified device-side capability contract, preferably querying the authoritative Connector RPC and preserving handshake metadata only if needed.
+- Refresh capabilities whenever ownership or actual availability changes.
+- Ensure unknown and unsupported features are never falsely advertised as available.
+- Offline or fallback status must clear stale Windows capabilities.
 
 ## Display
 
-Example:
+Show connected status and individual capabilities (`Available` vs `Unavailable` / `Offline`).
 
 ```text
 Windows PC
@@ -457,7 +440,7 @@ Macros        Unavailable
 App Launch    Unavailable
 ```
 
-When Windows is not active:
+When Windows is inactive:
 
 ```text
 Windows PC
@@ -466,16 +449,11 @@ Offline
 Using fallback Connector
 ```
 
-## Requirements
-
-- consume existing daemon/Connector metadata
-- no direct network connection
-- no fake capabilities
-- only mark capabilities available when advertised
-
 ## Acceptance Criteria
 
-Status updates correctly as Windows connects, disconnects, or gains additional supported features.
+- Device capability contract handles `app.ready` normalization by querying authoritative Connector RPC.
+- Capability list refreshes on ownership/availability transitions and clears stale capabilities when offline/fallback.
+- Unknown and unsupported features are never falsely advertised as available.
 
 ---
 
@@ -522,33 +500,23 @@ App navigation does not disrupt existing Spotify/Nocturne navigation.
 
 Allow physical Car Thing controls to trigger typed device or Windows actions.
 
-## Example Device Actions
-
-```text
-device.openSpotify
-device.openApps
-device.openTimer
-```
-
-## Example Windows Actions
-
-```text
-windows.volume.toggleMute
-windows.media.playPause
-windows.media.next
-```
-
 ## Requirements
 
-- preserve existing Nocturne defaults
-- mappings are explicit/configurable
-- unavailable Windows actions fail gracefully
-- no arbitrary remote shell commands
-- do not globally change knob behavior until mappings exist
+- Mappings are explicit and configurable with safe defaults and persistence.
+- Define explicit handling for conflicting assignments.
+- Preserve original physical controls unless deliberately remapped.
+- Windows actions do not execute against non-Windows fallback routes.
+- Prohibit arbitrary remote shell command execution from Car Thing.
+- Unavailable or invalid Windows actions fail gracefully without breaking UI.
+- Do not globally change knob behavior until mappings exist.
 
 ## Acceptance Criteria
 
-At least one device action and one Windows action can be mapped safely.
+- Mappings persist across restarts with safe defaults and preserved physical controls.
+- Arbitrary remote shell commands are prohibited and unavailable Windows actions fail gracefully.
+- Defined handling prevents conflicting assignment errors.
+- Windows actions are blocked from executing against fallback routes.
+- At least one device action and one Windows action map and execute safely.
 
 ---
 
@@ -556,13 +524,25 @@ At least one device action and one Windows action can be mapped safely.
 
 ## Prerequisite
 
-Connector Discord RPC/state must already be stable.
+Connector Discord RPC/state must be available. Note: Connector currently reports `state_known: false`, with nullable mute/deafen.
 
 ## Goal
 
-Add the Car Thing side of Discord integration.
+Add Car Thing Discord UI integration consuming Connector-provided state only.
 
-Initial display:
+## Display & Requirements
+
+When state verification is unavailable (`state_known: false`), display unknown states rather than fabricating mute/deafen values:
+
+```text
+Discord
+Connected
+
+Mic: Unknown
+Audio: Unknown
+```
+
+When state is known:
 
 ```text
 Discord
@@ -572,20 +552,16 @@ Mic: Muted
 Audio: On
 ```
 
-Initial controls:
-
-- toggle mute
-- toggle deafen if supported
-
-## Requirements
-
-- consume Connector-provided state only
-- Discord unavailable must not affect other Windows features
-- reconnect cleanly when Discord restarts
+- Support explicit toggle-mute and optional toggle-deafen controls.
+- UI must never fabricate actual mute/deafen state.
+- Toggle actions communicate unknown or unverified outcomes appropriately.
+- Discord failure or restart cannot disrupt other Windows/Nocturne functions, and reconnects cleanly when Discord restarts.
 
 ## Acceptance Criteria
 
-Discord controls work without affecting Spotify, media, volume, or Connector routing.
+- UI accurately reflects `state_known: false` with unknown mute/deafen displays rather than fabricated state.
+- Includes explicit toggle-mute and optional toggle-deafen controls, communicating unknown outcomes appropriately when unverified.
+- Discord failure/restart remains isolated and reconnects cleanly when Discord restarts without affecting volume, media, or route handling.
 
 ---
 
@@ -658,33 +634,22 @@ Configured actions execute reliably through the normal daemon → Connector RPC 
 
 ## Goal
 
-Validate the complete My-Turne side under realistic lifecycle changes.
+Validate complete My-Turne integration under realistic lifecycle changes and failure modes.
 
-Test:
+## Requirements & Test Matrix
 
-- Windows startup
-- Windows shutdown
-- Windows sleep/wake
-- Windows Bluetooth interruption
-- Windows Connector restart
-- Mac Connector restart
-- Mac reconnect while Windows active
-- Car Thing reboot
-- rapid Windows → Mac → Windows transitions
-- Windows media session disappearing
-- Windows feature RPC returning unsupported
-- malformed responses/events
-- active capability disappearing
+Test matrix must include:
+- Windows startup, shutdown, sleep/wake, Bluetooth interruption, Connector restart, Mac Connector restart, Mac reconnect while Windows active, Car Thing reboot, rapid handoffs (Windows → Mac → Windows).
+- Disappearing media sessions, unsupported RPC returns, malformed events, disappearing active capabilities.
+- Mixed Connector/daemon versions, failed RPCs, malformed events, clean reboot, and redeployment.
 
-## Core Invariant
+Core Invariant: `Windows feature failure ≠ core Nocturne failure`.
 
-```text
-Windows feature failure
-≠
-core Nocturne failure
-```
+## Acceptance Criteria
 
-Spotify and device-native functionality must remain usable whenever an appropriate fallback Connector exists.
+- Test matrix verifies mixed versions, failed RPCs, malformed events, rapid handoffs, clean reboot, and redeployment without core regressions.
+- Spotify, phone, and core Nocturne functions remain intact throughout.
+- Passes final no-USB physical end-to-end regression test.
 
 ---
 
@@ -737,7 +702,7 @@ Do not skip ahead when a later sprint depends on device-side state or RPC introd
 
 ---
 
-# Jules Rules
+# General Rules & Jules Rules
 
 For every My-Turne sprint:
 
@@ -753,3 +718,5 @@ For every My-Turne sprint:
 10. If a required Connector RPC does not exist yet, stop that sprint rather than implementing it in this repo.
 11. Do not create placeholder/fake Windows data.
 12. Keep each PR easy to review and merge independently.
+13. Each feature sprint must verify its real cross-repository RPC/event contract and include focused tests for ownership, unavailable state, and reconnect behavior. Physical hardware validation is required where relevant.
+14. Do not mark any sprint complete without verified evidence. Keep AC concise and measurable.
