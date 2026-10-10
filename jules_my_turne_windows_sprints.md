@@ -405,6 +405,16 @@ Neither state shows stale metadata, artwork, timeline, or fabricated state.
 - Handles unavailable artwork and unsupported controls safely without crashing or fabricating data.
 - Automated and physical tests verify browser media, native player media, and reconnection handling.
 
+## Physical Validation Checklist (Sprint 5)
+
+1. **Browser Media (Chrome/Edge)**: Play media in Chrome/Edge; verify track title, artist, app name, timeline, artwork, and Play/Pause/Next/Prev controls.
+2. **Native Player Media**: Play media in a native Windows player (e.g. Windows Media Player, iTunes); verify metadata and controls.
+3. **Spotify Linked vs Unlinked/Skipped**:
+   - **Linked**: Verify canonical Spotify integration remains active and unaffected.
+   - **Unlinked/Skipped**: Verify Windows Media reports Spotify Desktop media playback when active.
+4. **Media Session Closure**: Close active player on PC; verify Car Thing transitions to `No media playing` and clears stale metadata/artwork.
+5. **Bluetooth Reconnect**: Disconnect PC or disable Bluetooth; verify Car Thing shows `PC unavailable`. Reconnect PC; verify Car Thing restores state cleanly.
+
 ---
 
 # Sprint 6 — Windows Capability State + Host Status
