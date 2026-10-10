@@ -13,6 +13,7 @@ import {
   getWindowsMediaSnapshot,
   updateWindowsMediaSnapshot,
   disableWindowsMediaControl,
+  isWindowsMediaTopic,
   type SupportedControls,
   type WindowsMediaState,
 } from "./windowsMediaState";
@@ -22,21 +23,44 @@ export {
   formatArtworkUrl,
 } from "./windowsMediaState";
 
-// An RPC can outlive the screen that started it. Keep its route locked until it settles.
-let inFlightControl: { generation: number } | null = null;
+type InFlightOperation = { generation: number };
+let inFlightControl: InFlightOperation | null = null;
+const inFlightListeners = new Set<() => void>();
+
+function setInFlightControl(op: InFlightOperation | null) {
+  inFlightControl = op;
+  inFlightListeners.forEach((listener) => listener());
+}
 
 export function useWindowsMedia() {
   const [appReady, setAppReady] = useState(getAppReadyState);
   const { isWindowsActive } = getWindowsConnectorState(appReady);
-  const [state, setState] = useState<WindowsMediaState>(() =>
-    getWindowsMediaSnapshot(appReady.generation),
-  );
+  const [state, setState] = useState<WindowsMediaState>(() => {
+    const snapshot = getWindowsMediaSnapshot(appReady.generation);
+    const isLoading =
+      isWindowsActive && inFlightControl?.generation === appReady.generation;
+    return { ...snapshot, isLoading };
+  });
 
-  const pendingRef = useRef<{ generation: number } | null>(null);
+  const pendingRef = useRef<InFlightOperation | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   useEffect(() => subscribeAppReadyState(setAppReady), []);
+
+  useEffect(() => {
+    const listener = () => {
+      const isBusy =
+        isWindowsActive && inFlightControl?.generation === appReady.generation;
+      setState((prev) =>
+        prev.isLoading === isBusy ? prev : { ...prev, isLoading: isBusy },
+      );
+    };
+    inFlightListeners.add(listener);
+    return () => {
+      inFlightListeners.delete(listener);
+    };
+  }, [appReady.generation, isWindowsActive]);
 
   const sendMediaControl = useCallback(
     async (control: keyof SupportedControls) => {
@@ -58,7 +82,7 @@ export function useWindowsMedia() {
         session: stateRef.current,
       };
       pendingRef.current = operation;
-      inFlightControl = operation;
+      setInFlightControl(operation);
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
       const isCurrent = () =>
@@ -118,20 +142,25 @@ export function useWindowsMedia() {
           error: unsupported ? "Control unsupported" : message,
         }));
       } finally {
-        if (inFlightControl === operation) inFlightControl = null;
+        if (inFlightControl === operation) setInFlightControl(null);
         if (pendingRef.current === operation) {
           pendingRef.current = null;
-          setState((prev) => ({ ...prev, isLoading: false }));
         }
+        setState((prev) => ({ ...prev, isLoading: false }));
       }
     },
     [],
   );
 
   useEffect(() => {
+    const isBusy =
+      isWindowsActive && inFlightControl?.generation === appReady.generation;
     setState(
       isWindowsActive
-        ? getWindowsMediaSnapshot(appReady.generation)
+        ? {
+            ...getWindowsMediaSnapshot(appReady.generation),
+            isLoading: isBusy,
+          }
         : clearedMediaState,
     );
     const generation = appReady.generation;
@@ -145,7 +174,9 @@ export function useWindowsMedia() {
         )
           return;
 
-        if (message.type !== "event") return;
+        if (message.type !== "event" || !isWindowsMediaTopic(message.topic)) {
+          return;
+        }
 
         const updated = updateWindowsMediaSnapshot(
           message.topic ?? "",
@@ -154,7 +185,9 @@ export function useWindowsMedia() {
         );
         stateRef.current = {
           ...updated,
-          isLoading: pendingRef.current !== null,
+          isLoading:
+            inFlightControl?.generation === generation ||
+            pendingRef.current !== null,
         };
         setState(stateRef.current);
       },
