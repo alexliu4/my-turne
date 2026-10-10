@@ -205,11 +205,16 @@ fn normalize_app_ready_event(data: serde_json::Value) -> serde_json::Value {
         spotify_installed: bool_field(&data, "spotify_installed", "spotifyInstalled"),
     };
     let mut payload = bt_only_payload(event);
-    if let (Some(cp), Some(obj)) = (connector_platform, payload.as_object_mut()) {
-        obj.insert(
-            "connectorPlatform".to_string(),
-            serde_json::Value::String(cp),
-        );
+    if let Some(obj) = payload.as_object_mut() {
+        if let Some(cp) = connector_platform {
+            obj.insert(
+                "connectorPlatform".to_string(),
+                serde_json::Value::String(cp),
+            );
+        }
+        if let Some(capabilities) = data.get("capabilities") {
+            obj.insert("capabilities".to_string(), capabilities.clone());
+        }
     }
     payload
 }
@@ -2874,10 +2879,12 @@ mod tests {
             "ready": true,
             "platform": "macos",
             "connector_platform": "macos",
+            "capabilities": ["volume", "media"],
         }));
         assert_eq!(ready["ready"], true);
         assert_eq!(ready["connectorPlatform"], "macos");
         assert_eq!(ready["connector_platform"], "macos");
+        assert_eq!(ready["capabilities"], serde_json::json!(["volume", "media"]));
     }
 
     #[test]
