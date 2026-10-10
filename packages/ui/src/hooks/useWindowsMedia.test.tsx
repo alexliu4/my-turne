@@ -486,18 +486,106 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     await act(async () => {
       void hook.nextTrack();
     });
+    expect(hook.isLoading).toBe(true);
     await act(async () => root.render(null));
     await mount();
+    expect(hook.isLoading).toBe(true);
     await act(async () => {
       void hook.previousTrack();
     });
     expect(calls).toHaveLength(1);
     await respond({ status: "ok" });
+    expect(hook.isLoading).toBe(false);
     await act(async () => {
       void hook.previousTrack();
     });
     expect(calls).toHaveLength(2);
     await respond({ status: "ok" });
+  });
+
+  test("loading state recovers properly on RPC rejection, timeout, and route change", async () => {
+    await mount();
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    // Rejection recovery
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await act(async () => calls[0].reject(new Error("RPC Failed")));
+    expect(hook.isLoading).toBe(false);
+    expect(hook.error).toBe("RPC Failed");
+
+    // Timeout / error recovery
+    await act(async () => {
+      void hook.previousTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await act(async () => calls[1].reject(new Error("Request timeout")));
+    expect(hook.isLoading).toBe(false);
+    expect(hook.error).toBe("Request timeout");
+
+    // Route change recovery
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await route("windows"); // changes generation
+    expect(hook.isLoading).toBe(false);
+  });
+
+  test("unrelated WebSocket events do not cause React re-renders or update state", async () => {
+    let renderCount = 0;
+    function RenderTracker() {
+      hook = useWindowsMedia();
+      renderCount++;
+      return null;
+    }
+
+    await mount(<RenderTracker />);
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Initial Track" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    const initialRenders = renderCount;
+
+    // Unrelated events
+    await act(async () => {
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "volume.update",
+        data: { level: 50 },
+      });
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "notification.show",
+        data: { message: "Call" },
+      });
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "phone.status",
+        data: { status: "connected" },
+      });
+    });
+
+    expect(renderCount).toBe(initialRenders);
+    expect(hook.title).toBe("Initial Track");
+
+    // Valid media event updates UI normally
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Updated Track" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    expect(renderCount).toBeGreaterThan(initialRenders);
+    expect(hook.title).toBe("Updated Track");
   });
 
   test("late unsupported replies cannot disable a replacement session; malformed responses release busy state", async () => {
