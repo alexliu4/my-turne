@@ -14,9 +14,14 @@ import * as daemon from "./useNocturned";
 import * as settingsContext from "../contexts/SettingsContext";
 import { useWindowsMedia } from "./useWindowsMedia";
 import { WindowsMedia } from "../components/windows/WindowsMedia";
+import {
+  clearWindowsMediaSnapshot,
+  updateWindowsMediaSnapshot,
+} from "./windowsMediaState";
 import Settings from "../components/settings/Settings";
 
 let ready: daemon.AppReadyState;
+let routeGeneration = 0;
 let readinessListener: ((state: daemon.AppReadyState) => void) | undefined;
 let eventListener: Parameters<typeof daemon.addGlobalWsListener>[1] | undefined;
 let calls: {
@@ -37,6 +42,7 @@ function Probe() {
 }
 
 beforeEach(() => {
+  clearWindowsMediaSnapshot();
   dom = new Window({ url: "http://localhost" });
   for (const [key, value] of Object.entries({
     window: dom,
@@ -66,9 +72,12 @@ beforeEach(() => {
     ready: true,
     platform: "web",
     connectorPlatform: "windows",
-    generation: 1,
+    generation: ++routeGeneration,
   };
   spyOn(daemon, "getAppReadyState").mockImplementation(() => ready);
+  spyOn(daemon, "getWindowsMediaEventGeneration").mockImplementation(
+    () => ready.generation,
+  );
   spyOn(daemon, "subscribeAppReadyState").mockImplementation((listener) => {
     readinessListener = listener;
     listener(ready);
@@ -313,6 +322,211 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     await respond({ status: "ok" }, 0);
 
     expect(hook.isLoading).toBe(false);
+  });
+  test.each(["stopped", "closed"])(
+    "%s clears retained metadata and timeline; paused survives",
+    async (status) => {
+      await mount();
+      const attributes = {
+        media_generation: 8,
+        media_item_attributes: {
+          MediaItemTitle: "Retained",
+          MediaItemArtist: "Artist",
+          MediaItemPlaybackDurationInMilliseconds: 9000,
+        },
+        playback_attributes: {
+          PlaybackStatus: "paused",
+          PlaybackElapsedTimeInMilliseconds: 1000,
+        },
+      };
+      await event(attributes);
+      expect(hook.hasActiveSession).toBe(true);
+      await event(
+        { media_generation: 8, data: "cover" },
+        "media.now_playing.artwork",
+      );
+      await event({
+        ...attributes,
+        playback_attributes: {
+          ...attributes.playback_attributes,
+          PlaybackStatus: status,
+        },
+      });
+      expect(hook.hasActiveSession).toBe(false);
+      expect(hook.title).toBeNull();
+      expect(hook.artist).toBeNull();
+      expect(hook.artworkUrl).toBeNull();
+      expect(hook.durationMs).toBeNull();
+      expect(hook.elapsedTimeMs).toBeNull();
+      await event({ ...attributes, media_generation: 7 });
+      expect(hook.hasActiveSession).toBe(false);
+    },
+  );
+
+  test("reopening reads current paused cache including events while the screen was closed", async () => {
+    await mount();
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Old" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+    await act(async () => root.render(null));
+    updateWindowsMediaSnapshot(
+      "media.now_playing.update",
+      {
+        media_generation: 2,
+        media_item_attributes: { MediaItemTitle: "Paused" },
+        playback_attributes: {
+          PlaybackStatus: "paused",
+          PlaybackElapsedTimeInMilliseconds: 4200,
+        },
+      },
+      ready.generation,
+    );
+    updateWindowsMediaSnapshot(
+      "media.now_playing.artwork",
+      { media_generation: 2, data: "cover" },
+      ready.generation,
+    );
+    await mount();
+    expect(hook.title).toBe("Paused");
+    expect(hook.playbackStatus).toBe("paused");
+    expect(hook.elapsedTimeMs).toBe(4200);
+    expect(hook.artworkUrl).toContain("cover");
+    expect(calls).toHaveLength(0);
+    await route("macos");
+    await route("windows");
+    expect(hook.hasActiveSession).toBe(false);
+  });
+
+  test("rejects older metadata, invalid generations, malformed envelopes and mixed artwork tags", async () => {
+    await mount();
+    const metadata = {
+      media_generation: 10,
+      media_item_attributes: { MediaItemTitle: "New" },
+      playback_attributes: { PlaybackStatus: "paused" },
+    };
+    await event(metadata);
+    for (const value of [
+      null,
+      [],
+      {},
+      { ...metadata, media_generation: -1 },
+      { ...metadata, media_generation: "11" },
+      { ...metadata, media_generation: 9 },
+      { ...metadata, media_generation: undefined },
+      { ...metadata, playback_attributes: [] },
+    ]) {
+      await event(value);
+      expect(hook.title).toBe("New");
+      expect(hook.mediaGeneration).toBe(10);
+    }
+    for (const gen of [undefined, 9, 11, "10", -1]) {
+      await event(
+        { media_generation: gen, data: "wrong" },
+        "media.now_playing.artwork",
+      );
+      expect(hook.artworkUrl).toBeNull();
+    }
+    await event(
+      { media_generation: 10, data: "correct" },
+      "media.now_playing.artwork",
+    );
+    expect(hook.artworkUrl).toContain("correct");
+    await route("windows");
+    await event({
+      media_item_attributes: { MediaItemTitle: "Legacy" },
+      playback_attributes: { PlaybackStatus: "paused" },
+    });
+    await event(
+      { media_generation: 10, data: "wrong" },
+      "media.now_playing.artwork",
+    );
+    expect(hook.artworkUrl).toBeNull();
+    await event({ data: "legacy" }, "media.now_playing.artwork");
+    expect(hook.artworkUrl).toContain("legacy");
+  });
+
+  test("blocks overlapping controls and disables only the confirmed unsupported action until session changes", async () => {
+    await mount(<WindowsMedia />);
+    const metadata = {
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "paused" },
+    };
+    await event(metadata);
+    await act(async () => {
+      button("Next Track").click();
+      button("Previous Track").click();
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].params).toEqual({ windows_only: true });
+    await event({
+      ...metadata,
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+    await respond({ status: "unsupported" });
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(false);
+    await event(metadata);
+    expect(button("Next Track").disabled).toBe(true);
+    await act(async () => button("Next Track").click());
+    expect(calls).toHaveLength(1);
+    await event({ ...metadata, media_generation: 2 });
+    expect(button("Next Track").disabled).toBe(false);
+  });
+
+  test("an in-flight control stays serialized when its screen is closed and reopened", async () => {
+    await mount();
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "paused" },
+    });
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    await act(async () => root.render(null));
+    await mount();
+    await act(async () => {
+      void hook.previousTrack();
+    });
+    expect(calls).toHaveLength(1);
+    await respond({ status: "ok" });
+    await act(async () => {
+      void hook.previousTrack();
+    });
+    expect(calls).toHaveLength(2);
+    await respond({ status: "ok" });
+  });
+
+  test("late unsupported replies cannot disable a replacement session; malformed responses release busy state", async () => {
+    await mount();
+    const metadata = {
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    };
+    await event(metadata);
+    await act(async () => {
+      void hook.nextTrack();
+      void hook.previousTrack();
+    });
+    expect(calls).toHaveLength(1);
+    await event({ ...metadata, media_generation: 2 });
+    await respond({ status: "unsupported" });
+    expect(hook.supportedControls.next).toBe(true);
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    await respond(null);
+    expect(hook.error).toContain("Invalid");
+    expect(hook.isLoading).toBe(false);
+    await route("macos");
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    expect(calls).toHaveLength(2);
   });
 });
 

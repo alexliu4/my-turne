@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { getWindowsMediaSnapshot } from "./windowsMediaState";
 import deviceWireSnapshot from "../../test/wire_snapshots/device.json";
 import {
+  sendNocturneWsRequest,
   completePendingBtReconnectOnAppReady,
   addGlobalWsListener,
   cleanupGlobalWebSocket,
@@ -136,6 +138,81 @@ describe("WebSocket app.ready async ordering", () => {
     removeListener();
     cleanupGlobalWebSocket();
     restoreGlobals();
+  });
+
+  it("captures Windows replay while clock sync is pending and keeps paused state without screen listeners", async () => {
+    socket.ready({ platform: "web", connectorPlatform: "windows" });
+    socket.receive({
+      type: "event",
+      topic: "media.now_playing.update",
+      data: {
+        media_generation: 3,
+        media_item_attributes: { MediaItemTitle: "Paused" },
+        playback_attributes: {
+          PlaybackStatus: "paused",
+          PlaybackElapsedTimeInMilliseconds: 3200,
+        },
+      },
+    });
+    socket.receive({
+      type: "event",
+      topic: "media.now_playing.artwork",
+      data: { media_generation: 3, data: "cover" },
+    });
+    await socket.completeTimeSync(0);
+    const snapshot = getWindowsMediaSnapshot(getAppReadyState().generation);
+    expect(snapshot.title).toBe("Paused");
+    expect(snapshot.elapsedTimeMs).toBe(3200);
+    expect(snapshot.artworkUrl).toContain("cover");
+    socket.ready({ platform: "web", connectorPlatform: "macos" });
+    socket.receive({
+      type: "event",
+      topic: "media.now_playing.update",
+      data: {
+        media_generation: 99,
+        media_item_attributes: { MediaItemTitle: "Mac" },
+        playback_attributes: { PlaybackStatus: "playing" },
+      },
+    });
+    await socket.completeTimeSync(1);
+    expect(
+      getWindowsMediaSnapshot(getAppReadyState().generation).hasActiveSession,
+    ).toBe(false);
+  });
+
+  it("cancels a queued scoped request when app readiness changes before socket dispatch", async () => {
+    socket.ready({ platform: "web", connectorPlatform: "windows" });
+    await socket.completeTimeSync(0);
+    const generation = getAppReadyState().generation;
+    socket.readyState = ControlledWebSocket.CONNECTING;
+    const request = sendNocturneWsRequest(
+      "media.control.next",
+      { windows_only: true },
+      { timeoutMs: 500, appReadyGeneration: generation },
+    );
+    const rejected = request.catch((error) => error.message);
+    socket.ready({ ready: false });
+    socket.readyState = ControlledWebSocket.OPEN;
+    expect(await rejected).toBe("App route changed before dispatch");
+  });
+
+  it("cancels a queued scoped request as soon as a fallback readiness arrives, before clock sync completes", async () => {
+    socket.ready({ platform: "web", connectorPlatform: "windows" });
+    await socket.completeTimeSync(0);
+    const generation = getAppReadyState().generation;
+    socket.readyState = ControlledWebSocket.CONNECTING;
+    const rejected = sendNocturneWsRequest(
+      "media.control.next",
+      { windows_only: true },
+      { timeoutMs: 500, appReadyGeneration: generation },
+    ).catch((error) => error.message);
+    socket.ready({ platform: "web", connectorPlatform: "macos" });
+    socket.readyState = ControlledWebSocket.OPEN;
+    expect(await rejected).toBe("App route changed before dispatch");
+    expect(getAppReadyState().generation).toBe(generation);
+    // The separately queued clock-sync send also waits for the socket to open.
+    await Bun.sleep(110);
+    await socket.completeTimeSync(1);
   });
 
   it.each([

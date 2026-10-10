@@ -1795,18 +1795,32 @@ impl WebSocketServer {
                     return Ok(());
                 }
 
+                // Scope dedicated Windows UI controls without changing generic phone media routing.
+                let windows_media_only = method.starts_with("media.control.")
+                    && params
+                        .get("windows_only")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true);
+                let mut params = params;
+                if windows_media_only {
+                    if let Some(object) = params.as_object_mut() {
+                        object.remove("windows_only");
+                    }
+                }
                 let Some(active_app) = self.app_ready_registry.read().await.active() else {
                     self.send_error(id, "No active app session".to_string())
                         .await;
                     return Ok(());
                 };
-                if matches!(
-                    canonical_music_method(&method),
-                    Some("volume.get" | "volume.set" | "volume.adjust" | "volume.toggle_mute")
-                ) && (active_app.route.is_none()
-                    || !AppReadyRegistry::is_windows_data(&active_app.data))
+                if (windows_media_only
+                    || matches!(
+                        canonical_music_method(&method),
+                        Some("volume.get" | "volume.set" | "volume.adjust" | "volume.toggle_mute")
+                    ))
+                    && (active_app.route.is_none()
+                        || !AppReadyRegistry::is_windows_data(&active_app.data))
                 {
-                    self.send_error(id, "Windows volume control unavailable".to_string())
+                    self.send_error(id, "Windows control unavailable".to_string())
                         .await;
                     return Ok(());
                 }
@@ -2423,6 +2437,97 @@ mod tests {
                             method
                         }
                     );
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "windows"}),
+                            route,
+                            None,
+                        )
+                        .await;
+                    while rx.try_recv().is_ok() {}
+                } else {
+                    assert!(app_rx.try_recv().is_err());
+                    assert!(matches!(
+                        rx.try_recv().unwrap(),
+                        WebSocketMessage::Error { .. }
+                    ));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn windows_media_rpcs_require_windows_and_pin_the_accepted_route() {
+        let (app_tx, mut app_rx) = mpsc::unbounded_channel();
+        let server = WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        );
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        for (platform, connector, route) in [
+            ("web", "macos", Some("spp:owner")),
+            ("android", "", Some("spp:owner")),
+            ("ios", "", Some("spp:owner")),
+            ("web", "windows", None),
+            ("web", "windows", Some("spp:owner")),
+        ] {
+            *server.app_ready_registry.write().await = AppReadyRegistry::default();
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connectorPlatform": connector,
+                    }),
+                    route,
+                    None,
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            if connector != "windows" && route.is_some() {
+                for method in ["media.control.next", "spotify.player.next"] {
+                    server.handle_incoming_message(&serde_json::json!({ "type": "request", "id": "generic", "method": method, "params": {} }).to_string()).await.unwrap();
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["method"], method);
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                }
+            }
+            for method in [
+                "media.control.toggle",
+                "media.control.play",
+                "media.control.pause",
+                "media.control.next",
+                "media.control.previous",
+            ] {
+                let params = serde_json::json!({ "windows_only": true });
+                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": params}).to_string()).await.unwrap();
+                if connector == "windows" && route.is_some() {
+                    // Promotion after acceptance must not change this request's target.
+                    server.clear_app_ready_for_route("spp:owner").await;
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "macos"}),
+                            Some("spp:mac"),
+                            None,
+                        )
+                        .await;
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                    assert_eq!(data["params"], serde_json::json!({}));
+                    assert_eq!(data["method"], method);
                     server
                         .broadcast_event_from_route(
                             "app.ready".into(),

@@ -117,3 +117,5 @@ Now Playing gets device listing and transfer operations from `useSpotifyWebSocke
 A terminal artwork failure is scoped to the current Spotify readiness period. When readiness returns, `SpotifyImage` must clear its local failed-URL marker as well as the queue failure marker so the same visible cover can retry without remounting.
 
 - **Phone app launch toggle**: General > Open Phone App uses the shared daemon-backed preference, without a subscription or connected-phone gate. Disable it while loading or saving, show load/save errors, and describe foreground on connect versus background operation. This does not disable companion data.
+
+- **Windows Media controls**: `WindowsMedia` disables each transport button when its current session confirms that action is unsupported. The hook also blocks duplicate RPCs and unavailable sessions. Paused sessions remain visible; stopped and closed sessions clear all presentation.

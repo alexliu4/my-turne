@@ -35,6 +35,7 @@ export function WindowsMedia({
     elapsedTimeMs,
     durationMs,
     isLoading,
+    supportedControls,
     error,
     togglePlayPause,
     nextTrack,
@@ -45,7 +46,10 @@ export function WindowsMedia({
   const controlsDisabled = !isWindowsActive || !hasActiveSession || isLoading;
 
   const progressPercent =
-    durationMs && durationMs > 0 && elapsedTimeMs !== null && elapsedTimeMs !== undefined
+    durationMs &&
+    durationMs > 0 &&
+    elapsedTimeMs !== null &&
+    elapsedTimeMs !== undefined
       ? Math.max(0, Math.min(100, (elapsedTimeMs / durationMs) * 100))
       : 0;
 
@@ -89,8 +93,8 @@ export function WindowsMedia({
             PC unavailable
           </h2>
           <p className="text-sm text-zinc-400 max-w-sm">
-            Windows PC is offline or not selected as the active Connector.
-            Media controls are safely disabled.
+            Windows PC is offline or not selected as the active Connector. Media
+            controls are safely disabled.
           </p>
         </div>
       ) : !hasActiveSession ? (
@@ -161,7 +165,7 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={previousTrack}
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || !supportedControls.previous}
               className="p-3 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 transition disabled:opacity-40"
               aria-label="Previous Track"
             >
@@ -171,7 +175,7 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={togglePlayPause}
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || !supportedControls.toggle}
               className="p-4 rounded-full bg-green-500 hover:bg-green-400 active:bg-green-600 text-zinc-950 font-bold transition disabled:opacity-40 shadow-lg"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -185,7 +189,7 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={nextTrack}
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || !supportedControls.next}
               className="p-3 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 transition disabled:opacity-40"
               aria-label="Next Track"
             >

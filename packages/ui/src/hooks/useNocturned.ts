@@ -1,3 +1,8 @@
+import {
+  clearWindowsMediaSnapshot,
+  getWindowsMediaSnapshot,
+  updateWindowsMediaSnapshot,
+} from "./windowsMediaState";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSettings } from "../contexts/SettingsContext";
 import { getErrorMessage } from "../utils/helpers";
@@ -390,6 +395,7 @@ let appReady = false;
 let appReadyPlatform: string | null = null; // ios, android, web, or macos
 let appReadyConnectorPlatform: string | null = null; // windows, macos, or null
 let appReadyGeneration = 0;
+let windowsMediaEventGeneration: number | null = null;
 let latestAppReadyEventId = 0;
 const appReadySubscribers = new Set<Listener<AppReadyState>>();
 let appSubscribed = true;
@@ -692,6 +698,8 @@ export const resetReconnectionExhausted = () => {
   reconnectionExhausted = false;
 };
 
+export const getWindowsMediaEventGeneration = () => windowsMediaEventGeneration;
+
 export const getAppReadyState = (): AppReadyState => ({
   ready: appReady,
   platform: appReadyPlatform,
@@ -700,6 +708,7 @@ export const getAppReadyState = (): AppReadyState => ({
 });
 
 const emitAppReadyState = () => {
+  getWindowsMediaSnapshot(appReadyGeneration);
   appReadySubscribers.forEach((listener) => {
     try {
       listener({
@@ -912,6 +921,8 @@ export const cleanupGlobalWebSocket = () => {
   resetBtReconnectCycle();
   setPhoneNetworkStatus("unknown");
   latestAppReadyEventId += 1;
+  windowsMediaEventGeneration = null;
+  clearWindowsMediaSnapshot();
   appReady = false;
   appReadyPlatform = null;
   appReadyConnectorPlatform = null;
@@ -1122,6 +1133,8 @@ const setupGlobalWebSocket = async () => {
       bluetoothDiscoveryCoordinator.disconnected();
 
       latestAppReadyEventId += 1;
+      windowsMediaEventGeneration = null;
+      clearWindowsMediaSnapshot();
       appReady = false;
       appReadyPlatform = null;
       appReadyConnectorPlatform = null;
@@ -1169,6 +1182,8 @@ const setupGlobalWebSocket = async () => {
             readyData?.ready === false ||
             (!readyData?.platform && !readyData?.ready)
           ) {
+            windowsMediaEventGeneration = null;
+            clearWindowsMediaSnapshot();
             appReady = false;
             appReadyPlatform = null;
             appReadyConnectorPlatform = null;
@@ -1185,6 +1200,14 @@ const setupGlobalWebSocket = async () => {
                 ? readyData.connector_platform
                 : null;
 
+          windowsMediaEventGeneration =
+            isConnectorPlatform(pendingPlatform) &&
+            pendingConnectorPlatform?.toLowerCase() === "windows"
+              ? appReadyGeneration + 1
+              : null;
+          // Accept replayed metadata during the existing asynchronous clock sync.
+          clearWindowsMediaSnapshot();
+          getWindowsMediaSnapshot(appReadyGeneration + 1);
           setPhoneNetworkStatus("unknown");
 
           rememberActiveDevicePlatform(pendingPlatform);
@@ -1373,15 +1396,19 @@ const setupGlobalWebSocket = async () => {
 function sendWsRequest<T = Record<string, unknown>>(
   method: string,
   params?: object,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; appReadyGeneration?: number },
 ): Promise<T>;
 function sendWsRequest(
   method: string,
   params: object = {},
-  { timeoutMs = 30000 }: { timeoutMs?: number } = {},
+  {
+    timeoutMs = 30000,
+    appReadyGeneration: expectedGeneration,
+  }: { timeoutMs?: number; appReadyGeneration?: number } = {},
 ): Promise<unknown> {
   return new Promise<unknown>((resolve, reject) => {
     const start = Date.now();
+    const readinessEventId = latestAppReadyEventId;
 
     const ensureInitialized = () => {
       if (!wsInitialized) {
@@ -1395,6 +1422,15 @@ function sendWsRequest(
     };
 
     const attemptSend = () => {
+      if (
+        expectedGeneration !== undefined &&
+        (expectedGeneration !== appReadyGeneration ||
+          latestAppReadyEventId !== readinessEventId ||
+          !appReady)
+      ) {
+        reject(new Error("App route changed before dispatch"));
+        return;
+      }
       const ws = globalWsRef;
 
       if (!ws) {
@@ -1458,7 +1494,7 @@ function sendWsRequest(
 export const sendNocturneWsRequest = <T = Record<string, unknown>>(
   method: string,
   params: object = {},
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; appReadyGeneration?: number } = {},
 ) => sendWsRequest<T>(method, params, options);
 
 const bluetoothDiscoveryCoordinator = createBluetoothDiscoveryCoordinator(
@@ -1980,6 +2016,19 @@ const handleBluetoothSingletonClose = () => {
     localStorage.getItem("lastConnectedBluetoothDevice"),
   );
 };
+
+globalWsListeners.push({
+  id: "windows-media-cache",
+  onMessage: (message) => {
+    if (message.type === "event" && windowsMediaEventGeneration !== null) {
+      updateWindowsMediaSnapshot(
+        message.topic ?? "",
+        message.data,
+        windowsMediaEventGeneration,
+      );
+    }
+  },
+});
 
 globalWsListeners.push({
   id: "bt-singleton-reconnect",
