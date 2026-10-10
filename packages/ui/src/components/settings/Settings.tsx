@@ -38,6 +38,7 @@ type SettingAction =
   | "factoryReset"
   | "signOut"
   | "openDonation"
+  | "openHostStatus"
   | "openWindowsVolume"
   | "openWindowsMedia";
 interface SettingBase {
@@ -179,6 +180,13 @@ const settingsStructure: Record<string, SettingsSection> = {
         storageKey: "nativeNotificationsEnabled",
         defaultValue: true,
         requiresDirectPhone: true,
+      },
+      {
+        id: "host-status-screen",
+        title: "Host Status",
+        type: "action",
+        description: "View Windows PC connection status and native capabilities.",
+        action: "openHostStatus",
       },
       {
         id: "windows-media-screen",
@@ -444,6 +452,9 @@ export default function Settings({
         break;
       case "openDonation":
         onOpenDonationModal();
+        break;
+      case "openHostStatus":
+        setActiveSection("hostStatus");
         break;
       case "openWindowsMedia":
         setActiveSection("windowsMedia");
