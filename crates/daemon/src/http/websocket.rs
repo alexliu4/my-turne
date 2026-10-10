@@ -1952,10 +1952,17 @@ impl WebSocketServer {
             let Some(entry) = registry.entries.get(route_key) else {
                 return;
             };
-            if !registry.is_active(route_key) {
+            let windows = AppReadyRegistry::is_windows_entry(entry);
+            let is_phone_volume = !windows
+                && route.is_some()
+                && matches!(
+                    topic.as_str(),
+                    "device.volume.update" | "phone.volume.update"
+                )
+                && registry.is_phone_route(route_key);
+            if !registry.is_active(route_key) && !is_phone_volume {
                 return;
             }
-            let windows = AppReadyRegistry::is_windows_entry(entry);
             // Never let Windows events reach phone/Spotify subscribers or vice versa.
             if (topic == "phone.volume.update" && windows)
                 || (matches!(topic.as_str(), "volume.update" | "volume.state") && !windows)
@@ -2010,7 +2017,8 @@ impl WebSocketServer {
             }
         } else if let Some(route) = route {
             let registry = self.app_ready_registry.read().await;
-            let is_phone_event = is_phone_call_event(&topic) && registry.is_phone_route(route);
+            let is_phone_event = (is_phone_call_event(&topic) || topic == "phone.volume.update")
+                && registry.is_phone_route(route);
             if !is_phone_event && registry.active_route.is_some() && !registry.is_active(route) {
                 debug!(route, %topic, "Ignoring event from inactive app connection");
                 return;
@@ -2164,6 +2172,182 @@ mod tests {
             rx.try_recv().is_err(),
             "Closed route cannot publish after the last owner disconnects"
         );
+    }
+
+    #[tokio::test]
+    async fn registered_phone_volume_survives_windows_ownership_through_msgpack() {
+        use crate::app::msgpack::{MsgPackMessage, MsgPackProtocolHandler};
+
+        async fn receive_volume(
+            server: &Arc<WebSocketServer>,
+            route: &str,
+            message: MsgPackMessage,
+        ) {
+            let mut handler = MsgPackProtocolHandler::new(Some(Arc::clone(server)));
+            handler.set_connection_route(route.into());
+            for chunk in
+                MsgPackProtocolHandler::create_chunks(&rmp_serde::to_vec_named(&message).unwrap())
+                    .unwrap()
+            {
+                handler
+                    .handle_message(AppMessage {
+                        id: "volume".into(),
+                        protocol: "com.usenocturne.daemon".into(),
+                        session_id: 1,
+                        priority: AppMessagePriority::Normal,
+                        data: chunk,
+                    })
+                    .await
+                    .unwrap();
+            }
+        }
+
+        let (app_tx, _) = mpsc::unbounded_channel();
+        let server = Arc::new(WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        ));
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        for (route, platform, connector) in [
+            ("spp:windows", "web", "windows"),
+            ("spp:android", "android", ""),
+            ("iap2:ios", "ios", ""),
+            ("spp:mac", "web", "macos"),
+            ("spp:inactive-windows", "web", "windows"),
+        ] {
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connectorPlatform": connector,
+                    }),
+                    Some(route),
+                    Some("11:22:33:44:55:66"),
+                )
+                .await;
+        }
+        // Restore the selected Windows owner after registering the other routes.
+        server
+            .broadcast_event_from_route(
+                "app.ready".into(),
+                serde_json::json!({
+                    "platform": "web", "connectorPlatform": "windows",
+                }),
+                Some("spp:windows"),
+                Some("22:33:44:55:66:77"),
+            )
+            .await;
+        while rx.try_recv().is_ok() {}
+
+        receive_volume(
+            &server,
+            "spp:windows",
+            MsgPackMessage::Call {
+                id: "volume".into(),
+                method: "device.volume.update".into(),
+                params: serde_json::json!({ "volumePercent": 66, "muted": false }),
+            },
+        )
+        .await;
+        let WebSocketMessage::Event { topic, data, .. } = rx.try_recv().unwrap() else {
+            panic!("expected Windows volume event");
+        };
+        assert_eq!(topic, "volume.update");
+        assert_eq!(data["volume_percent"], 66);
+        assert_eq!(data["muted"], false);
+
+        for route in [
+            "spp:android",
+            "iap2:ios",
+            "spp:mac",
+            "spp:inactive-windows",
+            "spp:unknown",
+        ] {
+            for message in [
+                MsgPackMessage::Call {
+                    id: "volume".into(),
+                    method: "device.volume.update".into(),
+                    params: serde_json::json!({ "volumePercent": 42, "muted": true }),
+                },
+                MsgPackMessage::Event {
+                    topic: "phone.volume.update".into(),
+                    data: serde_json::json!({ "volume_percent": 42, "muted": true }),
+                },
+                MsgPackMessage::Event {
+                    topic: "volume.update".into(),
+                    data: serde_json::json!({ "volume_percent": 99, "muted": true }),
+                },
+            ] {
+                let is_phone_message = !matches!(&message, MsgPackMessage::Event { topic, .. } if topic == "volume.update");
+                receive_volume(&server, route, message).await;
+                if matches!(route, "spp:android" | "iap2:ios") && is_phone_message {
+                    let WebSocketMessage::Event { topic, data, .. } = rx.try_recv().unwrap() else {
+                        panic!("expected phone volume event");
+                    };
+                    assert_eq!(topic, "phone.volume.update");
+                    assert_eq!(data["volume_percent"], 42);
+                    assert_eq!(data["muted"], true);
+                }
+                assert!(
+                    rx.try_recv().is_err(),
+                    "No Windows volume changes or inactive Connector events"
+                );
+                assert_eq!(
+                    server
+                        .app_ready_registry
+                        .read()
+                        .await
+                        .active()
+                        .unwrap()
+                        .route
+                        .as_deref(),
+                    Some("spp:windows")
+                );
+            }
+        }
+
+        for route in ["spp:android", "iap2:ios"] {
+            server.clear_app_ready_for_route(route).await;
+            // A replacement phone route must not restore the old connection's authority.
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": if route == "spp:android" { "android" } else { "ios" },
+                    }),
+                    Some(&format!("{route}:replacement")),
+                    Some("11:22:33:44:55:66"),
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            for message in [
+                MsgPackMessage::Call {
+                    id: "volume".into(),
+                    method: "device.volume.update".into(),
+                    params: serde_json::json!({ "volumePercent": 90, "muted": false }),
+                },
+                MsgPackMessage::Event {
+                    topic: "phone.volume.update".into(),
+                    data: serde_json::json!({ "volume_percent": 90, "muted": false }),
+                },
+            ] {
+                receive_volume(&server, route, message).await;
+                assert!(
+                    rx.try_recv().is_err(),
+                    "Disconnected phone route remains stale after reconnect"
+                );
+            }
+        }
     }
 
     #[tokio::test]
