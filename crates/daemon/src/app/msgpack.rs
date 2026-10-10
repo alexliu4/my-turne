@@ -534,7 +534,11 @@ fn normalize_media_control_event(
                             .min(100) as u8,
                     )
                 });
-            (topic, media_control_payload(event))
+            let mut payload = media_control_payload(event);
+            if let Some(muted) = data.get("muted").and_then(serde_json::Value::as_bool) {
+                payload["muted"] = serde_json::json!(muted);
+            }
+            (topic, payload)
         }
         _ => (topic, data),
     }
@@ -1790,7 +1794,10 @@ impl MsgPackProtocolHandler {
         if actual_checksum != expected_checksum {
             warn!(
                 "Chunk {}/{} checksum mismatch: expected 0x{:08x}, got 0x{:08x}, requesting retransmission",
-                chunk_idx + 1, total_chunks, expected_checksum, actual_checksum
+                chunk_idx + 1,
+                total_chunks,
+                expected_checksum,
+                actual_checksum
             );
             self.request_chunk_retransmission(&message_id, chunk_idx)
                 .await?;
@@ -2035,30 +2042,17 @@ impl MsgPackProtocolHandler {
                 }
 
                 if method == "device.volume.update" {
-                    let request = DeviceVolumeUpdateRequest {
-                        volume_percent: params
-                            .get("volume_percent")
-                            .or_else(|| params.get("volumePercent"))
-                            .and_then(|v| v.as_u64())
-                            .and_then(|v| u8::try_from(v).ok())
-                            .unwrap_or(0),
-                    };
-
-                    info!("Received phone volume update: {}%", request.volume_percent);
-
+                    // The route registry, not companion-supplied metadata, owns classification.
                     if let Some(ws_server) = &self.websocket_server {
-                        let volume_data = media_control_payload(phone_volume_update_event(
-                            request.volume_percent,
-                        ));
-
-                        tokio::spawn({
-                            let ws_server = Arc::clone(ws_server);
-                            async move {
-                                ws_server
-                                    .broadcast_event("phone.volume.update".to_string(), volume_data)
-                                    .await;
-                            }
-                        });
+                        let source_peer = self.connection_peer.map(|peer| peer.to_string());
+                        ws_server
+                            .broadcast_event_from_route(
+                                "device.volume.update".to_string(),
+                                params,
+                                self.connection_route.as_deref(),
+                                source_peer.as_deref(),
+                            )
+                            .await;
                     }
 
                     return Ok(Some(MsgPackMessage::Result {
@@ -2143,7 +2137,10 @@ impl MsgPackProtocolHandler {
                                         url_clone, e
                                     );
                                 } else {
-                                    info!("IMAGE_RESPONSE: Successfully cached image for {} ({} bytes base64)", url_clone, data_len);
+                                    info!(
+                                        "IMAGE_RESPONSE: Successfully cached image for {} ({} bytes base64)",
+                                        url_clone, data_len
+                                    );
                                 }
                             });
                         } else {
@@ -2151,7 +2148,10 @@ impl MsgPackProtocolHandler {
                         }
                     }
                 } else if !id.is_empty() && result.get("data").is_some() {
-                    warn!("IMAGE_RESPONSE: Received result with 'data' field but request {} not tracked as image request!", id);
+                    warn!(
+                        "IMAGE_RESPONSE: Received result with 'data' field but request {} not tracked as image request!",
+                        id
+                    );
                 }
 
                 if self.websocket_message_ids.contains(&id) {
@@ -2164,7 +2164,10 @@ impl MsgPackProtocolHandler {
                             let ws_server = Arc::clone(ws_server);
                             let request_id = id.clone();
                             async move {
-                                info!("ROUTE_TO_WEBSOCKET: Sending response for request {} to WebSocket clients", request_id);
+                                info!(
+                                    "ROUTE_TO_WEBSOCKET: Sending response for request {} to WebSocket clients",
+                                    request_id
+                                );
                                 ws_server.send_response(request_id, result).await;
                             }
                         });

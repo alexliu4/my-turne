@@ -117,6 +117,11 @@ const LazyNetworkBanner = React.lazy(
 const LazyAuthScreen = React.lazy(
   () => import("./components/screens/AuthScreen"),
 );
+const LazyWindowsVolume = React.lazy(() =>
+  import("./components/windows/WindowsVolume").then((m) => ({
+    default: m.WindowsVolume,
+  })),
+);
 
 const IDLE_LOCK_MS = 5 * 60 * 1000;
 const DISPLAY_IDLE_SLEEP_MS = 20 * 60 * 1000;
@@ -1916,6 +1921,11 @@ function AppContent() {
         onStepChange={setCurrentTutorialStep}
       />
     );
+  } else if (
+    activeSection === "windowsVolume" ||
+    activeSection === "windows-volume"
+  ) {
+    content = <LazyWindowsVolume onClose={() => setActiveSection("recents")} />;
   } else if (activeSection === "nowPlaying") {
     content = (
       <LazyNowPlaying
