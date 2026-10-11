@@ -2884,7 +2884,10 @@ mod tests {
         assert_eq!(ready["ready"], true);
         assert_eq!(ready["connectorPlatform"], "macos");
         assert_eq!(ready["connector_platform"], "macos");
-        assert_eq!(ready["capabilities"], serde_json::json!(["volume", "media"]));
+        assert_eq!(
+            ready["capabilities"],
+            serde_json::json!(["volume", "media"])
+        );
     }
 
     #[test]

@@ -185,7 +185,8 @@ const settingsStructure: Record<string, SettingsSection> = {
         id: "host-status-screen",
         title: "Host Status",
         type: "action",
-        description: "View Windows PC connection status and native capabilities.",
+        description:
+          "View Windows PC connection status and native capabilities.",
         action: "openHostStatus",
       },
       {
