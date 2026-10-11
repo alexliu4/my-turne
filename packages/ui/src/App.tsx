@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { BrowserRouter as Router } from "react-router-dom";
 import Home from "./pages/Home";
+import { useWindowsConnector } from "./hooks/useWindowsConnector";
+import {
+  shouldShowConnectionLostScreen,
+  useSectionNavigation,
+} from "./hooks/useSectionNavigation";
 import GradientBackground from "./components/common/GradientBackground";
 import { useGradientState } from "./hooks/useGradientState";
 import { DeviceSwitcherContext } from "./hooks/useSpotifyPlayerControls";
@@ -439,52 +444,21 @@ function AppContent() {
   const [appPlatform, setAppPlatform] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [currentTutorialStep, setCurrentTutorialStep] = useState(0);
-  const [activeSection, setActiveSection] = useState<ActiveSection>("recents");
-  const [appsBackSection, setAppsBackSection] = useState<ActiveSection>("recents");
-  const [bypassOfflineScreen, setBypassOfflineScreen] = useState(false);
-  const previousSectionRef = useRef<ActiveSection>("recents");
-  const activeSectionRef = useRef(activeSection);
-  const idleLockActiveRef = useRef(false);
-
-  useEffect(() => {
-    const isOfflineNativeSection =
-      activeSection === "apps" ||
-      activeSection === "timer" ||
-      activeSection === "weather";
-
-    if (
-      bypassOfflineScreen &&
-      !isOfflineNativeSection
-    ) {
-      // Trying to navigate to non-offline screens while disconnected redirects to offline apps
-      setActiveSection("apps");
-    }
-
-    const isAppOrWindowsDetailScreen =
-      activeSection === "timer" ||
-      activeSection === "weather" ||
-      activeSection === "hostStatus" ||
-      activeSection === "host-status" ||
-      activeSection === "windowsMedia" ||
-      activeSection === "windows-media" ||
-      activeSection === "windowsVolume" ||
-      activeSection === "windows-volume";
-
-    const isSystemOrTransientSection =
-      activeSection === "lock" ||
-      activeSection === "splash" ||
-      activeSection === "auth" ||
-      activeSection === "network";
-
-    if (!isAppOrWindowsDetailScreen && !isSystemOrTransientSection) {
-      setAppsBackSection(activeSection);
-    }
-
-    activeSectionRef.current = activeSection;
-    if (activeSection !== "lock") {
-      previousSectionRef.current = activeSection;
-    }
-  }, [activeSection, bypassOfflineScreen]);
+  const [appReady, setAppReady] = useState(false);
+  const { isWindowsActive } = useWindowsConnector();
+  const {
+    activeSection,
+    setActiveSection,
+    appsBackSection,
+    bypassOfflineScreen,
+    openOfflineApps,
+    exitOfflineMode,
+    previousSectionRef,
+    activeSectionRef,
+    idleLockActiveRef,
+    handleIdleLock,
+    handleCloseLockView,
+  } = useSectionNavigation(isWindowsActive, appReady);
   const [viewingContent, setViewingContent] = useState<ViewingContent | null>(
     null,
   );
@@ -534,7 +508,6 @@ function AppContent() {
     () => localStorage.getItem("hasSeenMockingbirdOnboarding") === "true",
   );
   const [isAuthCheckInProgress, setIsAuthCheckInProgress] = useState(false);
-  const [appReady, setAppReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const startSectionAppliedRef = useRef(false);
   const lastSpotifyAuthStateRef = useRef<boolean | null>(null);
@@ -755,9 +728,6 @@ function AppContent() {
       (state: { ready: boolean; platform: string | null }) => {
         setAppReady(state.ready);
         setAppPlatform(state.platform);
-        if (state.ready) {
-          setBypassOfflineScreen(false);
-        }
       },
     );
 
@@ -1520,23 +1490,6 @@ function AppContent() {
     viewingContent,
   ]);
 
-  const handleIdleLock = useCallback(() => {
-    if (activeSectionRef.current === "lock") return;
-
-    previousSectionRef.current = activeSectionRef.current || "recents";
-    idleLockActiveRef.current = true;
-
-    activeSectionRef.current = "lock";
-    setActiveSection("lock");
-  }, []);
-
-  const handleCloseLockView = useCallback(() => {
-    idleLockActiveRef.current = false;
-    const target = previousSectionRef.current || "recents";
-    activeSectionRef.current = target;
-    setActiveSection(target);
-  }, []);
-
   useEffect(() => {
     if (
       playerEventSequence > 0 &&
@@ -1560,15 +1513,9 @@ function AppContent() {
     if (!idleLockActiveRef.current) return;
 
     const isLocked = activeSectionRef.current === "lock";
-    const target = previousSectionRef.current ?? "nowPlaying";
-
-    if (isLocked) {
-      setActiveSection(target);
-      activeSectionRef.current = target;
-    }
-
+    if (isLocked) handleCloseLockView();
     idleLockActiveRef.current = false;
-  }, [currentPlayback]);
+  }, [currentPlayback, handleCloseLockView]);
 
   useEffect(() => {
     if (
@@ -1772,10 +1719,7 @@ function AppContent() {
       if (isMockingbirdEnabled) return;
 
       if (activeSectionRef.current === "lock") {
-        idleLockActiveRef.current = false;
-        const target = previousSectionRef.current || "recents";
-        setActiveSection(target);
-        activeSectionRef.current = target;
+        handleCloseLockView();
       } else {
         idleLockActiveRef.current = false;
         previousSectionRef.current = activeSectionRef.current;
@@ -1796,6 +1740,7 @@ function AppContent() {
     showTutorial,
     currentTutorialStep,
     showAuthScreen,
+    handleCloseLockView,
     isMockingbirdEnabled,
     presentedIncomingCall,
   ]);
@@ -1905,8 +1850,11 @@ function AppContent() {
       isReconnectPending,
       showExhaustedReconnectScreen,
     });
-  const effectiveConnectionLostScreen =
-    showConnectionLostScreen && !bypassOfflineScreen;
+  const effectiveConnectionLostScreen = shouldShowConnectionLostScreen(
+    showConnectionLostScreen,
+    bypassOfflineScreen,
+    activeSection,
+  );
 
   const showSubscriptionScreen =
     !showConnectionLostScreen &&
@@ -1927,7 +1875,10 @@ function AppContent() {
     !showSplash;
 
   const isSystemScreen =
-    showSplash || showAuthScreen || effectiveConnectionLostScreen || showTutorial;
+    showSplash ||
+    showAuthScreen ||
+    effectiveConnectionLostScreen ||
+    showTutorial;
   const mockingbirdSystemScreen =
     isMockingbird && !showSplash
       ? showTutorial && !hasSeenMockingbirdOnboardingFlag
@@ -1966,14 +1917,23 @@ function AppContent() {
         openBluetoothPairing={!hasKnownBluetoothDevice && !appReady}
       />
     );
+  } else if (activeSection === "lock" && !showTutorial) {
+    content = (
+      <LazyLockView
+        currentPlayback={currentPlayback}
+        refreshPlaybackState={refreshPlaybackState}
+        updateGradientColors={updateGradientColors}
+        onClose={handleCloseLockView}
+      />
+    );
   } else if (effectiveConnectionLostScreen) {
     content = (
       <LazyNetworkScreen
         isConnectionLost={true}
         onConnectionRestored={handleConnectionRestored}
         onOpenApps={() => {
-          setBypassOfflineScreen(true);
-          setActiveSection("apps");
+          setViewingContent(null);
+          openOfflineApps();
         }}
       />
     );
@@ -1988,21 +1948,31 @@ function AppContent() {
     activeSection === "hostStatus" ||
     activeSection === "host-status"
   ) {
-    content = <LazyHostStatus onClose={() => setActiveSection(appsBackSection)} />;
+    content = (
+      <LazyHostStatus onClose={() => setActiveSection(appsBackSection)} />
+    );
   } else if (
     activeSection === "windowsMedia" ||
     activeSection === "windows-media"
   ) {
-    content = <LazyWindowsMedia onClose={() => setActiveSection(appsBackSection)} />;
+    content = (
+      <LazyWindowsMedia onClose={() => setActiveSection(appsBackSection)} />
+    );
   } else if (
     activeSection === "windowsVolume" ||
     activeSection === "windows-volume"
   ) {
-    content = <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />;
+    content = (
+      <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
+    );
   } else if (activeSection === "timer") {
-    content = <LazyTimerApp onClose={() => setActiveSection(appsBackSection)} />;
+    content = (
+      <LazyTimerApp onClose={() => setActiveSection(appsBackSection)} />
+    );
   } else if (activeSection === "weather") {
-    content = <LazyWeatherApp onClose={() => setActiveSection(appsBackSection)} />;
+    content = (
+      <LazyWeatherApp onClose={() => setActiveSection(appsBackSection)} />
+    );
   } else if (activeSection === "nowPlaying") {
     content = (
       <LazyNowPlaying
@@ -2015,15 +1985,6 @@ function AppContent() {
         onNavigateToAlbum={handleNavigateToAlbumFromNowPlaying}
         setIgnoreNextRelease={setIgnoreNextRelease}
         isReceivingNowPlayingUpdates={isReceivingNowPlayingUpdates}
-      />
-    );
-  } else if (activeSection === "lock") {
-    content = (
-      <LazyLockView
-        currentPlayback={currentPlayback}
-        refreshPlaybackState={refreshPlaybackState}
-        updateGradientColors={updateGradientColors}
-        onClose={handleCloseLockView}
       />
     );
   } else if (viewingContent) {
@@ -2060,11 +2021,7 @@ function AppContent() {
         refreshPlaybackState={refreshPlaybackState}
         onOpenContent={handleOpenContent}
         onNavigateToNowPlaying={handleNavigateToNowPlaying}
-          onExitOfflineMode={
-            bypassOfflineScreen
-              ? () => setBypassOfflineScreen(false)
-              : undefined
-          }
+        onExitOfflineMode={bypassOfflineScreen ? exitOfflineMode : undefined}
       />
     );
   }

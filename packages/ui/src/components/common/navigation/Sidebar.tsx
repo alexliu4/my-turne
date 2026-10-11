@@ -52,7 +52,8 @@ const SidebarItem = memo(
       </div>
     </div>
   ),
-  (prev, next) => prev.isActive === next.isActive,
+  (prev, next) =>
+    prev.isActive === next.isActive && prev.onSelect === next.onSelect,
 );
 
 const SidebarComponent = function Sidebar({
@@ -64,6 +65,7 @@ const SidebarComponent = function Sidebar({
 
   const handleSectionClick = (section: ActiveSection) => {
     window.umami?.track?.("sidebar_tab_click", { section });
+    if (onExitOfflineMode && section !== "apps") return;
     setActiveSection(section);
   };
 
@@ -144,5 +146,6 @@ export default memo(
   SidebarComponent,
   (prev, next) =>
     prev.activeSection === next.activeSection &&
-    prev.setActiveSection === next.setActiveSection,
+    prev.setActiveSection === next.setActiveSection &&
+    prev.onExitOfflineMode === next.onExitOfflineMode,
 );

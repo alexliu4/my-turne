@@ -135,10 +135,15 @@ const APPS_CATALOG: AppDefinition[] = [
 function AppsSection({ activeSection, onSelectApp }: AppsSectionProps) {
   const { isWindowsActive } = useWindowsConnector();
 
+  const selectApp = (app: AppDefinition) => {
+    if (app.isWindowsDependent && !isWindowsActive) return;
+    onSelectApp(app.targetSection);
+  };
+
   const handleItemSelect = (index: number) => {
     if (index !== -1 && APPS_CATALOG[index]) {
       const app = APPS_CATALOG[index];
-      onSelectApp(app.targetSection);
+      selectApp(app);
     }
   };
 
@@ -158,7 +163,8 @@ function AppsSection({ activeSection, onSelectApp }: AppsSectionProps) {
             <div
               style={CARD_SIZE_STYLE}
               className="mt-10 aspect-square rounded-[12px] drop-shadow-[0_8px_5px_rgba(0,0,0,0.25)] bg-white/10 border border-white/15 flex flex-col items-center justify-center relative overflow-hidden"
-              onClick={() => onSelectApp(app.targetSection)}
+              onClick={() => selectApp(app)}
+              aria-disabled={isOffline}
             >
               {app.iconSvg}
               {app.isWindowsDependent && (
@@ -176,7 +182,8 @@ function AppsSection({ activeSection, onSelectApp }: AppsSectionProps) {
 
             <h4
               className="mt-2 text-[36px] font-[580] text-white truncate tracking-tight max-w-[280px]"
-              onClick={() => onSelectApp(app.targetSection)}
+              onClick={() => selectApp(app)}
+              aria-disabled={isOffline}
             >
               {app.title}
             </h4>
