@@ -117,6 +117,11 @@ const LazyNetworkBanner = React.lazy(
 const LazyAuthScreen = React.lazy(
   () => import("./components/screens/AuthScreen"),
 );
+const LazyHostStatus = React.lazy(() =>
+  import("./components/windows/HostStatus").then((m) => ({
+    default: m.HostStatus,
+  })),
+);
 const LazyWindowsMedia = React.lazy(() =>
   import("./components/windows/WindowsMedia").then((m) => ({
     default: m.WindowsMedia,
@@ -1926,6 +1931,11 @@ function AppContent() {
         onStepChange={setCurrentTutorialStep}
       />
     );
+  } else if (
+    activeSection === "hostStatus" ||
+    activeSection === "host-status"
+  ) {
+    content = <LazyHostStatus onClose={() => setActiveSection("recents")} />;
   } else if (
     activeSection === "windowsMedia" ||
     activeSection === "windows-media"

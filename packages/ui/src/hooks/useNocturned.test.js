@@ -140,6 +140,42 @@ describe("WebSocket app.ready async ordering", () => {
     restoreGlobals();
   });
 
+  it.each(["offline event", "socket closure", "cleanup"])(
+    "propagates session handshake capabilities and clears them on %s",
+    async (cancellation) => {
+      const capabilities = { volume: true, media: true, discord: false };
+      socket.ready({
+        platform: "web",
+        connectorPlatform: "windows",
+        capabilities,
+      });
+      await socket.completeTimeSync(0);
+      expect(getAppReadyState().capabilities).toEqual(capabilities);
+      expect(published.at(-1).capabilities).toEqual(capabilities);
+
+      // A newer handshake without metadata must not inherit the old capabilities.
+      socket.ready({ platform: "web", connectorPlatform: "macos" });
+      await socket.completeTimeSync(1);
+      expect(getAppReadyState().capabilities).toBeUndefined();
+      expect(published.at(-1).capabilities).toBeUndefined();
+
+      // The daemon's existing handshake contract also supports string arrays.
+      socket.ready({
+        platform: "web",
+        connectorPlatform: "windows",
+        capabilities: ["media"],
+      });
+      await socket.completeTimeSync(2);
+      expect(getAppReadyState().capabilities).toEqual(["media"]);
+      if (cancellation === "offline event") socket.ready({ ready: false });
+      else if (cancellation === "socket closure") socket.close();
+      else cleanupGlobalWebSocket();
+      expect(getAppReadyState().ready).toBe(false);
+      expect(getAppReadyState().capabilities).toBeUndefined();
+      expect(published.at(-1).capabilities).toBeUndefined();
+    },
+  );
+
   it("captures Windows replay while clock sync is pending and keeps paused state without screen listeners", async () => {
     socket.ready({ platform: "web", connectorPlatform: "windows" });
     socket.receive({
