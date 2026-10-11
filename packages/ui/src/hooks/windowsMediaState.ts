@@ -74,6 +74,15 @@ export function normalizeMediaGeneration(value: unknown): number | null {
   return num !== null && Number.isSafeInteger(num) && num >= 0 ? num : null;
 }
 
+export function isWindowsMediaTopic(topic?: string): boolean {
+  return (
+    topic === "media.now_playing.update" ||
+    topic === "media.nowPlaying.update" ||
+    topic === "media.now_playing.artwork" ||
+    topic === "media.nowPlaying.artwork"
+  );
+}
+
 export function formatArtworkUrl(
   data: string,
   contentType?: string | null,
@@ -111,6 +120,9 @@ export function updateWindowsMediaSnapshot(
   data: unknown,
   routeGeneration: number,
 ) {
+  if (!isWindowsMediaTopic(topic)) {
+    return getWindowsMediaSnapshot(routeGeneration);
+  }
   const prev = getWindowsMediaSnapshot(routeGeneration);
   const body = record(data);
   if (!body) return prev;

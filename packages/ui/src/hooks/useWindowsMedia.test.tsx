@@ -486,18 +486,157 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     await act(async () => {
       void hook.nextTrack();
     });
+    expect(hook.isLoading).toBe(true);
     await act(async () => root.render(null));
     await mount();
+    expect(hook.isLoading).toBe(true);
     await act(async () => {
       void hook.previousTrack();
     });
     expect(calls).toHaveLength(1);
     await respond({ status: "ok" });
+    expect(hook.isLoading).toBe(false);
     await act(async () => {
       void hook.previousTrack();
     });
     expect(calls).toHaveLength(2);
     await respond({ status: "ok" });
+  });
+
+  test("loading state recovers properly on RPC rejection, timeout, and route change", async () => {
+    await mount();
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    // Rejection recovery
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await act(async () => calls[0].reject(new Error("RPC Failed")));
+    expect(hook.isLoading).toBe(false);
+    expect(hook.error).toBe("RPC Failed");
+
+    // Timeout / error recovery
+    await act(async () => {
+      void hook.previousTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await act(async () => calls[1].reject(new Error("Request timeout")));
+    expect(hook.isLoading).toBe(false);
+    expect(hook.error).toBe("Request timeout");
+
+    // Route change recovery
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    expect(hook.isLoading).toBe(true);
+    await route("windows"); // changes generation
+    expect(hook.isLoading).toBe(false);
+  });
+
+  test("RPC A completion on older generation does not clear loading for pending RPC B on newer generation", async () => {
+    await mount(<WindowsMedia />);
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song Gen 1" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    // Start RPC A on generation 1
+    await act(async () => {
+      button("Next Track").click();
+    });
+    expect(calls).toHaveLength(1);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
+
+    // Route generation changes to generation 2
+    await route("windows");
+    await event({
+      media_generation: 2,
+      media_item_attributes: { MediaItemTitle: "Song Gen 2" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    // Start RPC B on generation 2
+    await act(async () => {
+      button("Previous Track").click();
+    });
+    expect(calls).toHaveLength(2);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
+
+    // Resolve or reject RPC A (from generation 1)
+    await act(async () => calls[0].resolve({ status: "ok" }));
+
+    // UI must still be loading and transport buttons remain disabled for RPC B
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
+
+    // Settle RPC B
+    await act(async () => calls[1].resolve({ status: "ok" }));
+
+    // Controls recover correctly
+    expect(button("Pause").disabled).toBe(false);
+    expect(button("Next Track").disabled).toBe(false);
+    expect(button("Previous Track").disabled).toBe(false);
+  });
+
+  test("unrelated WebSocket events do not cause React re-renders or update state", async () => {
+    let renderCount = 0;
+    function RenderTracker() {
+      hook = useWindowsMedia();
+      renderCount++;
+      return null;
+    }
+
+    await mount(<RenderTracker />);
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Initial Track" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    const initialRenders = renderCount;
+
+    // Unrelated events
+    await act(async () => {
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "volume.update",
+        data: { level: 50 },
+      });
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "notification.show",
+        data: { message: "Call" },
+      });
+      eventListener?.onMessage?.({
+        type: "event",
+        topic: "phone.status",
+        data: { status: "connected" },
+      });
+    });
+
+    expect(renderCount).toBe(initialRenders);
+    expect(hook.title).toBe("Initial Track");
+
+    // Valid media event updates UI normally
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Updated Track" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+
+    expect(renderCount).toBeGreaterThan(initialRenders);
+    expect(hook.title).toBe("Updated Track");
   });
 
   test("late unsupported replies cannot disable a replacement session; malformed responses release busy state", async () => {
