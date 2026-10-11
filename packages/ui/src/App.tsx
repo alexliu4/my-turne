@@ -440,6 +440,8 @@ function AppContent() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [currentTutorialStep, setCurrentTutorialStep] = useState(0);
   const [activeSection, setActiveSection] = useState<ActiveSection>("recents");
+  const [appsBackSection, setAppsBackSection] = useState<ActiveSection>("recents");
+  const [bypassOfflineScreen, setBypassOfflineScreen] = useState(false);
   const previousSectionRef = useRef<ActiveSection>("recents");
   const activeSectionRef = useRef(activeSection);
   const idleLockActiveRef = useRef(false);
@@ -1867,7 +1869,8 @@ function AppContent() {
       isReconnectPending,
       showExhaustedReconnectScreen,
     });
-  // const showConnectionLostScreen = false;
+  const effectiveConnectionLostScreen =
+    showConnectionLostScreen && !bypassOfflineScreen;
 
   const showSubscriptionScreen =
     !showConnectionLostScreen &&
@@ -1882,13 +1885,13 @@ function AppContent() {
   const displayNetworkBanner =
     showNetworkBanner &&
     !isMockingbird &&
-    !showConnectionLostScreen &&
+    !effectiveConnectionLostScreen &&
     !showTutorial &&
     !showAuthScreen &&
     !showSplash;
 
   const isSystemScreen =
-    showSplash || showAuthScreen || showConnectionLostScreen || showTutorial;
+    showSplash || showAuthScreen || effectiveConnectionLostScreen || showTutorial;
   const mockingbirdSystemScreen =
     isMockingbird && !showSplash
       ? showTutorial && !hasSeenMockingbirdOnboardingFlag
@@ -1927,11 +1930,15 @@ function AppContent() {
         openBluetoothPairing={!hasKnownBluetoothDevice && !appReady}
       />
     );
-  } else if (showConnectionLostScreen) {
+  } else if (effectiveConnectionLostScreen) {
     content = (
       <LazyNetworkScreen
         isConnectionLost={true}
         onConnectionRestored={handleConnectionRestored}
+        onOpenApps={() => {
+          setBypassOfflineScreen(true);
+          setActiveSection("apps");
+        }}
       />
     );
   } else if (showTutorial) {
@@ -1945,21 +1952,21 @@ function AppContent() {
     activeSection === "hostStatus" ||
     activeSection === "host-status"
   ) {
-    content = <LazyHostStatus onClose={() => setActiveSection("recents")} />;
+    content = <LazyHostStatus onClose={() => setActiveSection(appsBackSection)} />;
   } else if (
     activeSection === "windowsMedia" ||
     activeSection === "windows-media"
   ) {
-    content = <LazyWindowsMedia onClose={() => setActiveSection("recents")} />;
+    content = <LazyWindowsMedia onClose={() => setActiveSection(appsBackSection)} />;
   } else if (
     activeSection === "windowsVolume" ||
     activeSection === "windows-volume"
   ) {
-    content = <LazyWindowsVolume onClose={() => setActiveSection("recents")} />;
+    content = <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "timer") {
-    content = <LazyTimerApp onClose={() => setActiveSection("apps")} />;
+    content = <LazyTimerApp onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "weather") {
-    content = <LazyWeatherApp onClose={() => setActiveSection("apps")} />;
+    content = <LazyWeatherApp onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "nowPlaying") {
     content = (
       <LazyNowPlaying

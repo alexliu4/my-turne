@@ -1,53 +1,64 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { BackIcon } from "../common/icons";
+import {
+  getTimerState,
+  subscribeTimerState,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  addTimerMs,
+  updateTimerTick,
+} from "./timerStore";
 
 export function TimerApp({
   onClose,
 }: {
   onClose?: () => void;
 }): React.ReactElement {
-  const [seconds, setSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [timerState, setTimerState] = useState(getTimerState());
 
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setSeconds((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    const unsubscribe = subscribeTimerState(() => {
+      setTimerState(getTimerState());
+    });
+    return unsubscribe;
+  }, []);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isRunning]);
+  useEffect(() => {
+    if (!timerState.isRunning) return;
+
+    const interval = setInterval(() => {
+      updateTimerTick();
+      setTimerState(getTimerState());
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [timerState.isRunning]);
+
+  const calculateRemainingSeconds = () => {
+    if (timerState.isRunning && timerState.endTime) {
+      const remainingMs = Math.max(0, timerState.endTime - Date.now());
+      return Math.ceil(remainingMs / 1000);
+    }
+    return Math.ceil(timerState.remainingMs / 1000);
+  };
+
+  const remainingSeconds = calculateRemainingSeconds();
 
   const handleStartPause = () => {
-    if (!isRunning && seconds === 0) {
-      // Default to 60 seconds if starting from 0
-      setSeconds(60);
+    if (timerState.isRunning) {
+      pauseTimer();
+    } else {
+      startTimer();
     }
-    setIsRunning((prev) => !prev);
   };
 
   const handleReset = () => {
-    setIsRunning(false);
-    setSeconds(0);
+    resetTimer();
   };
 
   const handleAddPreset = (addSeconds: number) => {
-    setSeconds((prev) => prev + addSeconds);
+    addTimerMs(addSeconds * 1000);
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -102,7 +113,7 @@ export function TimerApp({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col items-center justify-center space-y-8">
         <div className="text-7xl font-mono font-bold tracking-wider text-zinc-100 bg-zinc-900/80 px-8 py-6 rounded-2xl border border-zinc-800 shadow-inner">
-          {formatTime(seconds)}
+          {remainingSeconds === 0 && !timerState.isRunning && timerState.remainingMs === 0 ? "00:00" : formatTime(remainingSeconds)}
         </div>
 
         {/* Presets */}
@@ -136,12 +147,12 @@ export function TimerApp({
             type="button"
             onClick={handleStartPause}
             className={`px-8 py-3 rounded-xl font-semibold text-lg transition ${
-              isRunning
+              timerState.isRunning
                 ? "bg-amber-600 hover:bg-amber-500 text-zinc-100"
                 : "bg-emerald-600 hover:bg-emerald-500 text-zinc-100"
             }`}
           >
-            {isRunning ? "Pause" : "Start"}
+            {timerState.isRunning ? "Pause" : "Start"}
           </button>
           <button
             type="button"
