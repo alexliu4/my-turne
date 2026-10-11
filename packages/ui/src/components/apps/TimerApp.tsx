@@ -113,7 +113,7 @@ export function TimerApp({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col items-center justify-center space-y-8">
         <div className="text-7xl font-mono font-bold tracking-wider text-zinc-100 bg-zinc-900/80 px-8 py-6 rounded-2xl border border-zinc-800 shadow-inner">
-          {remainingSeconds === 0 && !timerState.isRunning && timerState.remainingMs === 0 ? "00:00" : formatTime(remainingSeconds)}
+          {timerState.isFinished ? "Time's Up!" : formatTime(remainingSeconds)}
         </div>
 
         {/* Presets */}

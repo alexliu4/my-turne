@@ -447,6 +447,20 @@ function AppContent() {
   const idleLockActiveRef = useRef(false);
 
   useEffect(() => {
+    const isAppOrWindowsDetailScreen =
+      activeSection === "timer" ||
+      activeSection === "weather" ||
+      activeSection === "hostStatus" ||
+      activeSection === "host-status" ||
+      activeSection === "windowsMedia" ||
+      activeSection === "windows-media" ||
+      activeSection === "windowsVolume" ||
+      activeSection === "windows-volume";
+
+    if (!isAppOrWindowsDetailScreen) {
+      setAppsBackSection(activeSection);
+    }
+
     activeSectionRef.current = activeSection;
     if (activeSection !== "lock") {
       previousSectionRef.current = activeSection;
@@ -722,6 +736,9 @@ function AppContent() {
       (state: { ready: boolean; platform: string | null }) => {
         setAppReady(state.ready);
         setAppPlatform(state.platform);
+        if (state.ready) {
+          setBypassOfflineScreen(false);
+        }
       },
     );
 

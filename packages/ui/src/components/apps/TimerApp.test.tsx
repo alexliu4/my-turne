@@ -122,4 +122,29 @@ describe("TimerApp and timerStore behavioral tests", () => {
     expect(state.isRunning).toBe(false);
     expect(state.remainingMs).toBe(0);
   });
+
+  it("reconciles timer expired while unmounted and shows Time's Up on remount", async () => {
+    addTimerMs(100); // 100ms
+    startTimer();
+
+    // Fast-forward past deadline
+    const initialDeadline = getTimerState().endTime!;
+    const originalNow = Date.now;
+    Date.now = () => initialDeadline + 1000;
+
+    try {
+      const state = getTimerState(); // getTimerState reconciles expiration
+      expect(state.isFinished).toBe(true);
+      expect(state.isRunning).toBe(false);
+
+      await act(async () => {
+        root.render(<TimerApp />);
+      });
+
+      const textContent = document.body.textContent ?? "";
+      expect(textContent).toContain("Time's Up!");
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 });
