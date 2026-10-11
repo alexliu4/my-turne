@@ -430,7 +430,7 @@ Restore useful Host Status UI details using native Connector state without reint
 ## Requirements
 
 - Define a verified device-side capability contract, preferably querying the authoritative Connector RPC and preserving handshake metadata only if needed.
-- Refresh capabilities whenever ownership or actual availability changes.
+- Refresh capabilities on session changes and manual Refresh. Runtime availability changes within a session may remain stale until Refresh; there is no polling.
 - Ensure unknown and unsupported features are never falsely advertised as available.
 - Offline or fallback status must clear stale Windows capabilities.
 
@@ -462,7 +462,7 @@ Using fallback Connector
 ## Acceptance Criteria
 
 - Device capability contract handles `app.ready` normalization by querying authoritative Connector RPC.
-- Capability list refreshes on ownership/availability transitions and clears stale capabilities when offline/fallback.
+- Capability list refreshes on session changes and manual Refresh, and clears stale capabilities when offline/fallback.
 - Unknown and unsupported features are never falsely advertised as available.
 
 ---

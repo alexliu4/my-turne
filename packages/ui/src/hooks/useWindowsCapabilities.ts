@@ -104,7 +104,7 @@ export function parseCapabilities(
     for (const item of payload) {
       if (typeof item === "string") {
         const lower = item.toLowerCase().trim();
-        const mapped = KEY_MAP[lower];
+        const mapped = Object.hasOwn(KEY_MAP, lower) ? KEY_MAP[lower] : null;
         if (mapped) {
           result[mapped] = true;
         }
@@ -124,7 +124,7 @@ export function parseCapabilities(
       for (const item of targetCaps) {
         if (typeof item === "string") {
           const lower = item.toLowerCase().trim();
-          const mapped = KEY_MAP[lower];
+          const mapped = Object.hasOwn(KEY_MAP, lower) ? KEY_MAP[lower] : null;
           if (mapped) {
             result[mapped] = true;
           }
@@ -136,18 +136,12 @@ export function parseCapabilities(
     const targetObj = targetCaps as Record<string, unknown>;
     for (const [key, val] of Object.entries(targetObj)) {
       const lowerKey = key.toLowerCase().trim();
-      const mappedKey =
-        KEY_MAP[lowerKey] || (CAPABILITY_KEYS.includes(key as any) ? (key as WindowsCapabilityKey) : null);
+      const mappedKey = Object.hasOwn(KEY_MAP, lowerKey)
+        ? KEY_MAP[lowerKey]
+        : null;
 
-      if (mappedKey) {
-        if (
-          val === true ||
-          val === "available" ||
-          val === "enabled" ||
-          val === "supported"
-        ) {
-          result[mappedKey] = true;
-        }
+      if (mappedKey && val === true) {
+        result[mappedKey] = true;
       }
     }
   }
@@ -226,7 +220,11 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
   const requestTokenRef = useRef(0);
 
   useEffect(() => {
-    return subscribeAppReadyState(setAppReady);
+    const unsubscribe = subscribeAppReadyState(setAppReady);
+    return () => {
+      requestTokenRef.current++;
+      unsubscribe();
+    };
   }, []);
 
   const refreshCapabilities = useCallback(async () => {
