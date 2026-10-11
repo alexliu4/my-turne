@@ -146,7 +146,12 @@ export function useWindowsMedia() {
         if (pendingRef.current === operation) {
           pendingRef.current = null;
         }
-        setState((prev) => ({ ...prev, isLoading: false }));
+        const currentReady = getAppReadyState();
+        const currentConnector = getWindowsConnectorState(currentReady);
+        const isBusy =
+          currentConnector.isWindowsActive &&
+          inFlightControl?.generation === currentReady.generation;
+        setState((prev) => ({ ...prev, isLoading: isBusy }));
       }
     },
     [],
