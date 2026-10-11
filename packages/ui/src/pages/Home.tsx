@@ -50,6 +50,7 @@ interface HomeProps extends Pick<
   refreshPlaybackState: () => void;
   onOpenContent: OpenContent;
   onNavigateToNowPlaying: () => void;
+  onExitOfflineMode?: () => void;
 }
 
 const DJ_PLAYLIST_URI = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq";
@@ -83,6 +84,7 @@ export default function Home({
   refreshPlaybackState,
   onOpenContent,
   onNavigateToNowPlaying,
+  onExitOfflineMode,
 }: HomeProps) {
   const { playDJMix } = useSpotifyPlayerControls(currentPlayback);
   const [showDonationModal, setShowDonationModal] = useState(false);
@@ -263,6 +265,7 @@ export default function Home({
           <Sidebar
             activeSection={activeSection}
             setActiveSection={setActiveSection}
+            onExitOfflineMode={onExitOfflineMode}
           />
         </div>
 

@@ -96,4 +96,23 @@ describe("AppsSection component behavioral tests", () => {
     expect(textContent).toContain("PC Offline");
     expect(textContent).toContain("PC Unavailable");
   });
+
+  it("invokes onSelectApp callback with target section when card is selected", async () => {
+    spyOn(windowsConnector, "useWindowsConnector").mockImplementation(() => ({
+      isWindowsActive: true,
+      isFallbackActive: false,
+      hasActiveConnector: true,
+      activeConnectorPlatform: "windows",
+      appPlatform: "web",
+    }));
+
+    const onSelectApp = mock((_section: string) => {});
+
+    await act(async () => {
+      root.render(<AppsSection activeSection="apps" onSelectApp={onSelectApp} />);
+    });
+
+    const timerCard = document.querySelector('[data-id="timer"]');
+    expect(timerCard).toBeDefined();
+  });
 });

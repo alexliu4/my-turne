@@ -447,6 +447,19 @@ function AppContent() {
   const idleLockActiveRef = useRef(false);
 
   useEffect(() => {
+    const isOfflineNativeSection =
+      activeSection === "apps" ||
+      activeSection === "timer" ||
+      activeSection === "weather";
+
+    if (
+      bypassOfflineScreen &&
+      !isOfflineNativeSection
+    ) {
+      // Trying to navigate to non-offline screens while disconnected redirects to offline apps
+      setActiveSection("apps");
+    }
+
     const isAppOrWindowsDetailScreen =
       activeSection === "timer" ||
       activeSection === "weather" ||
@@ -457,7 +470,13 @@ function AppContent() {
       activeSection === "windowsVolume" ||
       activeSection === "windows-volume";
 
-    if (!isAppOrWindowsDetailScreen) {
+    const isSystemOrTransientSection =
+      activeSection === "lock" ||
+      activeSection === "splash" ||
+      activeSection === "auth" ||
+      activeSection === "network";
+
+    if (!isAppOrWindowsDetailScreen && !isSystemOrTransientSection) {
       setAppsBackSection(activeSection);
     }
 
@@ -465,7 +484,7 @@ function AppContent() {
     if (activeSection !== "lock") {
       previousSectionRef.current = activeSection;
     }
-  }, [activeSection]);
+  }, [activeSection, bypassOfflineScreen]);
   const [viewingContent, setViewingContent] = useState<ViewingContent | null>(
     null,
   );
@@ -2041,6 +2060,11 @@ function AppContent() {
         refreshPlaybackState={refreshPlaybackState}
         onOpenContent={handleOpenContent}
         onNavigateToNowPlaying={handleNavigateToNowPlaying}
+          onExitOfflineMode={
+            bypassOfflineScreen
+              ? () => setBypassOfflineScreen(false)
+              : undefined
+          }
       />
     );
   }
