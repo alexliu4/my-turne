@@ -539,11 +539,7 @@ describe("Windows Media hook RPC and event lifecycle", () => {
   });
 
   test("RPC A completion on older generation does not clear loading for pending RPC B on newer generation", async () => {
-    function RenderTracker() {
-      hook = useWindowsMedia();
-      return null;
-    }
-    await mount(<RenderTracker />);
+    await mount(<WindowsMedia />);
     await event({
       media_generation: 1,
       media_item_attributes: { MediaItemTitle: "Song Gen 1" },
@@ -552,37 +548,45 @@ describe("Windows Media hook RPC and event lifecycle", () => {
 
     // Start RPC A on generation 1
     await act(async () => {
-      void hook.nextTrack();
+      button("Next Track").click();
     });
     expect(calls).toHaveLength(1);
-    expect(hook.isLoading).toBe(true);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
 
     // Route generation changes to generation 2
     await route("windows");
     await event({
-      media_generation: 1,
+      media_generation: 2,
       media_item_attributes: { MediaItemTitle: "Song Gen 2" },
       playback_attributes: { PlaybackStatus: "playing" },
     });
 
     // Start RPC B on generation 2
     await act(async () => {
-      void hook.previousTrack();
+      button("Previous Track").click();
     });
     expect(calls).toHaveLength(2);
-    expect(hook.isLoading).toBe(true);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
 
     // Resolve or reject RPC A (from generation 1)
     await act(async () => calls[0].resolve({ status: "ok" }));
 
     // UI must still be loading and transport buttons remain disabled for RPC B
-    expect(hook.isLoading).toBe(true);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Previous Track").disabled).toBe(true);
 
     // Settle RPC B
     await act(async () => calls[1].resolve({ status: "ok" }));
 
     // Controls recover correctly
-    expect(hook.isLoading).toBe(false);
+    expect(button("Pause").disabled).toBe(false);
+    expect(button("Next Track").disabled).toBe(false);
+    expect(button("Previous Track").disabled).toBe(false);
   });
 
   test("unrelated WebSocket events do not cause React re-renders or update state", async () => {
