@@ -7,6 +7,45 @@ import {
 import * as daemon from "./useNocturned";
 
 describe("Windows capability parsing & map building", () => {
+  it("parses actual Connector RPC response shape with boolean flags", () => {
+    const connectorResponse = {
+      result: {
+        capabilities: {
+          volume: true,
+          media: true,
+          discord: false,
+          systemStats: true,
+          macros: false,
+          appLaunch: false,
+        },
+      },
+    };
+
+    const parsed = parseCapabilities(connectorResponse);
+    expect(parsed.volume).toBe(true);
+    expect(parsed.media).toBe(true);
+    expect(parsed.discord).toBe(false);
+    expect(parsed.systemStats).toBe(true);
+    expect(parsed.macros).toBe(false);
+    expect(parsed.appLaunch).toBe(false);
+  });
+
+  it("parses unwrapped capability boolean map", () => {
+    const capsObj = {
+      volume: true,
+      media: true,
+      discord: false,
+      systemStats: false,
+      macros: false,
+      appLaunch: false,
+    };
+
+    const parsed = parseCapabilities(capsObj);
+    expect(parsed.volume).toBe(true);
+    expect(parsed.media).toBe(true);
+    expect(parsed.discord).toBe(false);
+  });
+
   it("parses array of capability strings", () => {
     const parsed = parseCapabilities(["volume", "media", "discord"]);
     expect(parsed.volume).toBe(true);
@@ -30,24 +69,6 @@ describe("Windows capability parsing & map building", () => {
     expect(parsed.systemStats).toBe(true);
     expect(parsed.macros).toBe(true);
     expect(parsed.appLaunch).toBe(true);
-  });
-
-  it("parses object with capabilities array or boolean flags", () => {
-    const parsedFromObj = parseCapabilities({
-      capabilities: ["volume", "media"],
-    });
-    expect(parsedFromObj.volume).toBe(true);
-    expect(parsedFromObj.media).toBe(true);
-    expect(parsedFromObj.discord).toBe(false);
-
-    const parsedFromFlags = parseCapabilities({
-      volume: true,
-      media: "available",
-      discord: false,
-    });
-    expect(parsedFromFlags.volume).toBe(true);
-    expect(parsedFromFlags.media).toBe(true);
-    expect(parsedFromFlags.discord).toBe(false);
   });
 
   it("builds capabilities map when active vs inactive", () => {
@@ -89,12 +110,12 @@ describe("Windows capability parsing & map building", () => {
       platform: "web",
       connectorPlatform: "windows",
       generation: 1,
-      capabilities: ["volume", "discord"],
+      capabilities: { volume: true, discord: true },
     } as any;
-    expect(extractHandshakeCapabilities(rootState)).toEqual([
-      "volume",
-      "discord",
-    ]);
+    expect(extractHandshakeCapabilities(rootState)).toEqual({
+      volume: true,
+      discord: true,
+    });
 
     const dataState = {
       ready: true,

@@ -57,6 +57,26 @@ const createOfflineCapabilities = (): Record<
   appLaunch: "Offline",
 });
 
+const KEY_MAP: Record<string, WindowsCapabilityKey> = {
+  volume: "volume",
+  audio_control: "volume",
+  media: "media",
+  gsmtc: "media",
+  discord: "discord",
+  systemstats: "systemStats",
+  system_stats: "systemStats",
+  system_stat: "systemStats",
+  stats: "systemStats",
+  pc_stats: "systemStats",
+  macros: "macros",
+  macro: "macros",
+  macro_execution: "macros",
+  applaunch: "appLaunch",
+  app_launch: "appLaunch",
+  app_launcher: "appLaunch",
+  apps: "appLaunch",
+};
+
 export function parseCapabilities(
   raw: unknown,
 ): Record<WindowsCapabilityKey, boolean> {
@@ -71,68 +91,64 @@ export function parseCapabilities(
 
   if (!raw) return result;
 
-  let items: unknown[] = [];
-  if (Array.isArray(raw)) {
-    items = raw;
-  } else if (typeof raw === "object" && raw !== null) {
-    const obj = raw as Record<string, unknown>;
-    if (Array.isArray(obj.capabilities)) {
-      items = obj.capabilities;
-    } else if (Array.isArray(obj.items)) {
-      items = obj.items;
-    } else {
-      for (const [key, val] of Object.entries(obj)) {
+  let payload: unknown = raw;
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "result" in (payload as Record<string, unknown>)
+  ) {
+    payload = (payload as Record<string, unknown>).result;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      if (typeof item === "string") {
+        const lower = item.toLowerCase().trim();
+        const mapped = KEY_MAP[lower];
+        if (mapped) {
+          result[mapped] = true;
+        }
+      }
+    }
+    return result;
+  }
+
+  if (typeof payload === "object" && payload !== null) {
+    const obj = payload as Record<string, unknown>;
+    const targetCaps =
+      typeof obj.capabilities === "object" && obj.capabilities !== null
+        ? obj.capabilities
+        : obj;
+
+    if (Array.isArray(targetCaps)) {
+      for (const item of targetCaps) {
+        if (typeof item === "string") {
+          const lower = item.toLowerCase().trim();
+          const mapped = KEY_MAP[lower];
+          if (mapped) {
+            result[mapped] = true;
+          }
+        }
+      }
+      return result;
+    }
+
+    const targetObj = targetCaps as Record<string, unknown>;
+    for (const [key, val] of Object.entries(targetObj)) {
+      const lowerKey = key.toLowerCase().trim();
+      const mappedKey =
+        KEY_MAP[lowerKey] || (CAPABILITY_KEYS.includes(key as any) ? (key as WindowsCapabilityKey) : null);
+
+      if (mappedKey) {
         if (
           val === true ||
           val === "available" ||
           val === "enabled" ||
           val === "supported"
         ) {
-          items.push(key);
+          result[mappedKey] = true;
         }
       }
-    }
-  }
-
-  for (const item of items) {
-    if (typeof item !== "string") continue;
-    const lower = item.toLowerCase().trim();
-
-    if (
-      lower === "volume" ||
-      lower.startsWith("volume") ||
-      lower === "audio_control"
-    ) {
-      result.volume = true;
-    } else if (
-      lower === "media" ||
-      lower.startsWith("media") ||
-      lower === "gsmtc"
-    ) {
-      result.media = true;
-    } else if (lower === "discord" || lower.startsWith("discord")) {
-      result.discord = true;
-    } else if (
-      lower === "systemstats" ||
-      lower === "system_stats" ||
-      lower === "system_stat" ||
-      lower === "stats" ||
-      lower === "pc_stats"
-    ) {
-      result.systemStats = true;
-    } else if (
-      lower === "macros" ||
-      lower === "macro" ||
-      lower === "macro_execution"
-    ) {
-      result.macros = true;
-    } else if (
-      lower === "applaunch" ||
-      lower === "app_launch" ||
-      lower === "app_launcher" ||
-      lower === "apps"
-    ) {
-      result.appLaunch = true;
     }
   }
 
@@ -207,7 +223,7 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pendingGeneration = useRef<number | null>(null);
+  const requestTokenRef = useRef(0);
 
   useEffect(() => {
     return subscribeAppReadyState(setAppReady);
@@ -224,8 +240,8 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
       return;
     }
 
+    const currentToken = ++requestTokenRef.current;
     const currentGen = ready.generation;
-    pendingGeneration.current = currentGen;
     setIsLoading(true);
     setError(null);
 
@@ -233,11 +249,11 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
       const response = await sendNocturneWsRequest<unknown>(
         "connector.capabilities",
         {},
-        { timeoutMs: 3000 },
+        { timeoutMs: 3000, appReadyGeneration: currentGen },
       );
 
       if (
-        pendingGeneration.current !== currentGen ||
+        currentToken !== requestTokenRef.current ||
         getAppReadyState().generation !== currentGen ||
         !getWindowsConnectorState(getAppReadyState()).isWindowsActive
       ) {
@@ -248,7 +264,7 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
       setCapabilitiesMap(buildCapabilitiesMap(parsed, true));
     } catch (err: unknown) {
       if (
-        pendingGeneration.current !== currentGen ||
+        currentToken !== requestTokenRef.current ||
         getAppReadyState().generation !== currentGen ||
         !getWindowsConnectorState(getAppReadyState()).isWindowsActive
       ) {
@@ -279,19 +295,19 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
         );
       }
     } finally {
-      if (pendingGeneration.current === currentGen) {
-        pendingGeneration.current = null;
+      if (currentToken === requestTokenRef.current) {
         setIsLoading(false);
       }
     }
   }, []);
 
   useEffect(() => {
+    requestTokenRef.current++;
+
     if (!isWindowsActive) {
       setCapabilitiesMap(createOfflineCapabilities());
       setIsLoading(false);
       setError(null);
-      pendingGeneration.current = null;
       return;
     }
 

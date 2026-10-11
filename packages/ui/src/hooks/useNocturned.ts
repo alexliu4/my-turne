@@ -13,6 +13,7 @@ export type AppReadyState = {
   ready: boolean;
   platform: string | null;
   connectorPlatform: string | null;
+  capabilities?: unknown;
   generation: number;
 };
 type SubscribedState = {
