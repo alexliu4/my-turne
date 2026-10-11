@@ -29,6 +29,7 @@ const LibrarySection = lazy(() => import("./home/LibrarySection"));
 const ArtistsSection = lazy(() => import("./home/ArtistsSection"));
 const RadioSection = lazy(() => import("./home/RadioSection"));
 const PodcastsSection = lazy(() => import("./home/PodcastsSection"));
+const AppsSection = lazy(() => import("./home/AppsSection"));
 
 interface HomeProps extends Pick<
   LibraryData,
@@ -227,6 +228,13 @@ export default function Home({
             userShows={userShows}
             activeSection={activeSection}
             onCardClick={onOpenContent}
+          />
+        );
+      case "apps":
+        return (
+          <AppsSection
+            activeSection={activeSection}
+            onSelectApp={setActiveSection}
           />
         );
       case "settings":

@@ -8,6 +8,7 @@ import {
   ArtistsIcon,
   RadioIcon,
   PodcastIcon,
+  AppsIcon,
   SettingsIcon,
 } from "../../common/icons";
 import StatusBar from "./StatusBar";
@@ -108,6 +109,13 @@ const SidebarComponent = function Sidebar({
         icon={PodcastIcon}
         label="Podcasts"
         isActive={activeSection === "podcasts"}
+        onSelect={handleSectionClick}
+      />
+      <SidebarItem
+        section="apps"
+        icon={AppsIcon}
+        label="Apps"
+        isActive={activeSection === "apps"}
         onSelect={handleSectionClick}
       />
       <SidebarItem

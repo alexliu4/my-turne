@@ -6,6 +6,7 @@ export { default as LibraryIcon } from "./LibraryIcon";
 export { default as ArtistsIcon } from "./ArtistsIcon";
 export { default as RadioIcon } from "./RadioIcon";
 export { default as PodcastIcon } from "./PodcastIcon";
+export { default as AppsIcon } from "./AppsIcon";
 export { default as SettingsIcon } from "./SettingsIcon";
 export { default as XIcon } from "./XIcon";
 export { default as CheckIcon } from "./CheckIcon";

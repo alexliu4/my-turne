@@ -132,6 +132,16 @@ const LazyWindowsVolume = React.lazy(() =>
     default: m.WindowsVolume,
   })),
 );
+const LazyTimerApp = React.lazy(() =>
+  import("./components/apps/TimerApp").then((m) => ({
+    default: m.TimerApp,
+  })),
+);
+const LazyWeatherApp = React.lazy(() =>
+  import("./components/apps/WeatherApp").then((m) => ({
+    default: m.WeatherApp,
+  })),
+);
 
 const IDLE_LOCK_MS = 5 * 60 * 1000;
 const DISPLAY_IDLE_SLEEP_MS = 20 * 60 * 1000;
@@ -1946,6 +1956,10 @@ function AppContent() {
     activeSection === "windows-volume"
   ) {
     content = <LazyWindowsVolume onClose={() => setActiveSection("recents")} />;
+  } else if (activeSection === "timer") {
+    content = <LazyTimerApp onClose={() => setActiveSection("apps")} />;
+  } else if (activeSection === "weather") {
+    content = <LazyWeatherApp onClose={() => setActiveSection("apps")} />;
   } else if (activeSection === "nowPlaying") {
     content = (
       <LazyNowPlaying
