@@ -119,3 +119,5 @@ A terminal artwork failure is scoped to the current Spotify readiness period. Wh
 - **Phone app launch toggle**: General > Open Phone App uses the shared daemon-backed preference, without a subscription or connected-phone gate. Disable it while loading or saving, show load/save errors, and describe foreground on connect versus background operation. This does not disable companion data.
 
 - **Windows Media controls**: `WindowsMedia` disables each transport button when its current session confirms that action is unsupported. The hook also blocks duplicate RPCs and unavailable sessions. Paused sessions remain visible; stopped and closed sessions clear all presentation.
+
+- **Offline Apps interactions:** Sidebar blocks unsupported destinations while its Reconnect / Bluetooth action is present. Include selection and offline exit callbacks in memo comparisons so reconnect changes apply without a section change. Apps cards share the same guarded selection handler for touch, title clicks, and knob selection; Windows cards remain marked PC Offline and cannot launch without a Windows Connector.

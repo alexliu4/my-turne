@@ -13,6 +13,7 @@ import { useDeviceInfo } from "../../hooks/useNocturned";
 interface NetworkScreenProps {
   isConnectionLost?: boolean;
   onConnectionRestored?: () => void;
+  onOpenApps?: () => void;
 }
 interface NetworkOption {
   id: string;
@@ -24,6 +25,7 @@ interface NetworkOption {
 const NetworkScreen = ({
   isConnectionLost = true,
   onConnectionRestored,
+  onOpenApps,
 }: NetworkScreenProps) => {
   const { deviceInfo } = useDeviceInfo();
   const [showMain, setShowMain] = React.useState(true);
@@ -200,14 +202,26 @@ const NetworkScreen = ({
                     phone's settings.
                   </p>
 
-                  <button
-                    onClick={openNetworkSettings}
-                    className="mt-4 bg-white/10 hover:bg-white/20 transition-colors duration-200 rounded-xl px-6 py-3 border border-white/10 focus:outline-none"
-                  >
-                    <span className="text-[28px] font-[560] text-white tracking-tight">
-                      Bluetooth Settings
-                    </span>
-                  </button>
+                  <div className="flex space-x-4 mt-4">
+                    <button
+                      onClick={openNetworkSettings}
+                      className="bg-white/10 hover:bg-white/20 transition-colors duration-200 rounded-xl px-6 py-3 border border-white/10 focus:outline-none"
+                    >
+                      <span className="text-[28px] font-[560] text-white tracking-tight">
+                        Bluetooth Settings
+                      </span>
+                    </button>
+                    {onOpenApps && (
+                      <button
+                        onClick={onOpenApps}
+                        className="bg-white/10 hover:bg-white/20 transition-colors duration-200 rounded-xl px-6 py-3 border border-white/10 focus:outline-none"
+                      >
+                        <span className="text-[28px] font-[560] text-white tracking-tight">
+                          Offline Apps
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

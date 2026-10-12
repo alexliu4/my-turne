@@ -8,6 +8,7 @@ import {
   ArtistsIcon,
   RadioIcon,
   PodcastIcon,
+  AppsIcon,
   SettingsIcon,
 } from "../../common/icons";
 import StatusBar from "./StatusBar";
@@ -24,6 +25,7 @@ interface SidebarItemProps {
 interface SidebarProps {
   activeSection: ActiveSection;
   setActiveSection: (section: ActiveSection) => void;
+  onExitOfflineMode?: () => void;
 }
 
 const SidebarItem = memo(
@@ -50,23 +52,35 @@ const SidebarItem = memo(
       </div>
     </div>
   ),
-  (prev, next) => prev.isActive === next.isActive,
+  (prev, next) =>
+    prev.isActive === next.isActive && prev.onSelect === next.onSelect,
 );
 
 const SidebarComponent = function Sidebar({
   activeSection,
   setActiveSection,
+  onExitOfflineMode,
 }: SidebarProps) {
   const { settings } = useSettings();
 
   const handleSectionClick = (section: ActiveSection) => {
     window.umami?.track?.("sidebar_tab_click", { section });
+    if (onExitOfflineMode && section !== "apps") return;
     setActiveSection(section);
   };
 
   return (
     <div className="space-y-7 pt-12">
       {settings.showStatusBar && <StatusBar />}
+
+      {onExitOfflineMode && (
+        <button
+          onClick={onExitOfflineMode}
+          className="w-full mb-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl px-4 py-3 font-semibold text-lg flex items-center justify-center space-x-2 transition"
+        >
+          <span>Reconnect / Bluetooth</span>
+        </button>
+      )}
 
       <SidebarItem
         section="nowPlaying"
@@ -111,6 +125,13 @@ const SidebarComponent = function Sidebar({
         onSelect={handleSectionClick}
       />
       <SidebarItem
+        section="apps"
+        icon={AppsIcon}
+        label="Apps"
+        isActive={activeSection === "apps"}
+        onSelect={handleSectionClick}
+      />
+      <SidebarItem
         section="settings"
         icon={SettingsIcon}
         label="Settings"
@@ -125,5 +146,6 @@ export default memo(
   SidebarComponent,
   (prev, next) =>
     prev.activeSection === next.activeSection &&
-    prev.setActiveSection === next.setActiveSection,
+    prev.setActiveSection === next.setActiveSection &&
+    prev.onExitOfflineMode === next.onExitOfflineMode,
 );

@@ -29,6 +29,7 @@ const LibrarySection = lazy(() => import("./home/LibrarySection"));
 const ArtistsSection = lazy(() => import("./home/ArtistsSection"));
 const RadioSection = lazy(() => import("./home/RadioSection"));
 const PodcastsSection = lazy(() => import("./home/PodcastsSection"));
+const AppsSection = lazy(() => import("./home/AppsSection"));
 
 interface HomeProps extends Pick<
   LibraryData,
@@ -49,6 +50,7 @@ interface HomeProps extends Pick<
   refreshPlaybackState: () => void;
   onOpenContent: OpenContent;
   onNavigateToNowPlaying: () => void;
+  onExitOfflineMode?: () => void;
 }
 
 const DJ_PLAYLIST_URI = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq";
@@ -82,6 +84,7 @@ export default function Home({
   refreshPlaybackState,
   onOpenContent,
   onNavigateToNowPlaying,
+  onExitOfflineMode,
 }: HomeProps) {
   const { playDJMix } = useSpotifyPlayerControls(currentPlayback);
   const [showDonationModal, setShowDonationModal] = useState(false);
@@ -229,6 +232,13 @@ export default function Home({
             onCardClick={onOpenContent}
           />
         );
+      case "apps":
+        return (
+          <AppsSection
+            activeSection={activeSection}
+            onSelectApp={setActiveSection}
+          />
+        );
       case "settings":
         return (
           <Settings
@@ -255,6 +265,7 @@ export default function Home({
           <Sidebar
             activeSection={activeSection}
             setActiveSection={setActiveSection}
+            onExitOfflineMode={onExitOfflineMode}
           />
         </div>
 
