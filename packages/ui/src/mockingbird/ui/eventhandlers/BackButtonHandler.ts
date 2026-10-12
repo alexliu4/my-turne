@@ -1,3 +1,7 @@
+import {
+  isMappingProtected,
+  isHardwareActionBlocked,
+} from "./mappingProtection";
 import { View } from "../stores/ViewStore";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
@@ -25,9 +29,7 @@ const reactToBackButton = (
       if (onboardingStore.backEnabled || onboardingStore.noInteractionModal) {
         onboardingStore.handleBack();
       }
-      if (!onboardingStore.backEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       voiceStore.cancel();
@@ -64,12 +66,8 @@ const reactToBackButton = (
   };
 
   const handleBackButton = async () => {
-    if (
-      onboardingStore.isActive ||
-      overlayController.isShowing("voice") ||
-      overlayController.isShowing("lets_drive") ||
-      overlayController.isSettingsShowing
-    ) {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
       runInAction(runDefaultBackButton);
       return;
     }

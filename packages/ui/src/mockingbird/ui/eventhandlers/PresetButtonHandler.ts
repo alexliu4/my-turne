@@ -1,3 +1,4 @@
+import { isMappingProtected } from "./mappingProtection";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
 import { runInAction } from "mobx";
@@ -12,27 +13,14 @@ const reactToPresetButtons = (
   hardwareEvents: HardwareEvents,
   rootStore: RootStore,
 ) => {
-  const {
-    presetsController,
-    viewStore,
-    onboardingStore,
-    setupStore,
-    otaStore,
-  } = rootStore;
+  const { presetsController, viewStore } = rootStore;
 
   const handlePresetButtonPress = async (presetNumber: number) => {
     if (!presetsController.isPresetButtonsEnabled) {
       return;
     }
 
-    if (
-      onboardingStore?.isActive ||
-      setupStore?.shouldShowSetup ||
-      otaStore?.criticalUpdate
-    ) {
-      presetsController.presetsUiState.handlePresetButtonPress(presetNumber);
-      return;
-    }
+    if (isMappingProtected(rootStore)) return;
 
     const trigger = `preset_${presetNumber}` as ControlTrigger;
     const isWindowsActive =
@@ -56,6 +44,7 @@ const reactToPresetButtons = (
       return;
     }
 
+    if (isMappingProtected(rootStore)) return;
     presetsController.presetsUiState.handlePresetButtonLongPress(presetNumber);
   };
 

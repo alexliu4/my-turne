@@ -1,3 +1,7 @@
+import {
+  isMappingProtected,
+  isHardwareActionBlocked,
+} from "./mappingProtection";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
 import { runInAction } from "mobx";
@@ -38,9 +42,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialPress();
       }
-      if (!onboardingStore.dialPressEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       if (voiceStore.error || voiceStore.friendlyError) {
@@ -95,11 +97,8 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
   };
 
   const handleDialPress = async () => {
-    if (
-      onboardingStore.isActive ||
-      overlayController.isShowing("voice") ||
-      overlayController.isSettingsShowing
-    ) {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
       runInAction(runDefaultDialPress);
       return;
     }
@@ -131,14 +130,8 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
   };
 
   const handleDialLongPress = async () => {
-    if (
-      onboardingStore.isActive ||
-      overlayController.isShowing("voice") ||
-      overlayController.isSettingsShowing
-    ) {
-      runInAction(runDefaultDialLongPress);
-      return;
-    }
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) return;
 
     const isWindowsActive =
       getWindowsConnectorState(getAppReadyState()).isWindowsActive;
@@ -169,9 +162,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialTurn();
       }
-      if (!onboardingStore.dialTurnEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       return;
@@ -218,11 +209,8 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
   };
 
   const handleDialLeft = async () => {
-    if (
-      onboardingStore.isActive ||
-      overlayController.isShowing("voice") ||
-      overlayController.isSettingsShowing
-    ) {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
       runInAction(runDefaultDialLeft);
       return;
     }
@@ -248,9 +236,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialTurn();
       }
-      if (!onboardingStore.dialTurnEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       return;
@@ -297,11 +283,8 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
   };
 
   const handleDialRight = async () => {
-    if (
-      onboardingStore.isActive ||
-      overlayController.isShowing("voice") ||
-      overlayController.isSettingsShowing
-    ) {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
       runInAction(runDefaultDialRight);
       return;
     }

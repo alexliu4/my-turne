@@ -19,6 +19,7 @@ export const MainMenuItemId = {
 };
 
 export const OptionsMenuItemId = {
+  ACTION_MAPPING: "ACTION_MAPPING",
   APP_LAUNCH: "APP_LAUNCH",
   APP_LAUNCH_TOGGLE: "APP_LAUNCH_TOGGLE",
   SPOTIFY_LAUNCH: "SPOTIFY_LAUNCH",
@@ -331,6 +332,13 @@ class SettingsStore {
               index: 0,
               visible: () => true,
               type: "toggle",
+            },
+            {
+              id: OptionsMenuItemId.ACTION_MAPPING,
+              label: "Action mapping",
+              index: 0,
+              type: "parent",
+              visible: () => true,
             },
           ],
           visible: () => true,

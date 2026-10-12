@@ -82,10 +82,10 @@ describe("useActionMapping logic & action execution", () => {
     let wsCallCount = 0;
     const context: ActionExecutionContext = {
       isWindowsActive: false, // Non-Windows fallback route!
-      sendWsRequest: (async () => {
+      sendWsRequest: async () => {
         wsCallCount++;
         return {};
-      }) as any,
+      },
     };
 
     const res = await executeAction("dial_press", context, deviceId);
@@ -96,7 +96,7 @@ describe("useActionMapping logic & action execution", () => {
     expect(wsCallCount).toBe(0);
   });
 
-  test("At least one device action and one Windows action map and execute safely", async () => {
+  test("device navigation executes but stale Windows context cannot authorize an RPC", async () => {
     // 1. Device action execution
     setActionMapping("preset_1", {
       kind: "device",
@@ -125,14 +125,14 @@ describe("useActionMapping logic & action execution", () => {
     let calledMethod = "";
     const winContext: ActionExecutionContext = {
       isWindowsActive: true,
-      sendWsRequest: (async (method: string) => {
+      sendWsRequest: async (method: string) => {
         calledMethod = method;
         return { status: "ok" };
-      }) as any,
+      },
     };
 
     const winRes = await executeAction("preset_2", winContext);
-    expect(winRes.executed).toBe(true);
-    expect(calledMethod).toBe("volume.toggleMute");
+    expect(winRes.executed).toBe(false);
+    expect(calledMethod).toBe("");
   });
 });

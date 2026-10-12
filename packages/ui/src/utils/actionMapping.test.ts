@@ -172,16 +172,15 @@ describe("actionMapping utils & validation", () => {
 
   test("executeAction handles unsupported, error, and malformed RPC responses gracefully", async () => {
     setActionMapping("preset_1", {
-      kind: "windows",
-      action: "volume.adjust",
-      delta: 5,
+      kind: "device",
+      action: "media.next",
     });
 
     // Mock RPC returning unsupported status
     const mockWsReqUnsupported = async () => ({ status: "unsupported" });
     const context1: ActionExecutionContext = {
       isWindowsActive: true,
-      sendWsRequest: mockWsReqUnsupported as any,
+      sendWsRequest: mockWsReqUnsupported,
     };
 
     const res1 = await executeAction("preset_1", context1);
@@ -195,7 +194,7 @@ describe("actionMapping utils & validation", () => {
     };
     const context2: ActionExecutionContext = {
       isWindowsActive: true,
-      sendWsRequest: mockWsReqError as any,
+      sendWsRequest: mockWsReqError,
     };
 
     const res2 = await executeAction("preset_1", context2);

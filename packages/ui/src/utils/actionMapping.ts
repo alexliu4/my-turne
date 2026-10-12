@@ -79,7 +79,6 @@ export type ActionMappingsMap = Record<ControlTrigger, ActionDefinition>;
 export type ViewStoreLike = {
   showContentShelf?: () => void;
   showNpv?: () => void;
-  showView?: (view: string) => void;
 };
 
 export type ActionExecutionContext = {
@@ -90,9 +89,13 @@ export type ActionExecutionContext = {
     uris?: string[] | null,
   ) => Promise<boolean>;
   refreshPlaybackState?: () => void;
-  setActiveSection?: (section: string) => void;
+  setActiveSection?: (section: string) => boolean | void;
   viewStore?: ViewStoreLike;
-  sendWsRequest?: typeof sendNocturneWsRequest;
+  sendWsRequest?: (
+    method: string,
+    params: Record<string, unknown>,
+    options: { timeoutMs?: number; appReadyGeneration?: number },
+  ) => Promise<unknown>;
 };
 
 export type ActionResult = {
@@ -130,7 +133,8 @@ const safeJsonParse = (val: string | null) => {
   if (!val) return null;
   try {
     return JSON.parse(val) as unknown;
-  } catch {
+  } catch (error) {
+    console.warn("Invalid saved action mappings:", error);
     return null;
   }
 };
@@ -240,7 +244,10 @@ export function getAllActionMappings(
     if (isPlainObject(raw)) {
       CONTROL_TRIGGERS.forEach((trigger) => {
         if (trigger in raw) {
-          result[trigger] = validateActionMapping(raw[trigger]);
+          result[trigger] =
+            trigger === "settings_press"
+              ? DEFAULT_ACTION
+              : validateActionMapping(raw[trigger]);
         }
       });
     }
@@ -264,7 +271,7 @@ export function setActionMapping(
   mappingInput: unknown,
   deviceId = getActivePresetDeviceId(),
 ): { success: boolean; mapping: ActionDefinition; conflictResolved: boolean } {
-  if (!CONTROL_TRIGGERS.includes(trigger)) {
+  if (!CONTROL_TRIGGERS.includes(trigger) || trigger === "settings_press") {
     return { success: false, mapping: DEFAULT_ACTION, conflictResolved: false };
   }
 
@@ -354,29 +361,44 @@ export function navigateToSection(
   ];
 
   if (context.setActiveSection && NOCTURNE_SECTIONS.includes(section)) {
-    context.setActiveSection(section);
-    return true;
+    return context.setActiveSection(section) !== false;
   }
 
   if (context.viewStore) {
-    if (section === "recents" || section === "shelf") {
-      context.viewStore.showContentShelf?.();
-      return true;
-    } else if (section === "nowPlaying" || section === "npv") {
-      context.viewStore.showNpv?.();
-      return true;
-    } else if (
-      (SUPPORTED_APP_IDS as readonly string[]).includes(section) ||
-      section === "hostStatus" ||
-      section === "windowsMedia" ||
-      section === "windowsVolume"
+    if (
+      (section === "recents" || section === "shelf") &&
+      context.viewStore.showContentShelf
     ) {
-      context.viewStore.showView?.(section);
+      context.viewStore.showContentShelf();
       return true;
     }
+    if (
+      (section === "nowPlaying" || section === "npv") &&
+      context.viewStore.showNpv
+    ) {
+      context.viewStore.showNpv();
+      return true;
+    }
+    // Apps belong to the Nocturne shell. Mockingbird renders only its own views.
   }
 
   return false;
+}
+
+function rpcActionResult(response: unknown): ActionResult {
+  if (
+    isPlainObject(response) &&
+    response.status === "ok" &&
+    !("error" in response)
+  ) {
+    return { executed: true, fallbackToDefault: false, result: response };
+  }
+  const reason =
+    isPlainObject(response) &&
+    (response.status === "unsupported" || response.error === "unsupported")
+      ? "unsupported"
+      : "rpc_failed";
+  return { executed: false, fallbackToDefault: false, reason };
 }
 
 export async function executeAction(
@@ -392,10 +414,7 @@ export async function executeAction(
 
   if (mapping.kind === "windows") {
     const ready = getAppReadyState();
-    const isWindowsActive =
-      typeof context.isWindowsActive === "boolean"
-        ? context.isWindowsActive
-        : getWindowsConnectorState(ready).isWindowsActive;
+    const isWindowsActive = getWindowsConnectorState(ready).isWindowsActive;
 
     if (!isWindowsActive) {
       return {
@@ -411,134 +430,44 @@ export async function executeAction(
       switch (mapping.action) {
         case "volume.adjust": {
           const delta = mapping.delta ?? 5;
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "volume.adjust",
             { delta },
             { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
-          const obj =
-            res && typeof res === "object"
-              ? (res as Record<string, unknown>)
-              : null;
-          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: "unsupported",
-            };
-          }
-          if (obj?.status !== undefined && obj?.status !== "ok") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: String(obj.error || "failed"),
-            };
-          }
-          return { executed: true, fallbackToDefault: false, result: res };
+          return rpcActionResult(res);
         }
         case "volume.toggle_mute": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "volume.toggleMute",
             {},
             { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
-          const obj =
-            res && typeof res === "object"
-              ? (res as Record<string, unknown>)
-              : null;
-          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: "unsupported",
-            };
-          }
-          if (obj?.status !== undefined && obj?.status !== "ok") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: String(obj.error || "failed"),
-            };
-          }
-          return { executed: true, fallbackToDefault: false, result: res };
+          return rpcActionResult(res);
         }
         case "media.play_pause": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.toggle",
             { windows_only: true },
             { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
-          const obj =
-            res && typeof res === "object"
-              ? (res as Record<string, unknown>)
-              : null;
-          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: "unsupported",
-            };
-          }
-          if (obj?.status !== undefined && obj?.status !== "ok") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: String(obj.error || "failed"),
-            };
-          }
-          return { executed: true, fallbackToDefault: false, result: res };
+          return rpcActionResult(res);
         }
         case "media.next": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.next",
             { windows_only: true },
             { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
-          const obj =
-            res && typeof res === "object"
-              ? (res as Record<string, unknown>)
-              : null;
-          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: "unsupported",
-            };
-          }
-          if (obj?.status !== undefined && obj?.status !== "ok") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: String(obj.error || "failed"),
-            };
-          }
-          return { executed: true, fallbackToDefault: false, result: res };
+          return rpcActionResult(res);
         }
         case "media.previous": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.previous",
             { windows_only: true },
             { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
-          const obj =
-            res && typeof res === "object"
-              ? (res as Record<string, unknown>)
-              : null;
-          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: "unsupported",
-            };
-          }
-          if (obj?.status !== undefined && obj?.status !== "ok") {
-            return {
-              executed: false,
-              fallbackToDefault: false,
-              reason: String(obj.error || "failed"),
-            };
-          }
-          return { executed: true, fallbackToDefault: false, result: res };
+          return rpcActionResult(res);
         }
         default:
           return {
@@ -566,44 +495,59 @@ export async function executeAction(
     try {
       switch (mapping.action) {
         case "media.play_pause": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.toggle",
             {},
             { timeoutMs: 3000 },
           );
-          context.refreshPlaybackState?.();
-          return { executed: true, fallbackToDefault: false, result: res };
+          const result = rpcActionResult(res);
+          if (result.executed) context.refreshPlaybackState?.();
+          return result;
         }
         case "media.next": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.next",
             {},
             { timeoutMs: 3000 },
           );
-          context.refreshPlaybackState?.();
-          return { executed: true, fallbackToDefault: false, result: res };
+          const result = rpcActionResult(res);
+          if (result.executed) context.refreshPlaybackState?.();
+          return result;
         }
         case "media.previous": {
-          const res = await wsReq<unknown>(
+          const res = await wsReq(
             "media.control.previous",
             {},
             { timeoutMs: 3000 },
           );
-          context.refreshPlaybackState?.();
-          return { executed: true, fallbackToDefault: false, result: res };
+          const result = rpcActionResult(res);
+          if (result.executed) context.refreshPlaybackState?.();
+          return result;
         }
         case "navigate.home": {
           const ok = navigateToSection("recents", context);
-          return { executed: ok, fallbackToDefault: !ok };
+          return {
+            executed: ok,
+            fallbackToDefault: false,
+            reason: ok ? undefined : "unsupported_destination",
+          };
         }
         case "navigate.now_playing": {
           const ok = navigateToSection("nowPlaying", context);
-          return { executed: ok, fallbackToDefault: !ok };
+          return {
+            executed: ok,
+            fallbackToDefault: false,
+            reason: ok ? undefined : "unsupported_destination",
+          };
         }
         case "app.launch": {
           if (mapping.appId) {
             const ok = navigateToSection(mapping.appId, context);
-            return { executed: ok, fallbackToDefault: !ok };
+            return {
+              executed: ok,
+              fallbackToDefault: false,
+              reason: ok ? undefined : "unsupported_destination",
+            };
           }
           return {
             executed: false,
