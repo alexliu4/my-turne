@@ -1,15 +1,41 @@
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
 import { action } from "mobx";
+import {
+  executeAction,
+  type ControlTrigger,
+} from "../../../utils/actionMapping";
+import { getWindowsConnectorState } from "../../../hooks/useWindowsConnector";
+import { getAppReadyState } from "../../../hooks/useNocturned";
 
 const reactToPresetButtons = (
   hardwareEvents: HardwareEvents,
   rootStore: RootStore,
 ) => {
-  const { presetsController } = rootStore;
+  const { presetsController, viewStore } = rootStore;
 
-  const handlePresetButtonPress = (presetNumber: number) => {
+  const handlePresetButtonPress = async (presetNumber: number) => {
     if (!presetsController.isPresetButtonsEnabled) {
+      return;
+    }
+
+    const trigger = `preset_${presetNumber}` as ControlTrigger;
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction(trigger, {
+      isWindowsActive,
+      setActiveSection: (sec) => {
+        if (sec === "recents" || sec === "home" || sec === "shelf") {
+          viewStore.showContentShelf();
+        } else if (sec === "nowPlaying" || sec === "npv") {
+          viewStore.showNpv();
+        } else {
+          viewStore.showView(sec);
+        }
+      },
+    });
+
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
       return;
     }
 

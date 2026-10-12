@@ -38,6 +38,7 @@ import {
   getActivePresetDeviceId,
   getButtonMappingValue,
 } from "./utils/presetStorage";
+import { executeAction, type ControlTrigger } from "./utils/actionMapping";
 import { selectPresentedPhoneCall, usePhoneCalls } from "./hooks/usePhoneCalls";
 import SplashScreen from "./components/screens/SplashScreen";
 import UIShell, { MockingbirdPhoneCallOverlay } from "./mockingbird/UIShell";
@@ -223,7 +224,8 @@ function useGlobalButtonMapping({
   isDisabled = false,
   currentPlayback,
   spotifyUserId,
-}: GlobalButtonMappingOptions) {
+  isWindowsActive = false,
+}: GlobalButtonMappingOptions & { isWindowsActive?: boolean }) {
   const [showMappingOverlay, setShowMappingOverlay] = useState(false);
   const [activeButton, setActiveButton] = useState<string | null>(null);
   const [isProcessingButtonPress, setIsProcessingButtonPress] = useState(false);
@@ -233,6 +235,18 @@ function useGlobalButtonMapping({
   const handleButtonPress = useCallback(
     async (buttonNumber: string) => {
       if (isProcessingButtonPress || isTutorialActive || isDisabled) return;
+
+      const trigger = `preset_${buttonNumber}` as ControlTrigger;
+      const actionRes = await executeAction(trigger, {
+        isWindowsActive,
+        playTrack,
+        refreshPlaybackState,
+        setActiveSection,
+      });
+
+      if (actionRes.executed || !actionRes.fallbackToDefault) {
+        return;
+      }
 
       const deviceId = getActivePresetDeviceId();
       const mappedId = getButtonMappingValue(buttonNumber, "Id", deviceId);
@@ -992,6 +1006,7 @@ function AppContent() {
       presentedIncomingCall !== null,
     currentPlayback,
     spotifyUserId,
+    isWindowsActive,
   });
 
   useEffect(() => {

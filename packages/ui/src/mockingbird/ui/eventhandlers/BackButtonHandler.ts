@@ -2,6 +2,9 @@ import { View } from "../stores/ViewStore";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
 import { action } from "mobx";
+import { executeAction } from "../../../utils/actionMapping";
+import { getWindowsConnectorState } from "../../../hooks/useWindowsConnector";
+import { getAppReadyState } from "../../../hooks/useNocturned";
 
 const reactToBackButton = (
   hardwareEvents: HardwareEvents,
@@ -17,7 +20,25 @@ const reactToBackButton = (
     voiceStore,
   } = rootStore;
 
-  const handleBackButton = action(() => {
+  const handleBackButton = action(async () => {
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("back_press", {
+      isWindowsActive,
+      setActiveSection: (sec) => {
+        if (sec === "recents" || sec === "home" || sec === "shelf") {
+          viewStore.showContentShelf();
+        } else if (sec === "nowPlaying" || sec === "npv") {
+          viewStore.showNpv();
+        } else {
+          viewStore.showView(sec);
+        }
+      },
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
     if (onboardingStore.isActive) {
       if (onboardingStore.backEnabled || onboardingStore.noInteractionModal) {
         onboardingStore.handleBack();
