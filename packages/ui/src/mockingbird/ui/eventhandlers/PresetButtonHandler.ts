@@ -1,6 +1,6 @@
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
-import { action } from "mobx";
+import { runInAction } from "mobx";
 import {
   executeAction,
   type ControlTrigger,
@@ -12,10 +12,25 @@ const reactToPresetButtons = (
   hardwareEvents: HardwareEvents,
   rootStore: RootStore,
 ) => {
-  const { presetsController, viewStore } = rootStore;
+  const {
+    presetsController,
+    viewStore,
+    onboardingStore,
+    setupStore,
+    otaStore,
+  } = rootStore;
 
   const handlePresetButtonPress = async (presetNumber: number) => {
     if (!presetsController.isPresetButtonsEnabled) {
+      return;
+    }
+
+    if (
+      onboardingStore?.isActive ||
+      setupStore?.shouldShowSetup ||
+      otaStore?.criticalUpdate
+    ) {
+      presetsController.presetsUiState.handlePresetButtonPress(presetNumber);
       return;
     }
 
@@ -24,22 +39,16 @@ const reactToPresetButtons = (
       getWindowsConnectorState(getAppReadyState()).isWindowsActive;
     const actionRes = await executeAction(trigger, {
       isWindowsActive,
-      setActiveSection: (sec) => {
-        if (sec === "recents" || sec === "home" || sec === "shelf") {
-          viewStore.showContentShelf();
-        } else if (sec === "nowPlaying" || sec === "npv") {
-          viewStore.showNpv();
-        } else {
-          viewStore.showView(sec);
-        }
-      },
+      viewStore,
     });
 
     if (actionRes.executed || !actionRes.fallbackToDefault) {
       return;
     }
 
-    presetsController.presetsUiState.handlePresetButtonPress(presetNumber);
+    runInAction(() => {
+      presetsController.presetsUiState.handlePresetButtonPress(presetNumber);
+    });
   };
 
   const handlePresetButtonLongPress = (presetNumber: number) => {
@@ -50,37 +59,37 @@ const reactToPresetButtons = (
     presetsController.presetsUiState.handlePresetButtonLongPress(presetNumber);
   };
 
-  const handlePreset1 = action(() => {
-    handlePresetButtonPress(1);
-  });
+  const handlePreset1 = () => {
+    void handlePresetButtonPress(1);
+  };
 
-  const handlePreset1LongPress = action(() => {
+  const handlePreset1LongPress = () => {
     handlePresetButtonLongPress(1);
-  });
+  };
 
-  const handlePreset2 = action(() => {
-    handlePresetButtonPress(2);
-  });
+  const handlePreset2 = () => {
+    void handlePresetButtonPress(2);
+  };
 
-  const handlePreset2LongPress = action(() => {
+  const handlePreset2LongPress = () => {
     handlePresetButtonLongPress(2);
-  });
+  };
 
-  const handlePreset3 = action(() => {
-    handlePresetButtonPress(3);
-  });
+  const handlePreset3 = () => {
+    void handlePresetButtonPress(3);
+  };
 
-  const handlePreset3LongPress = action(() => {
+  const handlePreset3LongPress = () => {
     handlePresetButtonLongPress(3);
-  });
+  };
 
-  const handlePreset4 = action(() => {
-    handlePresetButtonPress(4);
-  });
+  const handlePreset4 = () => {
+    void handlePresetButtonPress(4);
+  };
 
-  const handlePreset4LongPress = action(() => {
+  const handlePreset4LongPress = () => {
     handlePresetButtonLongPress(4);
-  });
+  };
 
   hardwareEvents.onPreset1(handlePreset1);
   hardwareEvents.onPreset1LongPress(handlePreset1LongPress);

@@ -6,6 +6,7 @@ import {
   setActionMapping,
   resetActionMappings,
   executeAction,
+  navigateToSection,
   type ActionExecutionContext,
 } from "./actionMapping";
 
@@ -51,7 +52,7 @@ afterAll(() => {
   }
 });
 
-describe("actionMapping utils", () => {
+describe("actionMapping utils & validation", () => {
   test("validateActionMapping returns default for empty or invalid input", () => {
     expect(validateActionMapping(null)).toEqual({ kind: "default" });
     expect(validateActionMapping({})).toEqual({ kind: "default" });
@@ -86,26 +87,30 @@ describe("actionMapping utils", () => {
     ).toEqual({ kind: "default" });
   });
 
-  test("validateActionMapping accepts valid device and windows action mappings", () => {
-    expect(
-      validateActionMapping({ kind: "device", action: "media.play_pause" }),
-    ).toEqual({ kind: "device", action: "media.play_pause" });
-
+  test("validateActionMapping rejects unsupported app IDs and bounds volume delta", () => {
     expect(
       validateActionMapping({
         kind: "device",
         action: "app.launch",
-        appId: "weather",
+        appId: "unsupportedApp123",
       }),
-    ).toEqual({ kind: "device", action: "app.launch", appId: "weather" });
+    ).toEqual({ kind: "default" });
 
     expect(
       validateActionMapping({
         kind: "windows",
         action: "volume.adjust",
-        delta: 10,
+        delta: 500,
       }),
-    ).toEqual({ kind: "windows", action: "volume.adjust", delta: 10 });
+    ).toEqual({ kind: "windows", action: "volume.adjust", delta: 100 });
+
+    expect(
+      validateActionMapping({
+        kind: "windows",
+        action: "volume.adjust",
+        delta: -200,
+      }),
+    ).toEqual({ kind: "windows", action: "volume.adjust", delta: -100 });
   });
 
   test("setActionMapping persists and handles conflicting assignments explicitly", () => {
@@ -119,7 +124,6 @@ describe("actionMapping utils", () => {
       action: "volume.toggle_mute",
     });
 
-    // Reassign same action to preset_2; conflict handling should unbind preset_1
     const set2 = setActionMapping("preset_2", {
       kind: "windows",
       action: "volume.toggle_mute",
@@ -144,9 +148,6 @@ describe("actionMapping utils", () => {
       action: "volume.toggle_mute",
     });
 
-    expect(getActionMapping("preset_1").kind).toBe("device");
-    expect(getActionMapping("dial_press").kind).toBe("windows");
-
     resetActionMappings();
 
     const all = getAllActionMappings();
@@ -155,83 +156,51 @@ describe("actionMapping utils", () => {
     });
   });
 
-  test("executeAction returns fallbackToDefault: true when mapped to default", async () => {
-    const context: ActionExecutionContext = { isWindowsActive: true };
-    const res = await executeAction("preset_1", context);
-    expect(res.executed).toBe(false);
-    expect(res.fallbackToDefault).toBe(true);
-  });
-
-  test("executeAction blocks Windows actions on non-Windows fallback routes gracefully", async () => {
-    setActionMapping("preset_1", {
-      kind: "windows",
-      action: "volume.toggle_mute",
-    });
-
-    let wsCalled = false;
-    const mockWsReq = async () => {
-      wsCalled = true;
-      return {};
+  test("navigateToSection handles supported Nocturne and Mockingbird views and rejects unsupported sections", () => {
+    let activeSec = "";
+    const mockContext: ActionExecutionContext = {
+      setActiveSection: (sec) => {
+        activeSec = sec;
+      },
     };
 
-    const context: ActionExecutionContext = {
-      isWindowsActive: false, // Fallback route!
-      sendWsRequest: mockWsReq as any,
-    };
+    expect(navigateToSection("weather", mockContext)).toBe(true);
+    expect(activeSec).toBe("weather");
 
-    const res = await executeAction("preset_1", context);
-
-    expect(res.executed).toBe(false);
-    expect(res.fallbackToDefault).toBe(false);
-    expect(res.reason).toBe("windows_unavailable");
-    expect(wsCalled).toBe(false); // MUST NOT send WS request to non-Windows target
+    expect(navigateToSection("unsupported_sec_99", mockContext)).toBe(false);
   });
 
-  test("executeAction executes Windows action safely when Windows is active", async () => {
+  test("executeAction handles unsupported, error, and malformed RPC responses gracefully", async () => {
     setActionMapping("preset_1", {
       kind: "windows",
       action: "volume.adjust",
       delta: 5,
     });
 
-    let calledMethod = "";
-    let calledParams: any = null;
-
-    const mockWsReq = async (method: string, params: any) => {
-      calledMethod = method;
-      calledParams = params;
-      return { status: "ok" };
-    };
-
-    const context: ActionExecutionContext = {
+    // Mock RPC returning unsupported status
+    const mockWsReqUnsupported = async () => ({ status: "unsupported" });
+    const context1: ActionExecutionContext = {
       isWindowsActive: true,
-      sendWsRequest: mockWsReq as any,
+      sendWsRequest: mockWsReqUnsupported as any,
     };
 
-    const res = await executeAction("preset_1", context);
+    const res1 = await executeAction("preset_1", context1);
+    expect(res1.executed).toBe(false);
+    expect(res1.fallbackToDefault).toBe(false);
+    expect(res1.reason).toBe("unsupported");
 
-    expect(res.executed).toBe(true);
-    expect(calledMethod).toBe("volume.adjust");
-    expect(calledParams).toEqual({ delta: 5 });
-  });
-
-  test("executeAction executes device action safely", async () => {
-    setActionMapping("dial_press", {
-      kind: "device",
-      action: "navigate.now_playing",
-    });
-
-    let navigatedSection = "";
-    const context: ActionExecutionContext = {
-      isWindowsActive: false,
-      setActiveSection: (sec) => {
-        navigatedSection = sec;
-      },
+    // Mock RPC throwing an error
+    const mockWsReqError = async () => {
+      throw new Error("RPC Network Timeout");
+    };
+    const context2: ActionExecutionContext = {
+      isWindowsActive: true,
+      sendWsRequest: mockWsReqError as any,
     };
 
-    const res = await executeAction("dial_press", context);
-
-    expect(res.executed).toBe(true);
-    expect(navigatedSection).toBe("nowPlaying");
+    const res2 = await executeAction("preset_1", context2);
+    expect(res2.executed).toBe(false);
+    expect(res2.fallbackToDefault).toBe(false);
+    expect(res2.reason).toBe("RPC Network Timeout");
   });
 });

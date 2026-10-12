@@ -41,10 +41,6 @@ const AVAILABLE_ACTIONS: Array<{
     definition: { kind: "device", action: "media.previous" },
   },
   {
-    label: "Device: Toggle Mute",
-    definition: { kind: "device", action: "volume.mute_toggle" },
-  },
-  {
     label: "Device: Navigate Home",
     definition: { kind: "device", action: "navigate.home" },
   },

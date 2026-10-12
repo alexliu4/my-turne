@@ -3,7 +3,8 @@ import {
   getDevicePresetStorageKey,
   normalizePresetDeviceId,
 } from "./presetStorage";
-import { sendNocturneWsRequest } from "../hooks/useNocturned";
+import { sendNocturneWsRequest, getAppReadyState } from "../hooks/useNocturned";
+import { getWindowsConnectorState } from "../hooks/useWindowsConnector";
 
 export const CONTROL_TRIGGERS = [
   "preset_1",
@@ -25,7 +26,6 @@ export const DEVICE_ACTION_IDS = [
   "media.play_pause",
   "media.next",
   "media.previous",
-  "volume.mute_toggle",
   "navigate.home",
   "navigate.now_playing",
   "app.launch",
@@ -43,6 +43,16 @@ export const WINDOWS_ACTION_IDS = [
 
 export type WindowsActionId = (typeof WINDOWS_ACTION_IDS)[number];
 
+export const SUPPORTED_APP_IDS = [
+  "weather",
+  "timer",
+  "hostStatus",
+  "windowsMedia",
+  "windowsVolume",
+] as const;
+
+export type SupportedAppId = (typeof SUPPORTED_APP_IDS)[number];
+
 export type DefaultActionDefinition = {
   kind: "default";
 };
@@ -50,7 +60,7 @@ export type DefaultActionDefinition = {
 export type DeviceActionDefinition = {
   kind: "device";
   action: DeviceActionId;
-  appId?: string;
+  appId?: SupportedAppId;
 };
 
 export type WindowsActionDefinition = {
@@ -66,8 +76,14 @@ export type ActionDefinition =
 
 export type ActionMappingsMap = Record<ControlTrigger, ActionDefinition>;
 
+export type ViewStoreLike = {
+  showContentShelf?: () => void;
+  showNpv?: () => void;
+  showView?: (view: string) => void;
+};
+
 export type ActionExecutionContext = {
-  isWindowsActive: boolean;
+  isWindowsActive?: boolean;
   playTrack?: (
     trackUri?: string | null,
     contextUri?: string | null,
@@ -75,6 +91,7 @@ export type ActionExecutionContext = {
   ) => Promise<boolean>;
   refreshPlaybackState?: () => void;
   setActiveSection?: (section: string) => void;
+  viewStore?: ViewStoreLike;
   sendWsRequest?: typeof sendNocturneWsRequest;
 };
 
@@ -157,12 +174,15 @@ export function validateActionMapping(mapping: unknown): ActionDefinition {
           typeof mapping.appId === "string" ? mapping.appId.trim() : "";
         if (
           !appId ||
-          containsProhibitedShellCommand(appId) ||
-          appId.includes(" ")
+          !(SUPPORTED_APP_IDS as readonly string[]).includes(appId)
         ) {
           return DEFAULT_ACTION;
         }
-        return { kind: "device", action: "app.launch", appId };
+        return {
+          kind: "device",
+          action: "app.launch",
+          appId: appId as SupportedAppId,
+        };
       }
       return { kind: "device", action: action as DeviceActionId };
     }
@@ -177,8 +197,14 @@ export function validateActionMapping(mapping: unknown): ActionDefinition {
     ) {
       if (action === "volume.adjust") {
         const rawDelta = Number(mapping.delta);
-        const delta = Number.isFinite(rawDelta) ? Math.round(rawDelta) : 5;
-        return { kind: "windows", action: "volume.adjust", delta };
+        const clampedDelta = Number.isFinite(rawDelta)
+          ? Math.max(-100, Math.min(100, Math.round(rawDelta)))
+          : 5;
+        return {
+          kind: "windows",
+          action: "volume.adjust",
+          delta: clampedDelta,
+        };
       }
       return { kind: "windows", action: action as WindowsActionId };
     }
@@ -246,8 +272,6 @@ export function setActionMapping(
   const currentMappings = getAllActionMappings(deviceId);
   let conflictResolved = false;
 
-  // Conflict resolution: If assigning a non-default action, check if it's identical to another trigger that should be unique
-  // For instance, if another trigger already holds this non-default action, or remapping explicitly overwrites prior trigger mapping cleanly.
   if (validated.kind !== "default") {
     CONTROL_TRIGGERS.forEach((otherTrigger) => {
       if (otherTrigger !== trigger) {
@@ -310,6 +334,51 @@ export function resetActionMappings(
   }
 }
 
+export function navigateToSection(
+  section: string,
+  context: ActionExecutionContext,
+): boolean {
+  const NOCTURNE_SECTIONS = [
+    "recents",
+    "nowPlaying",
+    "hostStatus",
+    "windowsMedia",
+    "windowsVolume",
+    "timer",
+    "weather",
+    "library",
+    "artists",
+    "podcasts",
+    "radio",
+    "settings",
+  ];
+
+  if (context.setActiveSection && NOCTURNE_SECTIONS.includes(section)) {
+    context.setActiveSection(section);
+    return true;
+  }
+
+  if (context.viewStore) {
+    if (section === "recents" || section === "shelf") {
+      context.viewStore.showContentShelf?.();
+      return true;
+    } else if (section === "nowPlaying" || section === "npv") {
+      context.viewStore.showNpv?.();
+      return true;
+    } else if (
+      (SUPPORTED_APP_IDS as readonly string[]).includes(section) ||
+      section === "hostStatus" ||
+      section === "windowsMedia" ||
+      section === "windowsVolume"
+    ) {
+      context.viewStore.showView?.(section);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function executeAction(
   trigger: ControlTrigger,
   context: ActionExecutionContext,
@@ -322,7 +391,13 @@ export async function executeAction(
   }
 
   if (mapping.kind === "windows") {
-    if (!context.isWindowsActive) {
+    const ready = getAppReadyState();
+    const isWindowsActive =
+      typeof context.isWindowsActive === "boolean"
+        ? context.isWindowsActive
+        : getWindowsConnectorState(ready).isWindowsActive;
+
+    if (!isWindowsActive) {
       return {
         executed: false,
         fallbackToDefault: false,
@@ -336,39 +411,133 @@ export async function executeAction(
       switch (mapping.action) {
         case "volume.adjust": {
           const delta = mapping.delta ?? 5;
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "volume.adjust",
             { delta },
-            { timeoutMs: 3000 },
+            { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
+          const obj =
+            res && typeof res === "object"
+              ? (res as Record<string, unknown>)
+              : null;
+          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: "unsupported",
+            };
+          }
+          if (obj?.status !== undefined && obj?.status !== "ok") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: String(obj.error || "failed"),
+            };
+          }
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "volume.toggle_mute": {
-          const res = await wsReq("volume.toggleMute", {}, { timeoutMs: 3000 });
+          const res = await wsReq<unknown>(
+            "volume.toggleMute",
+            {},
+            { timeoutMs: 3000, appReadyGeneration: ready.generation },
+          );
+          const obj =
+            res && typeof res === "object"
+              ? (res as Record<string, unknown>)
+              : null;
+          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: "unsupported",
+            };
+          }
+          if (obj?.status !== undefined && obj?.status !== "ok") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: String(obj.error || "failed"),
+            };
+          }
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "media.play_pause": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.toggle",
             { windows_only: true },
-            { timeoutMs: 3000 },
+            { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
+          const obj =
+            res && typeof res === "object"
+              ? (res as Record<string, unknown>)
+              : null;
+          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: "unsupported",
+            };
+          }
+          if (obj?.status !== undefined && obj?.status !== "ok") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: String(obj.error || "failed"),
+            };
+          }
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "media.next": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.next",
             { windows_only: true },
-            { timeoutMs: 3000 },
+            { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
+          const obj =
+            res && typeof res === "object"
+              ? (res as Record<string, unknown>)
+              : null;
+          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: "unsupported",
+            };
+          }
+          if (obj?.status !== undefined && obj?.status !== "ok") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: String(obj.error || "failed"),
+            };
+          }
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "media.previous": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.previous",
             { windows_only: true },
-            { timeoutMs: 3000 },
+            { timeoutMs: 3000, appReadyGeneration: ready.generation },
           );
+          const obj =
+            res && typeof res === "object"
+              ? (res as Record<string, unknown>)
+              : null;
+          if (obj?.status === "unsupported" || obj?.error === "unsupported") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: "unsupported",
+            };
+          }
+          if (obj?.status !== undefined && obj?.status !== "ok") {
+            return {
+              executed: false,
+              fallbackToDefault: false,
+              reason: String(obj.error || "failed"),
+            };
+          }
           return { executed: true, fallbackToDefault: false, result: res };
         }
         default:
@@ -397,7 +566,7 @@ export async function executeAction(
     try {
       switch (mapping.action) {
         case "media.play_pause": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.toggle",
             {},
             { timeoutMs: 3000 },
@@ -406,7 +575,7 @@ export async function executeAction(
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "media.next": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.next",
             {},
             { timeoutMs: 3000 },
@@ -415,7 +584,7 @@ export async function executeAction(
           return { executed: true, fallbackToDefault: false, result: res };
         }
         case "media.previous": {
-          const res = await wsReq(
+          const res = await wsReq<unknown>(
             "media.control.previous",
             {},
             { timeoutMs: 3000 },
@@ -423,26 +592,18 @@ export async function executeAction(
           context.refreshPlaybackState?.();
           return { executed: true, fallbackToDefault: false, result: res };
         }
-        case "volume.mute_toggle": {
-          const res = await wsReq(
-            "audio.volume.mute_toggle",
-            {},
-            { timeoutMs: 3000 },
-          );
-          return { executed: true, fallbackToDefault: false, result: res };
-        }
         case "navigate.home": {
-          context.setActiveSection?.("recents");
-          return { executed: true, fallbackToDefault: false };
+          const ok = navigateToSection("recents", context);
+          return { executed: ok, fallbackToDefault: !ok };
         }
         case "navigate.now_playing": {
-          context.setActiveSection?.("nowPlaying");
-          return { executed: true, fallbackToDefault: false };
+          const ok = navigateToSection("nowPlaying", context);
+          return { executed: ok, fallbackToDefault: !ok };
         }
         case "app.launch": {
           if (mapping.appId) {
-            context.setActiveSection?.(mapping.appId);
-            return { executed: true, fallbackToDefault: false };
+            const ok = navigateToSection(mapping.appId, context);
+            return { executed: ok, fallbackToDefault: !ok };
           }
           return {
             executed: false,

@@ -1,7 +1,7 @@
 import { View } from "../stores/ViewStore";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
-import { action } from "mobx";
+import { runInAction } from "mobx";
 import { executeAction } from "../../../utils/actionMapping";
 import { getWindowsConnectorState } from "../../../hooks/useWindowsConnector";
 import { getAppReadyState } from "../../../hooks/useNocturned";
@@ -20,25 +20,7 @@ const reactToBackButton = (
     voiceStore,
   } = rootStore;
 
-  const handleBackButton = action(async () => {
-    const isWindowsActive =
-      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
-    const actionRes = await executeAction("back_press", {
-      isWindowsActive,
-      setActiveSection: (sec) => {
-        if (sec === "recents" || sec === "home" || sec === "shelf") {
-          viewStore.showContentShelf();
-        } else if (sec === "nowPlaying" || sec === "npv") {
-          viewStore.showNpv();
-        } else {
-          viewStore.showView(sec);
-        }
-      },
-    });
-    if (actionRes.executed || !actionRes.fallbackToDefault) {
-      return;
-    }
-
+  const runDefaultBackButton = () => {
     if (onboardingStore.isActive) {
       if (onboardingStore.backEnabled || onboardingStore.noInteractionModal) {
         onboardingStore.handleBack();
@@ -79,9 +61,35 @@ const reactToBackButton = (
         viewStore.back();
         break;
     }
-  });
+  };
 
-  hardwareEvents.onBack(handleBackButton);
+  const handleBackButton = async () => {
+    if (
+      onboardingStore.isActive ||
+      overlayController.isShowing("voice") ||
+      overlayController.isShowing("lets_drive") ||
+      overlayController.isSettingsShowing
+    ) {
+      runInAction(runDefaultBackButton);
+      return;
+    }
+
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("back_press", {
+      isWindowsActive,
+      viewStore,
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
+    runInAction(runDefaultBackButton);
+  };
+
+  hardwareEvents.onBack(() => {
+    void handleBackButton();
+  });
 };
 
 export default reactToBackButton;

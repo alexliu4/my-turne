@@ -1,6 +1,6 @@
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
-import { action } from "mobx";
+import { runInAction } from "mobx";
 import { executeAction } from "../../../utils/actionMapping";
 import { getWindowsConnectorState } from "../../../hooks/useWindowsConnector";
 import { getAppReadyState } from "../../../hooks/useNocturned";
@@ -9,56 +9,61 @@ const reactToSettingsButton = (
   hardwareEvents: HardwareEvents,
   rootStore: RootStore,
 ) => {
-  const { overlayController, settingsStore, viewStore } = rootStore;
+  const { overlayController, settingsStore, viewStore, onboardingStore } =
+    rootStore;
 
-  const handleSettings = action(async () => {
+  const handleSettings = async () => {
+    if (onboardingStore?.isActive) {
+      overlayController.toggleSettings();
+      return;
+    }
+
     const isWindowsActive =
       getWindowsConnectorState(getAppReadyState()).isWindowsActive;
     const actionRes = await executeAction("settings_press", {
       isWindowsActive,
-      setActiveSection: (sec) => {
-        if (sec === "recents" || sec === "home" || sec === "shelf") {
-          viewStore.showContentShelf();
-        } else if (sec === "nowPlaying" || sec === "npv") {
-          viewStore.showNpv();
-        } else {
-          viewStore.showView(sec);
-        }
-      },
+      viewStore,
     });
     if (actionRes.executed || !actionRes.fallbackToDefault) {
       return;
     }
 
-    overlayController.toggleSettings();
-  });
+    runInAction(() => {
+      overlayController.toggleSettings();
+    });
+  };
 
-  const handleSettingsLongPress = action(async () => {
+  const handleSettingsLongPress = async () => {
+    if (onboardingStore?.isActive) {
+      if (settingsStore) {
+        settingsStore.handleSettingsButtonLongPress();
+      }
+      return;
+    }
+
     const isWindowsActive =
       getWindowsConnectorState(getAppReadyState()).isWindowsActive;
     const actionRes = await executeAction("settings_long_press", {
       isWindowsActive,
-      setActiveSection: (sec) => {
-        if (sec === "recents" || sec === "home" || sec === "shelf") {
-          viewStore.showContentShelf();
-        } else if (sec === "nowPlaying" || sec === "npv") {
-          viewStore.showNpv();
-        } else {
-          viewStore.showView(sec);
-        }
-      },
+      viewStore,
     });
     if (actionRes.executed || !actionRes.fallbackToDefault) {
       return;
     }
 
-    if (settingsStore) {
-      settingsStore.handleSettingsButtonLongPress();
-    }
-  });
+    runInAction(() => {
+      if (settingsStore) {
+        settingsStore.handleSettingsButtonLongPress();
+      }
+    });
+  };
 
-  hardwareEvents.onSettings(handleSettings);
-  hardwareEvents.onSettingsLongPress(handleSettingsLongPress);
+  hardwareEvents.onSettings(() => {
+    void handleSettings();
+  });
+  hardwareEvents.onSettingsLongPress(() => {
+    void handleSettingsLongPress();
+  });
 };
 
 export default reactToSettingsButton;
