@@ -27,3 +27,18 @@ The production build reports the existing warning about a chunk exceeding 500 kB
 The added tests simulate WebSocket I/O, DOM hardware events, native handler callbacks and rendered view layers. No physical Car Thing, Windows PC, Mac fallback host, Bluetooth transport, or actual hardware controls were exercised. Real-device route handoffs and physical control behavior remain unverified on hardware; no hardware success is claimed.
 
 The final diff was reviewed against the PR base and the reviewed commit. The user's pre-existing uncommitted change to `jules_my_turne_windows_sprints.md` is excluded from this fix commit.
+
+## Targeted hardware-event refinement
+
+Only `useMappedHardwareControls`, its regression tests and the hooks guide changed in this refinement. Native short Enter is preserved with a long-only mapping; dual mappings dispatch only the classified action. A short-only mapping replays an unmapped long action as a held native key and suppresses duplicate releases, so the existing native long-press parser emits long rather than short. The fallback starts its native hold after the hook's one-second classification threshold; timer-based native handlers therefore run after their own additional one-second threshold. Native release can remain pending during that replay interval. This does not claim unchanged native callback timing.
+
+Rotary capture uses unmodified horizontal-only `deltaX`. Vertical/diagonal scrolling, modified wheel gestures, form-control interactions and unmapped directions pass through. Rotary RPCs are single-flight with a 50 ms minimum interval between starts and at most eight pending steps. Excess steps beyond that buffer are discarded. Intentional buffered volume adjustments preserve direction and order. Queue entries are checked against route generation, device scope and mapping identity, and are cancelled on protected-state entry or unmount. Non-RPC navigation is not throttled.
+
+Validation with Bun 1.4.2 on macOS:
+
+- `bun run typecheck`: exit 0, no diagnostics.
+- Targeted `bun test` for `useMappedHardwareControls`, `useActionMapping`, `actionMapping`, `actionMappingRoute`, Mockingbird `actionMapping` and `interactionContracts`: exit 0, 58 passed, 0 failed, 499 assertions across six files, 5.49 seconds.
+- `bun run build`: exit 0, Vite production build 2.50 seconds; existing chunk-size warning remains.
+- `git diff --check`: exit 0.
+
+These are simulated DOM, RPC and native hardware-parser tests, not physical hardware tests. Mapping persistence, route authorization and Mockingbird production code remain unchanged. The existing uncommitted sprint document is again excluded.
