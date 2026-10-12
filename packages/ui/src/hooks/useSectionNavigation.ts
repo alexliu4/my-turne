@@ -17,6 +17,12 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "windows-volume",
   ].includes(section);
 
+// Host Status is read-only diagnostics, including when Windows is offline.
+const requiresWindowsConnector = (section: ActiveSection) =>
+  isWindowsAppSection(section) &&
+  section !== "hostStatus" &&
+  section !== "host-status";
+
 export const shouldShowConnectionLostScreen = (
   connectionLost: boolean,
   bypassOfflineScreen: boolean,
@@ -47,7 +53,7 @@ export function useSectionNavigation(
     if (
       !isSystemSection(section) &&
       ((availability.bypassOfflineScreen && !isOfflineAppSection(section)) ||
-        (isWindowsAppSection(section) && !availability.isWindowsActive))
+        (requiresWindowsConnector(section) && !availability.isWindowsActive))
     ) {
       return;
     }
@@ -96,7 +102,7 @@ export function useSectionNavigation(
     const target =
       availability.bypassOfflineScreen && !isOfflineAppSection(previous)
         ? "apps"
-        : isWindowsAppSection(previous) && !availability.isWindowsActive
+        : requiresWindowsConnector(previous) && !availability.isWindowsActive
           ? appsBackSection
           : previous;
     activeSectionRef.current = target;

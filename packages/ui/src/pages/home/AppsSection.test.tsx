@@ -11,6 +11,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Window } from "happy-dom";
 import AppsSection from "./AppsSection";
+import Settings from "../../components/settings/Settings";
+import { HostStatus } from "../../components/windows/HostStatus";
+import * as daemon from "../../hooks/useNocturned";
 import Sidebar from "../../components/common/navigation/Sidebar";
 import { TimerApp } from "../../components/apps/TimerApp";
 import { getTimerState, resetTimer } from "../../components/apps/timerStore";
@@ -28,12 +31,27 @@ class MockResizeObserver {
 }
 
 describe("AppsSection component behavioral tests", () => {
+  let ready: daemon.AppReadyState;
   let root: Root;
   let dom: Window;
   const originals = new Map<string, PropertyDescriptor | undefined>();
 
   beforeEach(() => {
     resetTimer();
+    ready = {
+      ready: false,
+      platform: null,
+      connectorPlatform: null,
+      generation: 1,
+    };
+    spyOn(daemon, "getAppReadyState").mockImplementation(() => ready);
+    spyOn(daemon, "subscribeAppReadyState").mockImplementation((listener) => {
+      listener(ready);
+      return () => {};
+    });
+    spyOn(daemon, "sendNocturneWsRequest").mockResolvedValue({
+      capabilities: { volume: true },
+    });
     dom = new Window({ url: "http://localhost" });
     for (const [key, value] of Object.entries({
       window: dom,
@@ -196,12 +214,18 @@ describe("AppsSection component behavioral tests", () => {
     expect(onSelectApp).toHaveBeenCalledTimes(2);
   });
 
-  // Use App's section state and lock handlers with the real Sidebar and Timer.
-  // Connection and lock presentation require no daemon I/O in this probe.
+  // Use App's section state and lock handlers with the real screens.
+  // Mock only daemon I/O and the shared Settings context.
   let navigation: ReturnType<typeof useSectionNavigation>;
   let renderedSections: string[];
-  function NavigationProbe({ connected = false }: { connected?: boolean }) {
-    navigation = useSectionNavigation(connected, connected);
+  function NavigationProbe({
+    connected = false,
+    windowsActive = connected,
+  }: {
+    connected?: boolean;
+    windowsActive?: boolean;
+  }) {
+    navigation = useSectionNavigation(windowsActive, connected);
     const section = navigation.activeSection;
     renderedSections.push(section);
     if (section === "lock") {
@@ -225,6 +249,23 @@ describe("AppsSection component behavioral tests", () => {
         />
       );
     }
+    if (section === "settings") {
+      return (
+        <Settings
+          onOpenDonationModal={() => {}}
+          setActiveSection={navigation.setActiveSection}
+        />
+      );
+    }
+    if (section === "hostStatus" || section === "host-status") {
+      return (
+        <HostStatus
+          onClose={() =>
+            navigation.setActiveSection(navigation.appsBackSection)
+          }
+        />
+      );
+    }
     return (
       <Sidebar
         activeSection={section}
@@ -238,7 +279,7 @@ describe("AppsSection component behavioral tests", () => {
     );
   }
 
-  async function mountNavigation(connected = false) {
+  async function mountNavigation(connected = false, windowsActive = connected) {
     renderedSections = [];
     spyOn(settingsContext, "useSettings").mockReturnValue({
       settings: { showStatusBar: false },
@@ -254,7 +295,9 @@ describe("AppsSection component behavioral tests", () => {
       showNativeNotifications: false,
     });
     await act(async () =>
-      root.render(<NavigationProbe connected={connected} />),
+      root.render(
+        <NavigationProbe connected={connected} windowsActive={windowsActive} />,
+      ),
     );
   }
 
@@ -284,7 +327,15 @@ describe("AppsSection component behavioral tests", () => {
     expect(navigation.activeSection).toBe("apps");
     expect(renderedSections.length).toBe(renderedBefore);
     // Also reject hardware/programmatic destinations at the parent boundary.
-    await act(async () => navigation.setActiveSection("windowsMedia"));
+    await act(async () => {
+      for (const section of [
+        "hostStatus",
+        "host-status",
+        "windowsMedia",
+        "windowsVolume",
+      ])
+        navigation.setActiveSection(section);
+    });
     expect(renderedSections.length).toBe(renderedBefore);
     await clickText("Reconnect / Bluetooth");
     expect(navigation.bypassOfflineScreen).toBe(false);
@@ -394,4 +445,69 @@ describe("AppsSection component behavioral tests", () => {
     expect(navigation.idleLockActiveRef.current).toBe(false);
     expect(document.body.textContent).toBe("Open Apps");
   });
+
+  it.each(["windows", "macos", "ios"])(
+    "Settings Host Status remains accessible with %s and preserves lock/unlock and Back",
+    async (platform) => {
+      ready = {
+        ready: true,
+        platform: platform === "ios" ? "ios" : "web",
+        connectorPlatform: platform === "ios" ? null : platform,
+        generation: 2,
+      };
+      const windowsActive = platform === "windows";
+      await mountNavigation(true, windowsActive);
+      await clickText("Settings");
+      const general = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent?.includes("General"),
+      );
+      if (!general) throw new Error("General settings missing");
+      await act(async () => {
+        general.click();
+        await Bun.sleep(350);
+      });
+      for (const label of windowsActive
+        ? []
+        : ["Windows Media", "Windows Volume"]) {
+        const button = Array.from(document.querySelectorAll("button")).find(
+          (item) => item.textContent?.includes(label),
+        );
+        if (!button) throw new Error(`Missing ${label}`);
+        await act(async () => button.click());
+        expect(navigation.activeSection).toBe("settings");
+      }
+      expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
+      const status = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent?.includes("Host Status"),
+      );
+      if (!status) throw new Error("Host Status settings entry missing");
+      await act(async () => status.click());
+      expect(navigation.activeSection).toBe("hostStatus");
+      expect(navigation.appsBackSection).toBe("settings");
+      expect(document.body.textContent).toContain("Windows PC");
+      if (windowsActive) {
+        expect(document.body.textContent).toContain("Connected");
+        expect(document.body.textContent).toContain("Available");
+      } else {
+        expect(document.body.textContent).toContain("Offline");
+        expect(document.body.textContent).toContain(
+          platform === "macos"
+            ? "Using fallback Connector (macos)"
+            : "Disconnected",
+        );
+        expect(document.body.textContent).not.toContain("Refresh");
+        expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
+      }
+      await act(async () => navigation.handleIdleLock());
+      await clickText("Unlock");
+      expect(navigation.activeSection).toBe("hostStatus");
+      expect(navigation.activeSectionRef.current).toBe("hostStatus");
+      expect(navigation.idleLockActiveRef.current).toBe(false);
+      const back = document.querySelector('[aria-label="Go Back"]');
+      if (!(back instanceof HTMLElement))
+        throw new Error("Host Status Back missing");
+      await act(async () => back.click());
+      expect(navigation.activeSection).toBe("settings");
+    },
+  );
 });
