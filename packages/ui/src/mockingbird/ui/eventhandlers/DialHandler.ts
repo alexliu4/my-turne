@@ -1,6 +1,13 @@
+import {
+  isMappingProtected,
+  isHardwareActionBlocked,
+} from "./mappingProtection";
 import type HardwareEvents from "../helpers/HardwareEvents";
 import type { RootStore } from "../stores/RootStore";
-import { action } from "mobx";
+import { runInAction } from "mobx";
+import { executeAction } from "../../../utils/actionMapping";
+import { getWindowsConnectorState } from "../../../hooks/useWindowsConnector";
+import { getAppReadyState } from "../../../hooks/useNocturned";
 
 export const isDialEnabled = (
   appView: string,
@@ -27,7 +34,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
     voiceStore,
   } = rootStore;
 
-  const handleDialPress = action(() => {
+  const runDefaultDialPress = () => {
     if (onboardingStore.isActive) {
       if (
         onboardingStore.dialPressEnabled ||
@@ -35,9 +42,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialPress();
       }
-      if (!onboardingStore.dialPressEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       if (voiceStore.error || voiceStore.friendlyError) {
@@ -89,9 +94,29 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       default:
         break;
     }
-  });
+  };
 
-  const handleDialLongPress = action(() => {
+  const handleDialPress = async () => {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
+      runInAction(runDefaultDialPress);
+      return;
+    }
+
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("dial_press", {
+      isWindowsActive,
+      viewStore,
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
+    runInAction(runDefaultDialPress);
+  };
+
+  const runDefaultDialLongPress = () => {
     switch (viewStore.currentView) {
       case "npv":
         if (npvStore.npvController) {
@@ -102,17 +127,34 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       default:
         break;
     }
-  });
+  };
 
-  const handleDialDown = action(() => {
+  const handleDialLongPress = async () => {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) return;
+
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("dial_long_press", {
+      isWindowsActive,
+      viewStore,
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
+    runInAction(runDefaultDialLongPress);
+  };
+
+  const handleDialDown = () => {
     hardwareStore.setDialPressed(true);
-  });
+  };
 
-  const handleDialUp = action(() => {
+  const handleDialUp = () => {
     hardwareStore.setDialPressed(false);
-  });
+  };
 
-  const handleDialLeft = action(() => {
+  const runDefaultDialLeft = () => {
     if (onboardingStore.isActive) {
       if (
         onboardingStore.dialTurnEnabled ||
@@ -120,9 +162,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialTurn();
       }
-      if (!onboardingStore.dialTurnEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       return;
@@ -166,9 +206,29 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       default:
         break;
     }
-  });
+  };
 
-  const handleDialRight = action(() => {
+  const handleDialLeft = async () => {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
+      runInAction(runDefaultDialLeft);
+      return;
+    }
+
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("dial_turn_left", {
+      isWindowsActive,
+      viewStore,
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
+    runInAction(runDefaultDialLeft);
+  };
+
+  const runDefaultDialRight = () => {
     if (onboardingStore.isActive) {
       if (
         onboardingStore.dialTurnEnabled ||
@@ -176,9 +236,7 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       ) {
         onboardingStore.handleDialTurn();
       }
-      if (!onboardingStore.dialTurnEnabled) {
-        return;
-      }
+      return;
     }
     if (overlayController.isShowing("voice")) {
       return;
@@ -222,14 +280,42 @@ const reactToDial = (hardwareEvents: HardwareEvents, rootStore: RootStore) => {
       default:
         break;
     }
-  });
+  };
 
-  hardwareEvents.onDialPress(handleDialPress);
-  hardwareEvents.onDialLongPress(handleDialLongPress);
+  const handleDialRight = async () => {
+    if (isHardwareActionBlocked(rootStore)) return;
+    if (isMappingProtected(rootStore)) {
+      runInAction(runDefaultDialRight);
+      return;
+    }
+
+    const isWindowsActive =
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
+    const actionRes = await executeAction("dial_turn_right", {
+      isWindowsActive,
+      viewStore,
+    });
+    if (actionRes.executed || !actionRes.fallbackToDefault) {
+      return;
+    }
+
+    runInAction(runDefaultDialRight);
+  };
+
+  hardwareEvents.onDialPress(() => {
+    void handleDialPress();
+  });
+  hardwareEvents.onDialLongPress(() => {
+    void handleDialLongPress();
+  });
   hardwareEvents.onDialButtonDown(handleDialDown);
   hardwareEvents.onDialButtonUp(handleDialUp);
-  hardwareEvents.onDialLeft(handleDialLeft);
-  hardwareEvents.onDialRight(handleDialRight);
+  hardwareEvents.onDialLeft(() => {
+    void handleDialLeft();
+  });
+  hardwareEvents.onDialRight(() => {
+    void handleDialRight();
+  });
 };
 
 export default reactToDial;

@@ -21,6 +21,7 @@ import PowerTutorial from "./PowerTutorial/PowerTutorial";
 import Licenses from "./Licenses/Licenses";
 import TipsOnDemand from "./TipsOnDemand/TipsOnDemand";
 import DisplayAndBrightness from "./DisplayAndBrightness/DisplayAndBrightness";
+import ActionMapping from "./ActionMapping/ActionMapping";
 import AppLaunch from "./AppLaunch/AppLaunch";
 import SpotifyLaunch from "./SpotifyLaunch/SpotifyLaunch";
 import PhoneCalls from "./PhoneCalls/PhoneCalls";
@@ -35,6 +36,7 @@ const transitionDurationMs =
   parseInt(variables["transition-duration-ms"], 10) || 500;
 
 const viewToComp: Record<string, (() => ReactNode) | undefined> = {
+  [OptionsMenuItemId.ACTION_MAPPING]: () => <ActionMapping />,
   [MainMenuItemId.SETTINGS_ROOT]: () => <MainMenu />,
   [OptionsMenuItemId.AIR_VENT_INTERFERENCE]: () => <AirVentInterference />,
   [OptionsMenuItemId.DISPLAY_AND_BRIGHTNESS]: () => <DisplayAndBrightness />,

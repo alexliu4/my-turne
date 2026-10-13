@@ -27,6 +27,7 @@ import {
 import SoftwareUpdate from "./SoftwareUpdate";
 import BluetoothDevices from "./network/BluetoothDevices";
 import About from "./About";
+import ActionMappingComponent from "./ActionMapping";
 import { useSettings } from "../../contexts/SettingsContext";
 import {
   isConnectorPlatform,
@@ -180,6 +181,19 @@ const settingsStructure: Record<string, SettingsSection> = {
         storageKey: "nativeNotificationsEnabled",
         defaultValue: true,
         requiresDirectPhone: true,
+      },
+      {
+        id: "action-mapping-screen",
+        title: "Action Mapping",
+        type: "navigate",
+        icon: SettingsGeneralIcon,
+        items: [
+          {
+            id: "action-mapping-custom",
+            type: "custom",
+            component: ActionMappingComponent,
+          },
+        ],
       },
       {
         id: "host-status-screen",

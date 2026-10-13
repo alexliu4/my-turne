@@ -51,7 +51,7 @@ describe("Mockingbird presentation and hardware contracts", () => {
     expect(markup).not.toContain("descId=");
   });
 
-  test("back on Now Playing takes the dedicated content-shelf action", () => {
+  test("back on Now Playing takes the dedicated content-shelf action", async () => {
     let onBack;
     const actions = [];
     reactToBackButton(
@@ -75,7 +75,8 @@ describe("Mockingbird presentation and hardware contracts", () => {
         voiceStore: {},
       },
     );
-    onBack();
+    await onBack();
+    await Promise.resolve();
     expect(actions).toEqual(["shelf"]);
   });
 
