@@ -118,8 +118,12 @@ A terminal artwork failure is scoped to the current Spotify readiness period. Wh
 
 - **Phone app launch toggle**: General > Open Phone App uses the shared daemon-backed preference, without a subscription or connected-phone gate. Disable it while loading or saving, show load/save errors, and describe foreground on connect versus background operation. This does not disable companion data.
 
-- **Windows Media controls**: `WindowsMedia` disables each transport button when its current session confirms that action is unsupported. The hook also blocks duplicate RPCs and unavailable sessions. Paused sessions remain visible; stopped and closed sessions clear all presentation.
+- **Windows Media controls**: `WindowsMedia` distinguishes unknown control support from acknowledged success. The released Connector returns unsupported for transient failures too, so rejection feedback keeps the action retryable. The hook also blocks duplicate RPCs and unavailable sessions. Paused sessions remain visible; stopped and closed sessions clear all presentation.
 
-- **Offline Apps interactions:** Sidebar blocks unsupported destinations while its Reconnect / Bluetooth action is present. Include selection and offline exit callbacks in memo comparisons so reconnect changes apply without a section change. Apps cards share the same guarded selection handler for touch, title clicks, and knob selection; Windows cards remain marked PC Offline and cannot launch without a Windows Connector.
+- **Offline Apps interactions:** Sidebar blocks unsupported destinations while its Reconnect / Bluetooth action is present. Include selection and offline exit callbacks in memo comparisons so reconnect changes apply without a section change. Apps cards share the same guarded selection handler for touch, title clicks, and knob selection; Computer Control media and control cards remain marked PC Offline and cannot launch without a Windows Connector. Host Status remains selectable offline for diagnostics.
 
 Action Mapping reserves short Settings press so recovery remains reachable. Both skins share typed action options and device-scoped storage. Mockingbird has its own touch configuration and reset page under Options and omits unsupported app launches; never route those app IDs into its view stack.
+
+Bluetooth Settings displays shared discovery failures with Retry pairing. The device list fetch runs independently of opening the pairing window, and leaving the page releases its owner without closing another surface's lease.
+
+The sidebar stops propagation only for vertical wheel gestures, allowing native scrolling at 800 by 480 while a Swiper carousel is mounted. Horizontal wheel handling is unchanged.

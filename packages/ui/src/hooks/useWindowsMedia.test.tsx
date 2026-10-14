@@ -447,7 +447,7 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     expect(hook.artworkUrl).toContain("legacy");
   });
 
-  test("blocks overlapping controls and disables only the confirmed unsupported action until session changes", async () => {
+  test("blocks overlapping controls and keeps ambiguous Connector rejection retryable", async () => {
     await mount(<WindowsMedia />);
     const metadata = {
       media_generation: 1,
@@ -466,12 +466,16 @@ describe("Windows Media hook RPC and event lifecycle", () => {
       playback_attributes: { PlaybackStatus: "playing" },
     });
     await respond({ status: "unsupported" });
-    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(false);
     expect(button("Previous Track").disabled).toBe(false);
+    expect(container.textContent).toContain(
+      "Windows player did not accept this control",
+    );
     await event(metadata);
-    expect(button("Next Track").disabled).toBe(true);
+    expect(button("Next Track").disabled).toBe(false);
     await act(async () => button("Next Track").click());
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+    await respond({ status: "ok" }, 1);
     await event({ ...metadata, media_generation: 2 });
     expect(button("Next Track").disabled).toBe(false);
   });
@@ -536,6 +540,37 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     expect(hook.isLoading).toBe(true);
     await route("windows"); // changes generation
     expect(hook.isLoading).toBe(false);
+  });
+
+  test("failed skip results and unrelated unsupported errors remain retryable", async () => {
+    await mount();
+    await event({
+      media_generation: 1,
+      media_item_attributes: { MediaItemTitle: "Song" },
+      playback_attributes: { PlaybackStatus: "playing" },
+    });
+    expect(hook.supportedControls.next).toBeNull();
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    await respond({ status: "ok", success: false });
+    expect(hook.error).toContain("failed");
+    expect(hook.supportedControls.next).toBeNull();
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    await act(async () =>
+      calls[1].reject(new Error("unsupported transport encoding")),
+    );
+    expect(hook.error).toBe("unsupported transport encoding");
+    expect(hook.supportedControls.next).toBeNull();
+    await act(async () => {
+      void hook.nextTrack();
+    });
+    await respond({ status: "ok" }, 2);
+    expect(hook.supportedControls.next).toBe(true);
+    await route("windows");
+    expect(hook.supportedControls.next).toBeNull();
   });
 
   test("RPC A completion on older generation does not clear loading for pending RPC B on newer generation", async () => {
@@ -654,7 +689,7 @@ describe("Windows Media hook RPC and event lifecycle", () => {
     expect(calls).toHaveLength(1);
     await event({ ...metadata, media_generation: 2 });
     await respond({ status: "unsupported" });
-    expect(hook.supportedControls.next).toBe(true);
+    expect(hook.supportedControls.next).toBeNull();
     await act(async () => {
       void hook.nextTrack();
     });
@@ -731,7 +766,7 @@ describe("rendered WindowsMedia screen", () => {
     expect(closed).toBe(true);
   });
 
-  test("Settings General entry opens the Windows Media screen", async () => {
+  test("Settings General omits the redundant Windows Media launch", async () => {
     spyOn(settingsContext, "useSettings").mockReturnValue({
       settings: {},
       updateSetting: () => {},
@@ -765,8 +800,7 @@ describe("rendered WindowsMedia screen", () => {
     const media = Array.from(container.querySelectorAll("button")).find(
       (item) => item.textContent?.includes("Windows Media"),
     );
-    if (!media) throw new Error("Windows Media settings entry missing");
-    await act(async () => media.click());
-    expect(selected).toBe("windowsMedia");
+    expect(media).toBeUndefined();
+    expect(selected).toBeUndefined();
   });
 });

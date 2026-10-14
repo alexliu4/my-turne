@@ -70,7 +70,10 @@ describe("WebSocket app.ready async ordering", () => {
         this.receive({
           type: "response",
           id: request.id,
-          result: { status: "requested" },
+          result: {
+            status: "requested",
+            discoverable: request.params.discoverable,
+          },
         });
       }
     }
@@ -521,6 +524,62 @@ describe("Bluetooth reconnect presentation lifecycle", () => {
 });
 
 describe("Bluetooth discovery coordinator", () => {
+  it("does not let an old socket acknowledgement suppress reactivation", async () => {
+    const transitions = [];
+    const first = deferred();
+    const coordinator = createBluetoothDiscoveryCoordinator(async (enabled) => {
+      transitions.push(enabled);
+      if (transitions.length === 1) await first.promise;
+    });
+    const owner = Symbol("settings");
+    const opening = coordinator.acquire(owner);
+    await Bun.sleep(0);
+    coordinator.disconnected();
+    first.resolve();
+    await opening;
+    await coordinator.connected();
+    expect(transitions).toEqual([true, true]);
+    await coordinator.release(owner);
+    expect(transitions.at(-1)).toBe(false);
+  });
+
+  it("reports activation failure, retries for the same owner, then cleans up", async () => {
+    const transitions = [];
+    let fail = true;
+    const coordinator = createBluetoothDiscoveryCoordinator(async (enabled) => {
+      transitions.push(enabled);
+      if (fail) {
+        fail = false;
+        throw new Error("BlueZ unavailable");
+      }
+    });
+    const errors = [];
+    const unsubscribe = coordinator.subscribe((error) => errors.push(error));
+    const owner = Symbol("settings");
+    await expect(coordinator.acquire(owner)).rejects.toThrow(
+      "BlueZ unavailable",
+    );
+    expect(errors.at(-1)).toContain("Retry pairing");
+    await coordinator.acquire(owner);
+    expect(errors.at(-1)).toBeNull();
+    await coordinator.release(owner);
+    expect(transitions).toEqual([true, true, false]);
+    unsubscribe();
+  });
+
+  it("closes after a failed activation even when the last confirmed state was closed", async () => {
+    const transitions = [];
+    const coordinator = createBluetoothDiscoveryCoordinator(async (enabled) => {
+      transitions.push(enabled);
+      if (enabled) throw new Error("lost acknowledgement");
+    });
+    await coordinator.connected();
+    const owner = Symbol("settings");
+    await expect(coordinator.acquire(owner)).rejects.toThrow();
+    await coordinator.release(owner);
+    expect(transitions).toEqual([false, true, false]);
+  });
+
   it("opens for the first owner and closes after the final release", async () => {
     const transitions = [];
     const coordinator = createBluetoothDiscoveryCoordinator(async (enabled) => {

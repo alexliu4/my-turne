@@ -482,6 +482,7 @@ function AppContent() {
     activeSection,
     setActiveSection,
     appsBackSection,
+    initializeConnectedSection,
     bypassOfflineScreen,
     openOfflineApps,
     exitOfflineMode,
@@ -944,7 +945,7 @@ function AppContent() {
 
     const shouldStartWithNowPlaying =
       localStorage.getItem("startWithNowPlaying") === "true";
-    if (shouldStartWithNowPlaying) {
+    if (shouldStartWithNowPlaying && activeSectionRef.current === "recents") {
       setActiveSection("nowPlaying");
     }
     startSectionAppliedRef.current = true;
@@ -966,7 +967,7 @@ function AppContent() {
       splashFlowWithDeviceRef.current = true;
       setShowSplash(false);
       setShowAuthScreen(false);
-      setActiveSection("nowPlaying");
+      initializeConnectedSection();
     } else {
       setShowSplash(false);
       if (!hasSeenTutorialFlag) {

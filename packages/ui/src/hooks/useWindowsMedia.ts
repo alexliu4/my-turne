@@ -12,7 +12,7 @@ import {
   clearedMediaState,
   getWindowsMediaSnapshot,
   updateWindowsMediaSnapshot,
-  disableWindowsMediaControl,
+  confirmWindowsMediaControl,
   isWindowsMediaTopic,
   type SupportedControls,
   type WindowsMediaState,
@@ -72,7 +72,7 @@ export function useWindowsMedia() {
         pendingRef.current ||
         inFlightControl?.generation === ready.generation ||
         !stateRef.current.hasActiveSession ||
-        !stateRef.current.supportedControls[control]
+        stateRef.current.supportedControls[control] === false
       ) {
         return;
       }
@@ -114,12 +114,25 @@ export function useWindowsMedia() {
         if (obj?.status === "unsupported" || obj?.error === "unsupported") {
           setState((prev) => ({
             ...prev,
-            ...disableWindowsMediaControl(control, ready.generation),
+            ...confirmWindowsMediaControl(control, ready.generation, null),
             isLoading: prev.isLoading,
-            error: "Control unsupported",
+            error: "Windows player did not accept this control",
           }));
-        } else if (obj?.status !== "ok") {
-          throw new Error("Invalid Windows media control response");
+        } else if (obj?.status !== "ok" || obj.success === false) {
+          throw new Error(
+            typeof obj?.error === "string"
+              ? obj.error
+              : "Invalid or failed Windows media control response",
+          );
+        } else {
+          const confirmed = confirmWindowsMediaControl(
+            control,
+            ready.generation,
+          );
+          setState((prev) => ({
+            ...prev,
+            supportedControls: confirmed.supportedControls,
+          }));
         }
       } catch (error: unknown) {
         if (
@@ -133,13 +146,16 @@ export function useWindowsMedia() {
         )
           return;
         const message = error instanceof Error ? error.message : String(error);
-        const unsupported = message.toLowerCase().includes("unsupported");
-        if (unsupported) disableWindowsMediaControl(control, ready.generation);
+        const unsupported = message.trim().toLowerCase() === "unsupported";
+        if (unsupported)
+          confirmWindowsMediaControl(control, ready.generation, null);
         setState((prev) => ({
           ...prev,
           supportedControls: getWindowsMediaSnapshot(ready.generation)
             .supportedControls,
-          error: unsupported ? "Control unsupported" : message,
+          error: unsupported
+            ? "Windows player did not accept this control"
+            : message,
         }));
       } finally {
         if (inFlightControl === operation) setInFlightControl(null);
