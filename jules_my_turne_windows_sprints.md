@@ -573,6 +573,10 @@ Audio: On
 - Includes explicit toggle-mute and optional toggle-deafen controls, communicating unknown outcomes appropriately when unverified.
 - Discord failure/restart remains isolated and reconnects cleanly when Discord restarts without affecting volume, media, or route handling.
 
+## Implementation Status (October 14, 2026)
+
+Discord is available from Computer Control through the existing Windows-only daemon RPC path. Unknown and verified states, explicit mute/deafen toggles, manual Refresh, and session recovery are implemented. Local UI tests and the production build pass. Sprint 9 is **not complete**: Linux daemon tests and the physical checklist remain pending. See [contract evidence and validation checklist](docs/windows-discord.md).
+
 ---
 
 # Sprint 10 — PC Stats UI

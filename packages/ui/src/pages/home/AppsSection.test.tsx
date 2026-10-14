@@ -132,15 +132,21 @@ describe("AppsSection component behavioral tests", () => {
         Array.from(document.querySelectorAll("[data-id]")).map((el) =>
           el.getAttribute("data-id"),
         ),
-      ).toEqual(["windows-media", "windows-controls", "host-status"]);
+      ).toEqual([
+        "windows-media",
+        "windows-controls",
+        "discord",
+        "host-status",
+      ]);
       expect(
         Array.from(document.querySelectorAll("[data-id] h4:first-of-type")).map(
           (el) => el.textContent,
         ),
-      ).toEqual(["Windows Media", "Windows Control", "Host Status"]);
+      ).toEqual(["Windows Media", "Windows Control", "Discord", "Host Status"]);
       for (const [id, destination] of [
         ["windows-media", "windowsMedia"],
         ["windows-controls", "windowsVolume"],
+        ["discord", "discord"],
         ["host-status", "hostStatus"],
       ]) {
         const card = document.querySelector(`[data-id="${id}"] [style]`);
@@ -152,7 +158,7 @@ describe("AppsSection component behavioral tests", () => {
         if (active || id === "host-status")
           expect(select).toHaveBeenCalledWith(destination);
       }
-      expect(select).toHaveBeenCalledTimes(active ? 3 : 1);
+      expect(select).toHaveBeenCalledTimes(active ? 4 : 1);
       expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
     },
   );
@@ -271,7 +277,7 @@ describe("AppsSection component behavioral tests", () => {
     expect(renderedSections.length).toBe(renderedBefore);
     // Also reject hardware/programmatic destinations at the parent boundary.
     await act(async () => {
-      for (const section of ["windowsMedia", "windowsVolume"])
+      for (const section of ["windowsMedia", "windowsVolume", "discord"])
         navigation.setActiveSection(section);
     });
     expect(renderedSections.length).toBe(renderedBefore);
@@ -440,6 +446,7 @@ describe("AppsSection component behavioral tests", () => {
         "weather",
         "windowsMedia",
         "windowsVolume",
+        "discord",
         "hostStatus",
       ]) {
         await act(async () => navigation.setActiveSection(detail));

@@ -142,6 +142,9 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyDiscord = React.lazy(() =>
+  import("./components/windows/Discord").then((m) => ({ default: m.Discord })),
+);
 const LazyWindowsVolume = React.lazy(() =>
   import("./components/windows/WindowsVolume").then((m) => ({
     default: m.WindowsVolume,
@@ -2067,6 +2070,8 @@ function AppContent() {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
     );
+  } else if (activeSection === "discord") {
+    content = <LazyDiscord onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "timer") {
     content = (
       <LazyTimerApp onClose={() => setActiveSection(appsBackSection)} />

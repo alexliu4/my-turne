@@ -47,6 +47,29 @@ const COMPUTER_CATALOG: AppDefinition[] = [
     ),
   },
   {
+    id: "discord",
+    title: "Discord",
+    category: "Windows App",
+    targetSection: "discord",
+    isWindowsDependent: true,
+    iconSvg: (
+      <svg
+        className="w-20 h-20 text-white"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M8 10h.01M16 10h.01M7 17l-3 3V7a3 3 0 013-3h10a3 3 0 013 3v7a3 3 0 01-3 3H7z"
+        />
+      </svg>
+    ),
+  },
+  {
     id: "host-status",
     title: "Host Status",
     category: "Computer Diagnostics",
