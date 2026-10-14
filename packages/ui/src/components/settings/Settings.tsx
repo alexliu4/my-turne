@@ -35,13 +35,7 @@ import {
 } from "../../hooks/useNocturned";
 import { useSubscription } from "../../hooks/useSubscription";
 
-type SettingAction =
-  | "factoryReset"
-  | "signOut"
-  | "openDonation"
-  | "openHostStatus"
-  | "openWindowsVolume"
-  | "openWindowsMedia";
+type SettingAction = "factoryReset" | "signOut" | "openDonation";
 interface SettingBase {
   id: string;
   title?: string;
@@ -194,28 +188,6 @@ const settingsStructure: Record<string, SettingsSection> = {
             component: ActionMappingComponent,
           },
         ],
-      },
-      {
-        id: "host-status-screen",
-        title: "Host Status",
-        type: "action",
-        description:
-          "View Windows PC connection status and native capabilities.",
-        action: "openHostStatus",
-      },
-      {
-        id: "windows-media-screen",
-        title: "Windows Media",
-        type: "action",
-        description: "Display and control Windows GSMTC media playback.",
-        action: "openWindowsMedia",
-      },
-      {
-        id: "windows-volume-screen",
-        title: "Windows Volume",
-        type: "action",
-        description: "Control desktop Windows system volume and mute state.",
-        action: "openWindowsVolume",
       },
       {
         id: "factory-reset",
@@ -467,15 +439,6 @@ export default function Settings({
         break;
       case "openDonation":
         onOpenDonationModal();
-        break;
-      case "openHostStatus":
-        setActiveSection("hostStatus");
-        break;
-      case "openWindowsMedia":
-        setActiveSection("windowsMedia");
-        break;
-      case "openWindowsVolume":
-        setActiveSection("windowsVolume");
         break;
     }
   };

@@ -165,7 +165,9 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={previousTrack}
-              disabled={controlsDisabled || !supportedControls.previous}
+              disabled={
+                controlsDisabled || supportedControls.previous === false
+              }
               className="p-3 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 transition disabled:opacity-40"
               aria-label="Previous Track"
             >
@@ -175,7 +177,7 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={togglePlayPause}
-              disabled={controlsDisabled || !supportedControls.toggle}
+              disabled={controlsDisabled || supportedControls.toggle === false}
               className="p-4 rounded-full bg-green-500 hover:bg-green-400 active:bg-green-600 text-zinc-950 font-bold transition disabled:opacity-40 shadow-lg"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -189,7 +191,7 @@ export function WindowsMedia({
             <button
               type="button"
               onClick={nextTrack}
-              disabled={controlsDisabled || !supportedControls.next}
+              disabled={controlsDisabled || supportedControls.next === false}
               className="p-3 rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 transition disabled:opacity-40"
               aria-label="Next Track"
             >
@@ -197,6 +199,12 @@ export function WindowsMedia({
             </button>
           </div>
 
+          {(supportedControls.next === null ||
+            supportedControls.previous === null) && (
+            <p className="text-center text-xs text-zinc-400 mt-2">
+              Track skipping depends on the Windows player.
+            </p>
+          )}
           {error && (
             <p className="text-center text-xs text-red-400 mt-2 font-medium">
               {error}

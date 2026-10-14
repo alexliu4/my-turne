@@ -383,8 +383,7 @@ describe("rendered Windows volume screen", () => {
     const volume = Array.from(container.querySelectorAll("button")).find(
       (item) => item.textContent?.includes("Windows Volume"),
     );
-    if (!volume) throw new Error("Windows Volume settings entry missing");
-    await act(async () => volume.click());
-    expect(selected).toBe("windowsVolume");
+    expect(volume).toBeUndefined();
+    expect(selected).toBeUndefined();
   });
 });

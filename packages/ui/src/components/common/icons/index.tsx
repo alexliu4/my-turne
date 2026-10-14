@@ -80,3 +80,5 @@ export {
   NOTIFICATION_APP_ICON_CATALOG,
   notificationIconSrcForBundleId,
 } from "./NotificationAppIcons";
+
+export { ComputerIcon } from "./ComputerIcon";

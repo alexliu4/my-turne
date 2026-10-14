@@ -41,6 +41,7 @@ export type ActiveSection =
   | "artists"
   | "radio"
   | "podcasts"
+  | "computerControl"
   | "apps"
   | "timer"
   | "weather"

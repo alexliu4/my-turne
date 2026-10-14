@@ -9,6 +9,7 @@ import {
   RadioIcon,
   PodcastIcon,
   AppsIcon,
+  ComputerIcon,
   SettingsIcon,
 } from "../../common/icons";
 import StatusBar from "./StatusBar";
@@ -65,12 +66,20 @@ const SidebarComponent = function Sidebar({
 
   const handleSectionClick = (section: ActiveSection) => {
     window.umami?.track?.("sidebar_tab_click", { section });
-    if (onExitOfflineMode && section !== "apps") return;
+    if (onExitOfflineMode && !["apps", "computerControl"].includes(section))
+      return;
     setActiveSection(section);
   };
 
   return (
-    <div className="space-y-7 pt-12">
+    <div
+      className="space-y-7 pt-12"
+      onWheel={(event) => {
+        // Keep vertical sidebar scrolling native while the carousel is mounted.
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX))
+          event.stopPropagation();
+      }}
+    >
       {settings.showStatusBar && <StatusBar />}
 
       {onExitOfflineMode && (
@@ -104,6 +113,20 @@ const SidebarComponent = function Sidebar({
         onSelect={handleSectionClick}
       />
       <SidebarItem
+        section="computerControl"
+        icon={ComputerIcon}
+        label="Computer Control"
+        isActive={activeSection === "computerControl"}
+        onSelect={handleSectionClick}
+      />
+      <SidebarItem
+        section="apps"
+        icon={AppsIcon}
+        label="Apps"
+        isActive={activeSection === "apps"}
+        onSelect={handleSectionClick}
+      />
+      <SidebarItem
         section="artists"
         icon={ArtistsIcon}
         label="Artists"
@@ -122,13 +145,6 @@ const SidebarComponent = function Sidebar({
         icon={PodcastIcon}
         label="Podcasts"
         isActive={activeSection === "podcasts"}
-        onSelect={handleSectionClick}
-      />
-      <SidebarItem
-        section="apps"
-        icon={AppsIcon}
-        label="Apps"
-        isActive={activeSection === "apps"}
         onSelect={handleSectionClick}
       />
       <SidebarItem
