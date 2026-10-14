@@ -20,6 +20,7 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "host-status",
     "windowsMedia",
     "windows-media",
+    "discord",
     "windowsVolume",
     "windows-volume",
   ].includes(section);
