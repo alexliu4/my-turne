@@ -92,6 +92,20 @@ export function parseCapabilities(
   if (!raw) return result;
 
   let payload: unknown = raw;
+  // Legacy versions omit status. Explicit failure always overrides advertised flags,
+  // including an error on the outer envelope of a wrapped response.
+  const failed = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return false;
+    const object = value as Record<string, unknown>;
+    return (
+      object.error != null ||
+      (object.status != null && object.status !== "ok") ||
+      object.available === false ||
+      object.success === false
+    );
+  };
+  if (failed(payload)) return result;
   if (
     typeof payload === "object" &&
     payload !== null &&
@@ -99,6 +113,7 @@ export function parseCapabilities(
   ) {
     payload = (payload as Record<string, unknown>).result;
   }
+  if (failed(payload)) return result;
 
   if (Array.isArray(payload)) {
     for (const item of payload) {
@@ -272,26 +287,9 @@ export function useWindowsCapabilities(): WindowsCapabilitiesState & {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
 
-      // Fall back to handshake capabilities if RPC fails
-      const handshakeCaps = extractHandshakeCapabilities(getAppReadyState());
-      if (handshakeCaps) {
-        const parsed = parseCapabilities(handshakeCaps);
-        setCapabilitiesMap(buildCapabilitiesMap(parsed, true));
-      } else {
-        setCapabilitiesMap(
-          buildCapabilitiesMap(
-            {
-              volume: false,
-              media: false,
-              discord: false,
-              systemStats: false,
-              macros: false,
-              appLaunch: false,
-            },
-            true,
-          ),
-        );
-      }
+      // A failed authoritative refresh invalidates even valid handshake flags:
+      // a service may have disappeared since the Connector became ready.
+      setCapabilitiesMap(buildCapabilitiesMap(parseCapabilities(null), true));
     } finally {
       if (currentToken === requestTokenRef.current) {
         setIsLoading(false);

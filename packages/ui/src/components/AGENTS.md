@@ -131,3 +131,5 @@ The sidebar stops propagation only for vertical wheel gestures, allowing native 
 - **PC Stats:** `windows/PCStats.tsx` displays only Connector-supplied CPU/RAM percentages and optional GPU. Absent CPU/RAM reads Unavailable; absent GPU is omitted. PC unavailable and Stats unavailable clear previous readings. Keep Back available through disconnects.
 
 - **Apps & Macros:** `windows/WindowsActions.tsx` renders independent configured app/macro catalogs with a scrollable list, Refresh and Back. Display only host-provided names; no target, command, URL or shortcut input. Disable actions while pending and hide catalogs when Windows is inactive.
+
+Settings owns its delayed version presentation timer and cancels it on unmount. Recovery navigation must not leave delayed state updates targeting an exited screen.

@@ -673,6 +673,10 @@ Core Invariant: `Windows feature failure ≠ core Nocturne failure`.
 - Spotify, phone, and core Nocturne functions remain intact throughout.
 - Passes final no-USB physical end-to-end regression test.
 
+## Implementation Status (October 15, 2026)
+
+Sprint 12 is in progress. Session guards now cancel queued Windows volume requests after readiness changes, failed capability responses clear stale availability, and Settings cancels its version timer on unmount. Expanded socket and feature regressions cover failures, malformed events, disappearing capabilities and repeated handoffs. CI now runs UI behavioral/formatting checks with pinned Bun and Linux workspace tests. Linux daemon execution and the complete mixed-version, reboot, redeployment and no-USB physical matrix remain pending. See [reliability evidence and physical test matrix](docs/windows-reliability.md).
+
 ---
 
 # Sequential Order
