@@ -23,6 +23,22 @@ on:
     types: [created]
 
 jobs:
+  test:
+    name: Test (Linux workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libopus-dev pkg-config
+
+      - name: Run workspace regressions
+        run: tools/test-workspace --locked --features device
+
   build:
     name: Build (aarch64 + --features device)
     runs-on: ubuntu-latest

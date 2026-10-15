@@ -382,9 +382,10 @@ export default function Settings({
   }, []);
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setVersionInfo("Client version: 3.0.0\nOS version: 1.0.0");
     }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleToggle = (key: keyof SettingsState & string) => {

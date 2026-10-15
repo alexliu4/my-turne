@@ -19,6 +19,19 @@ import {
 import * as daemon from "./useNocturned";
 
 describe("Windows capability parsing & map building", () => {
+  it.each([
+    { status: "unsupported", capabilities: { volume: true } },
+    { status: "error", capabilities: ["volume"] },
+    { status: "unknown", volume: true },
+    { error: "host unavailable", capabilities: { volume: true } },
+    { available: false, capabilities: { volume: true } },
+    { success: false, capabilities: ["volume"] },
+    { error: "unsupported", result: { capabilities: { volume: true } } },
+    { result: { status: "unsupported", capabilities: ["volume"] } },
+    { result: { error: "failed", volume: true } },
+  ])("explicit failure overrides capability flags in %p", (payload) => {
+    expect(Object.values(parseCapabilities(payload))).not.toContain(true);
+  });
   it("parses actual Connector RPC response shape with boolean flags", () => {
     const connectorResponse = {
       result: {
@@ -362,6 +375,26 @@ describe("Windows capability hook lifecycle", () => {
     expect(hook.isLoading).toBe(false);
   });
 
+  it("clears disappearing capabilities on Refresh and recovers after a failed mixed-version response", async () => {
+    await mount();
+    await respond({ capabilities: ["volume", "media", "discord"] });
+    expect(hook.capabilities.discord).toBe("Available");
+    await refresh();
+    await respond({ status: "ok", capabilities: { volume: true } });
+    expect(hook.capabilities.media).toBe("Unavailable");
+    expect(hook.capabilities.discord).toBe("Unavailable");
+    await refresh();
+    await respond({ status: "unsupported", capabilities: { volume: true } });
+    expect(Object.values(hook.capabilities)).toEqual(
+      Array(6).fill("Unavailable"),
+    );
+    expect(hook.isWindowsActive).toBe(true);
+    await refresh();
+    await respond({ capabilities: { media: true } });
+    expect(hook.capabilities.media).toBe("Available");
+    expect(hook.capabilities.volume).toBe("Unavailable");
+  });
+
   it.each(["success", "failure"])(
     "ignores stale RPC %s after disconnect",
     async (outcome) => {
@@ -379,7 +412,7 @@ describe("Windows capability hook lifecycle", () => {
     },
   );
 
-  it("RPC failures use only valid capabilities from the current handshake", async () => {
+  it("RPC failures invalidate handshake flags until an authoritative refresh recovers", async () => {
     ready.capabilities = { volume: true };
     await mount();
     expect(hook.capabilities.volume).toBe("Available");
@@ -391,8 +424,11 @@ describe("Windows capability hook lifecycle", () => {
     expect(hook.isLoading).toBe(true);
     await fail(1);
     expect(hook.error).toBe("RPC failed");
-    expect(hook.capabilities.media).toBe("Available");
+    expect(hook.capabilities.media).toBe("Unavailable");
     expect(hook.capabilities.discord).toBe("Unavailable");
+    await refresh();
+    await respond({ capabilities: { media: true } });
+    expect(hook.capabilities.media).toBe("Available");
     await route("windows");
     await fail();
     expect(Object.values(hook.capabilities)).toEqual(

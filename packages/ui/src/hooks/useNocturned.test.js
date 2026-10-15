@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { getWindowsMediaSnapshot } from "./windowsMediaState";
 import deviceWireSnapshot from "../../test/wire_snapshots/device.json";
 import {
@@ -48,6 +48,8 @@ describe("WebSocket app.ready async ordering", () => {
     static CLOSED = 3;
     readyState = ControlledWebSocket.CONNECTING;
     timeRequests = [];
+    requests = [];
+    heldMethods = new Set();
 
     open() {
       this.readyState = ControlledWebSocket.OPEN;
@@ -64,6 +66,8 @@ describe("WebSocket app.ready async ordering", () => {
 
     send(raw) {
       const request = JSON.parse(raw);
+      this.requests.push(request);
+      if (this.heldMethods.has(request.method)) return;
       if (request.method === "device.time.get") {
         this.timeRequests.push(request);
       } else {
@@ -235,23 +239,118 @@ describe("WebSocket app.ready async ordering", () => {
     expect(await rejected).toBe("App route changed before dispatch");
   });
 
-  it("cancels a queued scoped request as soon as a fallback readiness arrives, before clock sync completes", async () => {
+  it.each([
+    "volume.get",
+    "volume.set",
+    "volume.adjust",
+    "volume.toggleMute",
+    "media.control.next",
+    "connector.capabilities",
+    "discord.toggle_mute",
+    "system_stats.get",
+    "app_launch.launch",
+    "macros.execute",
+  ])(
+    "cancels queued scoped %s on fallback before clock sync completes",
+    async (method) => {
+      socket.ready({ platform: "web", connectorPlatform: "windows" });
+      await socket.completeTimeSync(0);
+      const generation = getAppReadyState().generation;
+      socket.readyState = ControlledWebSocket.CONNECTING;
+      const rejected = sendNocturneWsRequest(
+        method,
+        { windows_only: true },
+        { timeoutMs: 500, appReadyGeneration: generation },
+      ).catch((error) => error.message);
+      socket.ready({ platform: "web", connectorPlatform: "macos" });
+      socket.readyState = ControlledWebSocket.OPEN;
+      expect(await rejected).toBe("App route changed before dispatch");
+      expect(socket.requests.some((request) => request.method === method)).toBe(
+        false,
+      );
+      expect(getAppReadyState().generation).toBe(generation);
+      // The separately queued clock-sync send also waits for the socket to open.
+      await Bun.sleep(110);
+      await socket.completeTimeSync(1);
+    },
+  );
+
+  it("isolates failed Windows RPCs and malformed events while core RPCs and handoffs recover", async () => {
     socket.ready({ platform: "web", connectorPlatform: "windows" });
     await socket.completeTimeSync(0);
     const generation = getAppReadyState().generation;
-    socket.readyState = ControlledWebSocket.CONNECTING;
-    const rejected = sendNocturneWsRequest(
+    const methods = [
+      "volume.get",
       "media.control.next",
-      { windows_only: true },
-      { timeoutMs: 500, appReadyGeneration: generation },
-    ).catch((error) => error.message);
-    socket.ready({ platform: "web", connectorPlatform: "macos" });
-    socket.readyState = ControlledWebSocket.OPEN;
-    expect(await rejected).toBe("App route changed before dispatch");
-    expect(getAppReadyState().generation).toBe(generation);
-    // The separately queued clock-sync send also waits for the socket to open.
-    await Bun.sleep(110);
-    await socket.completeTimeSync(1);
+      "connector.capabilities",
+      "discord.get_status",
+      "system_stats.get",
+      "app_launch.get_status",
+      "macros.execute",
+    ];
+    for (const method of methods) {
+      socket.heldMethods.add(method);
+      const failed = sendNocturneWsRequest(
+        method,
+        {},
+        {
+          timeoutMs: 500,
+          appReadyGeneration: generation,
+        },
+      ).catch((error) => error.message);
+      const request = socket.requests.at(-1);
+      socket.receive({ type: "error", id: request.id, error: "unsupported" });
+      expect(await failed).toBe("unsupported");
+      expect(getAppReadyState().generation).toBe(generation);
+      expect(getAppReadyState().ready).toBe(true);
+      // Exercise the real request multiplexer after each optional-feature failure.
+      await expect(
+        sendNocturneWsRequest("spotify.player.state", {}, { timeoutMs: 500 }),
+      ).resolves.toBeDefined();
+      await expect(
+        sendNocturneWsRequest(
+          "phone.calls.get",
+          { device: "phone" },
+          { timeoutMs: 500 },
+        ),
+      ).resolves.toBeDefined();
+    }
+    const diagnostic = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      socket.onmessage({ data: "{broken JSON" });
+      expect(diagnostic).toHaveBeenCalled();
+      for (const data of [
+        null,
+        [],
+        {
+          media_item_attributes: { MediaItemTitle: {} },
+          playback_attributes: { PlaybackStatus: [] },
+        },
+      ]) {
+        socket.receive({
+          type: "event",
+          topic: "media.now_playing.update",
+          data,
+        });
+      }
+      expect(getAppReadyState().ready).toBe(true);
+      expect(getWindowsMediaSnapshot(generation).hasActiveSession).toBe(false);
+      await expect(
+        sendNocturneWsRequest("spotify.player.state", {}, { timeoutMs: 500 }),
+      ).resolves.toBeDefined();
+    } finally {
+      diagnostic.mockRestore();
+    }
+    // New Connector versions and repeated Windows/Mac ownership changes share one socket.
+    for (const connectorPlatform of ["macos", "windows", "macos", "windows"]) {
+      socket.ready({ platform: "web", connector_platform: connectorPlatform });
+      await socket.completeTimeSync(socket.timeRequests.length - 1);
+      expect(getAppReadyState().connectorPlatform).toBe(connectorPlatform);
+      expect(getAppReadyState().generation).toBeGreaterThan(generation);
+      expect(
+        getWindowsMediaSnapshot(getAppReadyState().generation).hasActiveSession,
+      ).toBe(false);
+    }
   });
 
   it.each([
