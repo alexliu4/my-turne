@@ -127,3 +127,5 @@ Action Mapping reserves short Settings press so recovery remains reachable. Both
 Bluetooth Settings displays shared discovery failures with Retry pairing. The device list fetch runs independently of opening the pairing window, and leaving the page releases its owner without closing another surface's lease.
 
 The sidebar stops propagation only for vertical wheel gestures, allowing native scrolling at 800 by 480 while a Swiper carousel is mounted. Horizontal wheel handling is unchanged.
+
+- **PC Stats:** `windows/PCStats.tsx` displays only Connector-supplied CPU/RAM percentages and optional GPU. Absent CPU/RAM reads Unavailable; absent GPU is omitted. PC unavailable and Stats unavailable clear previous readings. Keep Back available through disconnects.
