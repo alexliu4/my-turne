@@ -187,6 +187,92 @@ describe("configured Windows actions", () => {
     ).toEqual([{ id: "vscode", name: "VS Code" }]);
   });
 
+  test.each(["apps", "macros"] as const)(
+    "%s zero-config catalog is empty while service failures remain unavailable",
+    (kind) => {
+      const zeroConfig = { status: "ok", available: false, [kind]: [] };
+      expect(parseConfiguredActions(zeroConfig, kind)).toEqual([]);
+      expect(
+        parseConfiguredActions({ ...zeroConfig, available: true }, kind),
+      ).toEqual([]);
+      for (const payload of [
+        { ...zeroConfig, status: "unsupported" },
+        { ...zeroConfig, status: "error", message: "Host call failed" },
+        { ...zeroConfig, status: "unknown" },
+        { ...zeroConfig, error: "Failed" },
+        { ...zeroConfig, available: undefined },
+        { ...zeroConfig, available: "false" },
+        { ...zeroConfig, [kind]: undefined },
+        { ...zeroConfig, [kind]: {} },
+        { ...zeroConfig, [kind]: [{ id: "offline", name: "Offline" }] },
+      ]) {
+        expect(parseConfiguredActions(payload, kind)).toBeNull();
+      }
+    },
+  );
+
+  test("both zero-config catalogs display No configured actions without executable buttons", async () => {
+    await mount(<WindowsActions />);
+    await respond({ status: "ok", available: false, apps: [] }, 0);
+    await respond({ status: "ok", available: false, macros: [] }, 1);
+    for (const title of ["Applications", "Macros"]) {
+      const section = container.querySelector(`section[aria-label="${title}"]`);
+      expect(section?.textContent).toContain("No configured actions");
+      expect(section?.textContent).not.toContain("Unavailable");
+      expect(section?.querySelector("button")).toBeNull();
+    }
+    expect(textButton("Refresh").disabled).toBe(false);
+    expect(calls).toHaveLength(2);
+  });
+
+  test.each(["apps", "macros"] as const)(
+    "%s service rejection displays unavailable without hiding a valid empty peer catalog",
+    async (kind) => {
+      await mount(<WindowsActions />);
+      const failureIndex = kind === "apps" ? 0 : 1;
+      const title = kind === "apps" ? "Applications" : "Macros";
+      const peerTitle = kind === "apps" ? "Macros" : "Applications";
+      await act(async () =>
+        calls[failureIndex].reject(new Error("Service unavailable")),
+      );
+      await respond(
+        {
+          status: "ok",
+          available: false,
+          [kind === "apps" ? "macros" : "apps"]: [],
+        },
+        1 - failureIndex,
+      );
+      expect(
+        container.querySelector(`section[aria-label="${title}"]`)?.textContent,
+      ).toContain("Unavailable. Try Refresh.");
+      expect(
+        container.querySelector(`section[aria-label="${peerTitle}"]`)
+          ?.textContent,
+      ).toContain("No configured actions");
+    },
+  );
+
+  test.each(["app", "media", "url", "shortcut"])(
+    "%s macro success acknowledges dispatch without claiming verified completion",
+    async (action) => {
+      await mount(<WindowsActions />);
+      await catalogs();
+      await act(async () => textButton("Configured shortcut").click());
+      await respond({
+        status: "ok",
+        action,
+        ...(action === "app" ? { launched: true } : {}),
+      });
+      expect(container.querySelector('[role="status"]')?.textContent).toBe(
+        "Macro dispatch acknowledged. Check the PC for its effect.",
+      );
+      expect(container.textContent).not.toContain("Action completed");
+      expect(textButton("Configured shortcut").disabled).toBe(false);
+      expect(calls).toHaveLength(3);
+    },
+  );
+
   test("advertised apps and macros send only IDs, serialize taps and acknowledge success", async () => {
     await mount();
     expect(calls.map((call) => call.method)).toEqual([
@@ -213,7 +299,7 @@ describe("configured Windows actions", () => {
       params: { app: "vscode" },
     });
     await respond({ status: "ok", app: "vscode", launched: true });
-    expect(hook.notice).toBe("Action completed.");
+    expect(hook.notice).toBe("Launch request acknowledged.");
     await act(async () => {
       void hook.execute("macros", "shortcut");
     });
@@ -222,7 +308,9 @@ describe("configured Windows actions", () => {
       params: { id: "shortcut" },
     });
     await respond({ status: "ok", action: "shortcut" });
-    expect(hook.notice).toBe("Action completed.");
+    expect(hook.notice).toBe(
+      "Macro dispatch acknowledged. Check the PC for its effect.",
+    );
   });
 
   test("screen renders host names, scrollable catalogs and functioning Back", async () => {

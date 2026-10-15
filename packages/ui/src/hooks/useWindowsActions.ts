@@ -17,10 +17,17 @@ function record(value: unknown): Record<string, unknown> | null {
 // Retain only display metadata, never host targets or executable definitions.
 export function parseConfiguredActions(payload: unknown, kind: ActionKind) {
   const data = record(payload);
-  if (data?.status !== "ok" || data.available !== true || data.error != null)
+  if (
+    data?.status !== "ok" ||
+    typeof data.available !== "boolean" ||
+    data.error != null
+  )
     return null;
   const entries = data[kind];
   if (!Array.isArray(entries)) return null;
+  // Both Connector services fold configured count into availability. An ok,
+  // empty catalog is valid even when no configured action makes it available.
+  if (!data.available && entries.length !== 0) return null;
   const actions: ConfiguredAction[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
@@ -151,7 +158,11 @@ export function useWindowsActions() {
             busy: false,
             // Re-read advertised actions before another attempt after a failure.
             ...(!success ? { [selection.kind]: null } : {}),
-            notice: success ? "Action completed." : unknownOutcome,
+            notice: success
+              ? isApp
+                ? "Launch request acknowledged."
+                : "Macro dispatch acknowledged. Check the PC for its effect."
+              : unknownOutcome,
           }));
         }
       } catch (error: unknown) {
