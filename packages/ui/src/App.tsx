@@ -142,6 +142,9 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyPCStats = React.lazy(() =>
+  import("./components/windows/PCStats").then((m) => ({ default: m.PCStats })),
+);
 const LazyDiscord = React.lazy(() =>
   import("./components/windows/Discord").then((m) => ({ default: m.Discord })),
 );
@@ -2070,6 +2073,8 @@ function AppContent() {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
     );
+  } else if (activeSection === "pcStats") {
+    content = <LazyPCStats onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "discord") {
     content = <LazyDiscord onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "timer") {

@@ -136,17 +136,25 @@ describe("AppsSection component behavioral tests", () => {
         "windows-media",
         "windows-controls",
         "discord",
+        "pc-stats",
         "host-status",
       ]);
       expect(
         Array.from(document.querySelectorAll("[data-id] h4:first-of-type")).map(
           (el) => el.textContent,
         ),
-      ).toEqual(["Windows Media", "Windows Control", "Discord", "Host Status"]);
+      ).toEqual([
+        "Windows Media",
+        "Windows Control",
+        "Discord",
+        "PC Stats",
+        "Host Status",
+      ]);
       for (const [id, destination] of [
         ["windows-media", "windowsMedia"],
         ["windows-controls", "windowsVolume"],
         ["discord", "discord"],
+        ["pc-stats", "pcStats"],
         ["host-status", "hostStatus"],
       ]) {
         const card = document.querySelector(`[data-id="${id}"] [style]`);
@@ -158,7 +166,7 @@ describe("AppsSection component behavioral tests", () => {
         if (active || id === "host-status")
           expect(select).toHaveBeenCalledWith(destination);
       }
-      expect(select).toHaveBeenCalledTimes(active ? 4 : 1);
+      expect(select).toHaveBeenCalledTimes(active ? 5 : 1);
       expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
     },
   );
@@ -277,7 +285,12 @@ describe("AppsSection component behavioral tests", () => {
     expect(renderedSections.length).toBe(renderedBefore);
     // Also reject hardware/programmatic destinations at the parent boundary.
     await act(async () => {
-      for (const section of ["windowsMedia", "windowsVolume", "discord"])
+      for (const section of [
+        "windowsMedia",
+        "windowsVolume",
+        "discord",
+        "pcStats",
+      ])
         navigation.setActiveSection(section);
     });
     expect(renderedSections.length).toBe(renderedBefore);
@@ -354,6 +367,7 @@ describe("AppsSection component behavioral tests", () => {
     "hostStatus",
     "windowsMedia",
     "windowsVolume",
+    "pcStats",
   ])("disconnect preserves the %s surface", (section) => {
     expect(shouldShowConnectionLostScreen(true, false, section)).toBe(false);
   });
@@ -447,6 +461,7 @@ describe("AppsSection component behavioral tests", () => {
         "windowsMedia",
         "windowsVolume",
         "discord",
+        "pcStats",
         "hostStatus",
       ]) {
         await act(async () => navigation.setActiveSection(detail));

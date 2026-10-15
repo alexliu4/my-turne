@@ -610,6 +610,10 @@ GPU should be optional.
 
 Stats remain responsive without affecting media/RPC responsiveness.
 
+## Implementation Status (October 14, 2026)
+
+PC Stats is available from Computer Control through the existing Windows-only daemon RPC path. CPU/RAM and optional GPU display, screen-scoped serialized reads, unavailable states, session recovery, and focused UI/daemon tests are implemented. Sprint 10 remains pending Linux daemon test execution and physical responsiveness validation. See [contract evidence and validation checklist](docs/windows-stats.md).
+
 ---
 
 # Sprint 11 — App Launching + Macro UI

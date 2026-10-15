@@ -70,6 +70,29 @@ const COMPUTER_CATALOG: AppDefinition[] = [
     ),
   },
   {
+    id: "pc-stats",
+    title: "PC Stats",
+    category: "Computer Diagnostics",
+    targetSection: "pcStats",
+    isWindowsDependent: true,
+    iconSvg: (
+      <svg
+        className="w-20 h-20 text-white"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4 19h16M7 15V9m5 6V5m5 10v-4"
+        />
+      </svg>
+    ),
+  },
+  {
     id: "host-status",
     title: "Host Status",
     category: "Computer Diagnostics",
