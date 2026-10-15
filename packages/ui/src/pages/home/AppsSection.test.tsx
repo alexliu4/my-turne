@@ -137,6 +137,7 @@ describe("AppsSection component behavioral tests", () => {
         "windows-controls",
         "discord",
         "pc-stats",
+        "windows-actions",
         "host-status",
       ]);
       expect(
@@ -148,6 +149,7 @@ describe("AppsSection component behavioral tests", () => {
         "Windows Control",
         "Discord",
         "PC Stats",
+        "Apps & Macros",
         "Host Status",
       ]);
       for (const [id, destination] of [
@@ -155,6 +157,7 @@ describe("AppsSection component behavioral tests", () => {
         ["windows-controls", "windowsVolume"],
         ["discord", "discord"],
         ["pc-stats", "pcStats"],
+        ["windows-actions", "windowsActions"],
         ["host-status", "hostStatus"],
       ]) {
         const card = document.querySelector(`[data-id="${id}"] [style]`);
@@ -166,7 +169,7 @@ describe("AppsSection component behavioral tests", () => {
         if (active || id === "host-status")
           expect(select).toHaveBeenCalledWith(destination);
       }
-      expect(select).toHaveBeenCalledTimes(active ? 5 : 1);
+      expect(select).toHaveBeenCalledTimes(active ? 6 : 1);
       expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
     },
   );
@@ -290,6 +293,7 @@ describe("AppsSection component behavioral tests", () => {
         "windowsVolume",
         "discord",
         "pcStats",
+        "windowsActions",
       ])
         navigation.setActiveSection(section);
     });
@@ -368,6 +372,7 @@ describe("AppsSection component behavioral tests", () => {
     "windowsMedia",
     "windowsVolume",
     "pcStats",
+    "windowsActions",
   ])("disconnect preserves the %s surface", (section) => {
     expect(shouldShowConnectionLostScreen(true, false, section)).toBe(false);
   });
@@ -462,6 +467,7 @@ describe("AppsSection component behavioral tests", () => {
         "windowsVolume",
         "discord",
         "pcStats",
+        "windowsActions",
         "hostStatus",
       ]) {
         await act(async () => navigation.setActiveSection(detail));

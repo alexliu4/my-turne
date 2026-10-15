@@ -93,6 +93,29 @@ const COMPUTER_CATALOG: AppDefinition[] = [
     ),
   },
   {
+    id: "windows-actions",
+    title: "Apps & Macros",
+    category: "Windows App",
+    targetSection: "windowsActions",
+    isWindowsDependent: true,
+    iconSvg: (
+      <svg
+        className="w-20 h-20 text-white"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M5 4h14v16H5zM10 8l5 4-5 4V8z"
+        />
+      </svg>
+    ),
+  },
+  {
     id: "host-status",
     title: "Host Status",
     category: "Computer Diagnostics",
