@@ -22,6 +22,7 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "windows-media",
     "discord",
     "pcStats",
+    "windowsActions",
     "windowsVolume",
     "windows-volume",
   ].includes(section);

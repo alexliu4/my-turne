@@ -129,3 +129,5 @@ Bluetooth Settings displays shared discovery failures with Retry pairing. The de
 The sidebar stops propagation only for vertical wheel gestures, allowing native scrolling at 800 by 480 while a Swiper carousel is mounted. Horizontal wheel handling is unchanged.
 
 - **PC Stats:** `windows/PCStats.tsx` displays only Connector-supplied CPU/RAM percentages and optional GPU. Absent CPU/RAM reads Unavailable; absent GPU is omitted. PC unavailable and Stats unavailable clear previous readings. Keep Back available through disconnects.
+
+- **Apps & Macros:** `windows/WindowsActions.tsx` renders independent configured app/macro catalogs with a scrollable list, Refresh and Back. Display only host-provided names; no target, command, URL or shortcut input. Disable actions while pending and hide catalogs when Windows is inactive.

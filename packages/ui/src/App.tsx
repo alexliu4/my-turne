@@ -142,6 +142,11 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyWindowsActions = React.lazy(() =>
+  import("./components/windows/WindowsActions").then((m) => ({
+    default: m.WindowsActions,
+  })),
+);
 const LazyPCStats = React.lazy(() =>
   import("./components/windows/PCStats").then((m) => ({ default: m.PCStats })),
 );
@@ -2072,6 +2077,10 @@ function AppContent() {
   ) {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
+    );
+  } else if (activeSection === "windowsActions") {
+    content = (
+      <LazyWindowsActions onClose={() => setActiveSection(appsBackSection)} />
     );
   } else if (activeSection === "pcStats") {
     content = <LazyPCStats onClose={() => setActiveSection(appsBackSection)} />;

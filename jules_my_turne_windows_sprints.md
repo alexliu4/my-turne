@@ -646,6 +646,10 @@ Run configured shortcut
 
 Configured actions execute reliably through the normal daemon → Connector RPC path.
 
+## Implementation Status (October 15, 2026)
+
+Computer Control > Apps & Macros now displays advertised configured Windows actions and executes IDs through the existing Windows-only daemon RPC path. Session invalidation, serialized commands, manual Refresh, failure feedback and focused UI/daemon tests are implemented. Sprint 11 remains pending Linux daemon test execution and physical validation. See [contract evidence and validation checklist](docs/windows-actions.md).
+
 ---
 
 # Sprint 12 — Reliability and Recovery
