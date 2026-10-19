@@ -11,6 +11,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Window } from "happy-dom";
 import AppsSection from "./AppsSection";
+import ComputerControlSection from "./ComputerControlSection";
 import Settings from "../../components/settings/Settings";
 import { HostStatus } from "../../components/windows/HostStatus";
 import * as daemon from "../../hooks/useNocturned";
@@ -89,130 +90,89 @@ describe("AppsSection component behavioral tests", () => {
     originals.clear();
   });
 
-  it("renders catalog items and displays 'Connected' badges when Windows is active", async () => {
-    spyOn(windowsConnector, "useWindowsConnector").mockImplementation(() => ({
-      isWindowsActive: true,
-      isFallbackActive: false,
-      hasActiveConnector: true,
-      activeConnectorPlatform: "windows",
-      appPlatform: "web",
-    }));
-
-    const onSelectApp = mock(() => {});
-
-    await act(async () => {
-      root.render(
-        <AppsSection activeSection="apps" onSelectApp={onSelectApp} />,
-      );
-    });
-
-    const textContent = document.body.textContent ?? "";
-    expect(textContent).toContain("Timer");
-    expect(textContent).toContain("Weather");
-    expect(textContent).toContain("Windows Media");
-    expect(textContent).toContain("Windows Controls");
-    expect(textContent).toContain("Host Status");
-    expect(textContent).toContain("Connected");
-    expect(textContent).not.toContain("PC Offline");
-  });
-
-  it("displays 'PC Offline' and 'PC Unavailable' badges when Windows is offline", async () => {
-    spyOn(windowsConnector, "useWindowsConnector").mockImplementation(() => ({
-      isWindowsActive: false,
-      isFallbackActive: true,
-      hasActiveConnector: true,
-      activeConnectorPlatform: "macos",
-      appPlatform: "web",
-    }));
-
-    const onSelectApp = mock(() => {});
-
-    await act(async () => {
-      root.render(
-        <AppsSection activeSection="apps" onSelectApp={onSelectApp} />,
-      );
-    });
-
-    const textContent = document.body.textContent ?? "";
-    expect(textContent).toContain("PC Offline");
-    expect(textContent).toContain("PC Unavailable");
-  });
-
-  it("invokes onSelectApp callback with target section when card is selected", async () => {
-    spyOn(windowsConnector, "useWindowsConnector").mockImplementation(() => ({
-      isWindowsActive: true,
-      isFallbackActive: false,
-      hasActiveConnector: true,
-      activeConnectorPlatform: "windows",
-      appPlatform: "web",
-    }));
-
-    const onSelectApp = mock((_section: string) => {});
-
-    await act(async () => {
-      root.render(
-        <AppsSection activeSection="apps" onSelectApp={onSelectApp} />,
-      );
-    });
-
-    const timerCard = document.querySelector('[data-id="timer"]');
-    expect(timerCard).not.toBeNull();
-    const card = timerCard?.querySelector("[style]");
-    if (!(card instanceof HTMLElement)) throw new Error("Timer card missing");
-    await act(async () => card.click());
-    expect(onSelectApp).toHaveBeenCalledTimes(1);
-    expect(onSelectApp).toHaveBeenCalledWith("timer");
-  });
-  it("blocks Windows card and title clicks without a Windows Connector, while native apps open", async () => {
-    spyOn(windowsConnector, "useWindowsConnector").mockReturnValue({
-      isWindowsActive: false,
-      isFallbackActive: false,
-      hasActiveConnector: false,
-      activeConnectorPlatform: null,
-      appPlatform: null,
-    });
-    const onSelectApp = mock((_section: string) => {});
-    await act(async () => {
-      root.render(
-        <AppsSection activeSection="apps" onSelectApp={onSelectApp} />,
-      );
-    });
-    for (const id of ["windows-media", "windows-controls", "host-status"]) {
-      const card = document.querySelector(`[data-id="${id}"] [style]`);
-      const title = document.querySelector(`[data-id="${id}"] h4`);
-      if (!(card instanceof HTMLElement) || !(title instanceof HTMLElement)) {
-        throw new Error(`Missing ${id} card`);
-      }
-      expect(card.getAttribute("aria-disabled")).toBe("true");
-      await act(async () => {
-        card.click();
-        title.click();
-      });
-    }
-    // Knob selection reaches the carousel callback rather than a card click.
-    for (let index = 0; index < 5; index++) {
-      await act(async () =>
-        window.dispatchEvent(
-          new window.KeyboardEvent("keydown", { key: "ArrowRight" }),
-        ),
-      );
-      if (index >= 2) {
-        await act(async () =>
-          window.dispatchEvent(
-            new window.KeyboardEvent("keydown", { key: "Enter" }),
-          ),
-        );
-      }
-    }
-    expect(onSelectApp).not.toHaveBeenCalled();
+  it("Apps has exactly Timer and Weather with working destinations", async () => {
+    const select = mock((_section: string) => {});
+    await act(async () =>
+      root.render(<AppsSection activeSection="apps" onSelectApp={select} />),
+    );
+    expect(
+      Array.from(document.querySelectorAll("[data-id]")).map((el) =>
+        el.getAttribute("data-id"),
+      ),
+    ).toEqual(["timer", "weather"]);
+    expect(document.body.textContent).not.toContain("Windows");
     for (const id of ["timer", "weather"]) {
       const card = document.querySelector(`[data-id="${id}"] [style]`);
       if (!(card instanceof HTMLElement)) throw new Error(`Missing ${id}`);
       await act(async () => card.click());
-      expect(onSelectApp).toHaveBeenCalledWith(id);
+      expect(select).toHaveBeenCalledWith(id);
     }
-    expect(onSelectApp).toHaveBeenCalledTimes(2);
   });
+
+  it.each([true, false])(
+    "Computer Control destinations and Windows availability (%s)",
+    async (active) => {
+      spyOn(windowsConnector, "useWindowsConnector").mockReturnValue({
+        isWindowsActive: active,
+        isFallbackActive: !active,
+        hasActiveConnector: true,
+        activeConnectorPlatform: active ? "windows" : "macos",
+        appPlatform: "web",
+      });
+      const select = mock((_section: string) => {});
+      await act(async () =>
+        root.render(
+          <ComputerControlSection
+            activeSection="computerControl"
+            onSelectApp={select}
+          />,
+        ),
+      );
+      expect(
+        Array.from(document.querySelectorAll("[data-id]")).map((el) =>
+          el.getAttribute("data-id"),
+        ),
+      ).toEqual([
+        "windows-media",
+        "windows-controls",
+        "discord",
+        "pc-stats",
+        "windows-actions",
+        "host-status",
+      ]);
+      expect(
+        Array.from(document.querySelectorAll("[data-id] h4:first-of-type")).map(
+          (el) => el.textContent,
+        ),
+      ).toEqual([
+        "Windows Media",
+        "Windows Control",
+        "Discord",
+        "PC Stats",
+        "Apps & Macros",
+        "Host Status",
+      ]);
+      for (const [id, destination] of [
+        ["windows-media", "windowsMedia"],
+        ["windows-controls", "windowsVolume"],
+        ["discord", "discord"],
+        ["pc-stats", "pcStats"],
+        ["windows-actions", "windowsActions"],
+        ["host-status", "hostStatus"],
+      ]) {
+        const card = document.querySelector(`[data-id="${id}"] [style]`);
+        if (!(card instanceof HTMLElement)) throw new Error(`Missing ${id}`);
+        expect(card.getAttribute("aria-disabled")).toBe(
+          String(!active && id !== "host-status"),
+        );
+        await act(async () => card.click());
+        if (active || id === "host-status")
+          expect(select).toHaveBeenCalledWith(destination);
+      }
+      expect(select).toHaveBeenCalledTimes(active ? 6 : 1);
+      expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
+    },
+  );
 
   // Use App's section state and lock handlers with the real screens.
   // Mock only daemon I/O and the shared Settings context.
@@ -329,10 +289,11 @@ describe("AppsSection component behavioral tests", () => {
     // Also reject hardware/programmatic destinations at the parent boundary.
     await act(async () => {
       for (const section of [
-        "hostStatus",
-        "host-status",
         "windowsMedia",
         "windowsVolume",
+        "discord",
+        "pcStats",
+        "windowsActions",
       ])
         navigation.setActiveSection(section);
     });
@@ -340,6 +301,94 @@ describe("AppsSection component behavioral tests", () => {
     await clickText("Reconnect / Bluetooth");
     expect(navigation.bypassOfflineScreen).toBe(false);
     expect(document.body.textContent).toBe("Open Apps");
+  });
+
+  it("uses the exact sidebar ordering and allows offline diagnostics", async () => {
+    await mountNavigation(true);
+    expect(
+      Array.from(document.querySelectorAll("h4")).map((el) => el.textContent),
+    ).toEqual([
+      "Now Playing",
+      "Recents",
+      "Library",
+      "Computer Control",
+      "Apps",
+      "Artists",
+      "Radio",
+      "Podcasts",
+      "Settings",
+    ]);
+    await act(async () => root.render(<NavigationProbe connected={false} />));
+    await clickText("Open Apps");
+    await clickText("Computer Control");
+    expect(navigation.activeSection).toBe("computerControl");
+    await act(async () => navigation.setActiveSection("hostStatus"));
+    expect(navigation.activeSection).toBe("hostStatus");
+    expect(navigation.appsBackSection).toBe("computerControl");
+    expect(document.body.textContent).toContain("Offline");
+    expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
+  });
+
+  it("preserves native vertical sidebar scrolling with a mounted carousel", async () => {
+    await mountNavigation(true);
+    await act(async () =>
+      root.render(
+        <>
+          <Sidebar activeSection="apps" setActiveSection={() => {}} />
+          <AppsSection activeSection="apps" onSelectApp={() => {}} />
+        </>,
+      ),
+    );
+    const sidebarItem = Array.from(document.querySelectorAll("h4")).find(
+      (el) => el.textContent === "Computer Control",
+    );
+    if (!sidebarItem) throw new Error("Computer Control missing");
+    const vertical = new window.WheelEvent("wheel", {
+      deltaY: 120,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      sidebarItem.dispatchEvent(vertical);
+    });
+    expect(vertical.defaultPrevented).toBe(false);
+    const horizontal = new window.WheelEvent("wheel", {
+      deltaX: 120,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      sidebarItem.dispatchEvent(horizontal);
+    });
+    expect(horizontal.defaultPrevented).toBe(true);
+  });
+
+  it.each([
+    "apps",
+    "timer",
+    "weather",
+    "computerControl",
+    "hostStatus",
+    "windowsMedia",
+    "windowsVolume",
+    "pcStats",
+    "windowsActions",
+  ])("disconnect preserves the %s surface", (section) => {
+    expect(shouldShowConnectionLostScreen(true, false, section)).toBe(false);
+  });
+
+  it("initial socket connection selects Now Playing once and reconnect preserves Computer Control", async () => {
+    await mountNavigation(true);
+    await act(async () => navigation.initializeConnectedSection());
+    expect(navigation.activeSection).toBe("nowPlaying");
+    await act(async () => navigation.setActiveSection("computerControl"));
+    await act(async () => root.render(<NavigationProbe connected={false} />));
+    expect(navigation.activeSection).toBe("computerControl");
+    await act(async () => {
+      root.render(<NavigationProbe connected />);
+      navigation.initializeConnectedSection();
+    });
+    expect(navigation.activeSection).toBe("computerControl");
   });
 
   it("reconnect exits offline-only mode and the next disconnect shows the connection screen", async () => {
@@ -398,7 +447,7 @@ describe("AppsSection component behavioral tests", () => {
 
   it("connected Apps and Settings origins survive lock/unlock and app Back", async () => {
     await mountNavigation(true);
-    for (const origin of ["apps", "settings"]) {
+    for (const origin of ["apps", "settings", "computerControl"]) {
       await act(async () => {
         navigation.setActiveSection(origin);
         navigation.setActiveSection("timer");
@@ -416,6 +465,9 @@ describe("AppsSection component behavioral tests", () => {
         "weather",
         "windowsMedia",
         "windowsVolume",
+        "discord",
+        "pcStats",
+        "windowsActions",
         "hostStatus",
       ]) {
         await act(async () => navigation.setActiveSection(detail));
@@ -429,7 +481,7 @@ describe("AppsSection component behavioral tests", () => {
     }
   });
 
-  it("unlock after a Windows session disappears restores the origin with consistent lock refs", async () => {
+  it("unlock after a Windows session disappears preserves its unavailable screen and lock refs", async () => {
     await mountNavigation(true);
     await act(async () => {
       navigation.setActiveSection("settings");
@@ -440,14 +492,13 @@ describe("AppsSection component behavioral tests", () => {
     expect(document.body.textContent).toBe("Unlock");
     expect(shouldShowConnectionLostScreen(true, false, "lock")).toBe(false);
     await clickText("Unlock");
-    expect(navigation.activeSection).toBe("settings");
-    expect(navigation.activeSectionRef.current).toBe("settings");
+    expect(navigation.activeSection).toBe("windowsVolume");
+    expect(navigation.activeSectionRef.current).toBe("windowsVolume");
     expect(navigation.idleLockActiveRef.current).toBe(false);
-    expect(document.body.textContent).toBe("Open Apps");
   });
 
   it.each(["windows", "macos", "ios"])(
-    "Settings Host Status remains accessible with %s and preserves lock/unlock and Back",
+    "Computer Control Host Status remains accessible with %s and preserves lock/unlock and Back",
     async (platform) => {
       ready = {
         ready: true,
@@ -466,24 +517,15 @@ describe("AppsSection component behavioral tests", () => {
         general.click();
         await Bun.sleep(350);
       });
-      for (const label of windowsActive
-        ? []
-        : ["Windows Media", "Windows Volume"]) {
-        const button = Array.from(document.querySelectorAll("button")).find(
-          (item) => item.textContent?.includes(label),
-        );
-        if (!button) throw new Error(`Missing ${label}`);
-        await act(async () => button.click());
-        expect(navigation.activeSection).toBe("settings");
+      for (const label of ["Windows Media", "Windows Volume", "Host Status"]) {
+        expect(document.body.textContent).not.toContain(label);
       }
-      expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
-      const status = Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent?.includes("Host Status"),
-      );
-      if (!status) throw new Error("Host Status settings entry missing");
-      await act(async () => status.click());
+      await act(async () => {
+        navigation.setActiveSection("computerControl");
+        navigation.setActiveSection("hostStatus");
+      });
       expect(navigation.activeSection).toBe("hostStatus");
-      expect(navigation.appsBackSection).toBe("settings");
+      expect(navigation.appsBackSection).toBe("computerControl");
       expect(document.body.textContent).toContain("Windows PC");
       if (windowsActive) {
         expect(document.body.textContent).toContain("Connected");
@@ -507,7 +549,7 @@ describe("AppsSection component behavioral tests", () => {
       if (!(back instanceof HTMLElement))
         throw new Error("Host Status Back missing");
       await act(async () => back.click());
-      expect(navigation.activeSection).toBe("settings");
+      expect(navigation.activeSection).toBe("computerControl");
     },
   );
 });

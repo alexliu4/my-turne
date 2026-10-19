@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { BrowserRouter as Router } from "react-router-dom";
 import Home from "./pages/Home";
-import { useWindowsConnector } from "./hooks/useWindowsConnector";
+import {
+  useWindowsConnector,
+  getWindowsConnectorState,
+} from "./hooks/useWindowsConnector";
 import {
   shouldShowConnectionLostScreen,
   useSectionNavigation,
@@ -15,6 +18,7 @@ import {
   useNocturneInfo,
   useNocturned,
   sendNocturneWsRequest,
+  getAppReadyState,
   subscribeAppReadyState,
   subscribeSpotifySkippedState,
   getBluetoothPresentationState,
@@ -38,6 +42,12 @@ import {
   getActivePresetDeviceId,
   getButtonMappingValue,
 } from "./utils/presetStorage";
+import { useMappedHardwareControls } from "./hooks/useMappedHardwareControls";
+import {
+  executeAction,
+  getActionMapping,
+  type ControlTrigger,
+} from "./utils/actionMapping";
 import { selectPresentedPhoneCall, usePhoneCalls } from "./hooks/usePhoneCalls";
 import SplashScreen from "./components/screens/SplashScreen";
 import UIShell, { MockingbirdPhoneCallOverlay } from "./mockingbird/UIShell";
@@ -132,6 +142,17 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyWindowsActions = React.lazy(() =>
+  import("./components/windows/WindowsActions").then((m) => ({
+    default: m.WindowsActions,
+  })),
+);
+const LazyPCStats = React.lazy(() =>
+  import("./components/windows/PCStats").then((m) => ({ default: m.PCStats })),
+);
+const LazyDiscord = React.lazy(() =>
+  import("./components/windows/Discord").then((m) => ({ default: m.Discord })),
+);
 const LazyWindowsVolume = React.lazy(() =>
   import("./components/windows/WindowsVolume").then((m) => ({
     default: m.WindowsVolume,
@@ -183,9 +204,17 @@ function ScreenFallback() {
   );
 }
 
-function DeferredVoiceOverlay() {
+function DeferredVoiceOverlay({
+  onOpenChange,
+}: {
+  onOpenChange: (open: boolean) => void;
+}) {
   const { state } = useVoice();
   const [hasOpened, setHasOpened] = useState(false);
+
+  useEffect(() => {
+    onOpenChange(state.isOpen);
+  }, [state.isOpen, onOpenChange]);
 
   useEffect(() => {
     if (state.isOpen) {
@@ -223,7 +252,8 @@ function useGlobalButtonMapping({
   isDisabled = false,
   currentPlayback,
   spotifyUserId,
-}: GlobalButtonMappingOptions) {
+  isWindowsActive = false,
+}: GlobalButtonMappingOptions & { isWindowsActive?: boolean }) {
   const [showMappingOverlay, setShowMappingOverlay] = useState(false);
   const [activeButton, setActiveButton] = useState<string | null>(null);
   const [isProcessingButtonPress, setIsProcessingButtonPress] = useState(false);
@@ -233,6 +263,18 @@ function useGlobalButtonMapping({
   const handleButtonPress = useCallback(
     async (buttonNumber: string) => {
       if (isProcessingButtonPress || isTutorialActive || isDisabled) return;
+
+      const trigger = `preset_${buttonNumber}` as ControlTrigger;
+      const actionRes = await executeAction(trigger, {
+        isWindowsActive,
+        playTrack,
+        refreshPlaybackState,
+        setActiveSection,
+      });
+
+      if (actionRes.executed || !actionRes.fallbackToDefault) {
+        return;
+      }
 
       const deviceId = getActivePresetDeviceId();
       const mappedId = getButtonMappingValue(buttonNumber, "Id", deviceId);
@@ -369,6 +411,7 @@ function useGlobalButtonMapping({
       isDisabled,
       currentPlayback,
       spotifyUserId,
+      isWindowsActive,
     ],
   );
 
@@ -450,6 +493,7 @@ function AppContent() {
     activeSection,
     setActiveSection,
     appsBackSection,
+    initializeConnectedSection,
     bypassOfflineScreen,
     openOfflineApps,
     exitOfflineMode,
@@ -472,6 +516,7 @@ function AppContent() {
   >(null);
   const [displaySleepOverlayVisible, setDisplaySleepOverlayVisible] =
     useState(false);
+  const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false);
   const [powerMenuVisible, setPowerMenuVisible] = useState(false);
   const [hasOpenedPowerMenu, setHasOpenedPowerMenu] = useState(false);
   const [hasShownMappingOverlay, setHasShownMappingOverlay] = useState(false);
@@ -911,7 +956,7 @@ function AppContent() {
 
     const shouldStartWithNowPlaying =
       localStorage.getItem("startWithNowPlaying") === "true";
-    if (shouldStartWithNowPlaying) {
+    if (shouldStartWithNowPlaying && activeSectionRef.current === "recents") {
       setActiveSection("nowPlaying");
     }
     startSectionAppliedRef.current = true;
@@ -933,7 +978,7 @@ function AppContent() {
       splashFlowWithDeviceRef.current = true;
       setShowSplash(false);
       setShowAuthScreen(false);
-      setActiveSection("nowPlaying");
+      initializeConnectedSection();
     } else {
       setShowSplash(false);
       if (!hasSeenTutorialFlag) {
@@ -975,6 +1020,70 @@ function AppContent() {
   const playerIsActiveRef = useRef(playerIsActive);
   playerIsActiveRef.current = playerIsActive;
 
+  const hasActiveBluetoothSession =
+    (Array.isArray(activeSessionDevices) &&
+      activeSessionDevices.some((device) => device?.connected)) ||
+    (appReady && hasStoredBluetoothDevice);
+
+  const { showConnectionLostScreen, showPairingOverlay } =
+    getBluetoothPresentationState({
+      showTutorial,
+      pairingRequest,
+      showTetheringScreen: false,
+      hasActiveSession: hasActiveBluetoothSession,
+      hasFetchedInitialDevices,
+      isReconnectPending,
+      showExhaustedReconnectScreen,
+    });
+  const effectiveConnectionLostScreen = shouldShowConnectionLostScreen(
+    showConnectionLostScreen,
+    bypassOfflineScreen,
+    activeSection,
+  );
+
+  const showSubscriptionScreen =
+    !showConnectionLostScreen &&
+    hasActiveBluetoothSession &&
+    appReady &&
+    appPlatform !== null &&
+    appPlatform !== "web" &&
+    hasPhoneAccess === false;
+
+  const mappingsDisabled =
+    powerMenuVisible ||
+    voiceOverlayOpen ||
+    displaySleepOverlayVisible ||
+    isUpdating ||
+    showSplash ||
+    showAuthScreen ||
+    showSubscriptionScreen ||
+    effectiveConnectionLostScreen ||
+    showTutorial ||
+    !!pairingRequest ||
+    isDeviceSwitcherOpen ||
+    activeSection === "settings" ||
+    activeSection === "lock" ||
+    presentedIncomingCall !== null;
+  const navigateMappedSection = useCallback(
+    (section: string) => {
+      if (
+        (section === "windowsMedia" || section === "windowsVolume") &&
+        !getWindowsConnectorState(getAppReadyState()).isWindowsActive
+      )
+        return false;
+      if (bypassOfflineScreen && section !== "timer" && section !== "weather")
+        return false;
+      setViewingContent(null);
+      setActiveSection(section);
+      return true;
+    },
+    [setActiveSection, bypassOfflineScreen],
+  );
+  useMappedHardwareControls(mappingsDisabled || isMockingbirdEnabled, {
+    setActiveSection: navigateMappedSection,
+    refreshPlaybackState,
+  });
+
   const {
     showMappingOverlay: showGlobalMappingOverlay,
     activeButton: globalActiveButton,
@@ -983,15 +1092,12 @@ function AppContent() {
     playTrack: playerControls.playTrack,
     playDJMix: playerControls.playDJMix,
     refreshPlaybackState,
-    setActiveSection,
+    setActiveSection: navigateMappedSection,
     isTutorialActive: showTutorial,
-    isDisabled:
-      powerMenuVisible ||
-      isUpdating ||
-      isMockingbirdEnabled ||
-      presentedIncomingCall !== null,
+    isDisabled: mappingsDisabled || isMockingbirdEnabled,
     currentPlayback,
     spotifyUserId,
+    isWindowsActive,
   });
 
   useEffect(() => {
@@ -1283,7 +1389,14 @@ function AppContent() {
   ]);
 
   useEffect(() => {
-    if (!presentedIncomingCall) return;
+    if (
+      !presentedIncomingCall &&
+      !isUpdating &&
+      !pairingRequest &&
+      !(isMockingbirdEnabled && powerMenuVisible) &&
+      !isDeviceSwitcherOpen
+    )
+      return;
 
     const suppressHardwareInput = (event: Event) => {
       event.preventDefault();
@@ -1292,12 +1405,14 @@ function AppContent() {
     const mockingbirdHardwareEvents = window.carThingRootStore?.hardwareEvents;
 
     mockingbirdHardwareEvents?.stopListening?.();
-    window.addEventListener("keydown", suppressHardwareInput, true);
-    window.addEventListener("keyup", suppressHardwareInput, true);
-    window.addEventListener("wheel", suppressHardwareInput, {
-      capture: true,
-      passive: false,
-    });
+    if (presentedIncomingCall) {
+      window.addEventListener("keydown", suppressHardwareInput, true);
+      window.addEventListener("keyup", suppressHardwareInput, true);
+      window.addEventListener("wheel", suppressHardwareInput, {
+        capture: true,
+        passive: false,
+      });
+    }
 
     return () => {
       window.removeEventListener("keydown", suppressHardwareInput, true);
@@ -1305,7 +1420,14 @@ function AppContent() {
       window.removeEventListener("wheel", suppressHardwareInput, true);
       mockingbirdHardwareEvents?.startListening?.();
     };
-  }, [presentedIncomingCall]);
+  }, [
+    presentedIncomingCall,
+    isUpdating,
+    pairingRequest,
+    powerMenuVisible,
+    isDeviceSwitcherOpen,
+    isMockingbirdEnabled,
+  ]);
 
   const sleepDisplay = useCallback(() => {
     displaySleepDesiredRef.current = true;
@@ -1669,6 +1791,12 @@ function AppContent() {
 
       if (longPressTriggeredRef.current) return;
 
+      if (
+        isMockingbirdEnabled &&
+        getActionMapping("settings_long_press").kind !== "default"
+      )
+        return;
+
       if (showTutorial && currentTutorialStep === 7) {
         return;
       }
@@ -1676,7 +1804,18 @@ function AppContent() {
       if (!holdTimerRef.current) {
         holdTimerRef.current = setTimeout(() => {
           longPressTriggeredRef.current = true;
-          setPowerMenuVisible(true);
+          if (
+            !isMockingbirdEnabled &&
+            !mappingsDisabled &&
+            getActionMapping("settings_long_press").kind !== "default"
+          ) {
+            void executeAction("settings_long_press", {
+              setActiveSection: navigateMappedSection,
+              refreshPlaybackState,
+            });
+          } else {
+            setPowerMenuVisible(true);
+          }
           holdTimerRef.current = null;
         }, 600);
       }
@@ -1739,6 +1878,9 @@ function AppContent() {
   }, [
     showTutorial,
     currentTutorialStep,
+    mappingsDisabled,
+    navigateMappedSection,
+    refreshPlaybackState,
     showAuthScreen,
     handleCloseLockView,
     isMockingbirdEnabled,
@@ -1834,35 +1976,6 @@ function AppContent() {
       refreshRecentlyPlayed();
     }
   };
-
-  const hasActiveBluetoothSession =
-    (Array.isArray(activeSessionDevices) &&
-      activeSessionDevices.some((device) => device?.connected)) ||
-    (appReady && hasStoredBluetoothDevice);
-
-  const { showConnectionLostScreen, showPairingOverlay } =
-    getBluetoothPresentationState({
-      showTutorial,
-      pairingRequest,
-      showTetheringScreen: false,
-      hasActiveSession: hasActiveBluetoothSession,
-      hasFetchedInitialDevices,
-      isReconnectPending,
-      showExhaustedReconnectScreen,
-    });
-  const effectiveConnectionLostScreen = shouldShowConnectionLostScreen(
-    showConnectionLostScreen,
-    bypassOfflineScreen,
-    activeSection,
-  );
-
-  const showSubscriptionScreen =
-    !showConnectionLostScreen &&
-    hasActiveBluetoothSession &&
-    appReady &&
-    appPlatform !== null &&
-    appPlatform !== "web" &&
-    hasPhoneAccess === false;
 
   const isMockingbird = isMockingbirdEnabled;
 
@@ -1965,6 +2078,14 @@ function AppContent() {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
     );
+  } else if (activeSection === "windowsActions") {
+    content = (
+      <LazyWindowsActions onClose={() => setActiveSection(appsBackSection)} />
+    );
+  } else if (activeSection === "pcStats") {
+    content = <LazyPCStats onClose={() => setActiveSection(appsBackSection)} />;
+  } else if (activeSection === "discord") {
+    content = <LazyDiscord onClose={() => setActiveSection(appsBackSection)} />;
   } else if (activeSection === "timer") {
     content = (
       <LazyTimerApp onClose={() => setActiveSection(appsBackSection)} />
@@ -2125,7 +2246,7 @@ function AppContent() {
                   )}
                 </div>
               </main>
-              <DeferredVoiceOverlay />
+              <DeferredVoiceOverlay onOpenChange={setVoiceOverlayOpen} />
               <DeferredNotificationsContainer />
               {presentedIncomingCall && isMockingbird ? (
                 <MockingbirdPhoneCallOverlay

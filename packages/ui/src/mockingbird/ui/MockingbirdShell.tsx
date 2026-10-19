@@ -193,6 +193,15 @@ export default function MockingbirdShell({
   const spotifyData = parentSpotifyData || { initialDataLoaded: false };
   const dataReady = spotifyData.initialDataLoaded;
 
+  useLayoutEffect(() => {
+    const rootStore = window.carThingRootStore;
+    if (!rootStore) return;
+    rootStore.mappingSystemScreenActive = Boolean(systemScreen || !dataReady);
+    return () => {
+      rootStore.mappingSystemScreenActive = false;
+    };
+  }, [systemScreen, dataReady]);
+
   if (systemScreen && systemScreen !== "tutorial") {
     return (
       <NightModeApplication>

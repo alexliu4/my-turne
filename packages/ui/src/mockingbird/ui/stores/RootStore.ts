@@ -58,6 +58,7 @@ import {
 import { reaction, extendObservable } from "mobx";
 
 export class RootStore {
+  mappingSystemScreenActive = false;
   declare spotifyData: SpotifyDataState | null | undefined;
   declare currentPlayback: SpotifyPlaybackState | null | undefined;
   declare spotifyControls: PlayerControls | undefined;

@@ -13,6 +13,7 @@ const BluetoothDevices = () => {
     devices,
     loading,
     error,
+    discoveryError,
     fetchDevices,
     connectDeviceNoRetry,
     disconnectDevice,
@@ -29,8 +30,7 @@ const BluetoothDevices = () => {
 
   useEffect(() => {
     const initialize = async () => {
-      await startDiscovery();
-      await fetchDevices(true);
+      await Promise.all([startDiscovery(), fetchDevices(true)]);
     };
 
     void initialize();
@@ -109,8 +109,8 @@ const BluetoothDevices = () => {
             No Devices Found
           </p>
           <p className="text-[24px] font-[560] text-white/60 tracking-tight mt-2">
-            Connect to "{deviceInfo?.device || "Nocturne"}" in your phone's
-            Bluetooth settings.
+            Connect to "{deviceInfo?.device || "Nocturne"}" in your phone or
+            computer's Bluetooth settings.
           </p>
         </div>
       );
@@ -167,6 +167,22 @@ const BluetoothDevices = () => {
         Devices
       </h3>
 
+      {(discoveryError || error) && (
+        <div
+          role="alert"
+          className="bg-amber-500/20 rounded-xl p-4 text-white text-xl"
+        >
+          <p>{discoveryError || error}</p>
+          {discoveryError && (
+            <button
+              className="mt-2 underline"
+              onClick={() => void startDiscovery()}
+            >
+              Retry pairing
+            </button>
+          )}
+        </div>
+      )}
       <div className="space-y-4">{renderContent()}</div>
 
       {showForgetDialog && (

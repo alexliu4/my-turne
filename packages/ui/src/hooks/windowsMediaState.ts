@@ -1,9 +1,9 @@
 export type SupportedControls = {
-  toggle: boolean;
-  play: boolean;
-  pause: boolean;
-  next: boolean;
-  previous: boolean;
+  toggle: boolean | null;
+  play: boolean | null;
+  pause: boolean | null;
+  next: boolean | null;
+  previous: boolean | null;
 };
 
 export type WindowsMediaState = {
@@ -24,11 +24,11 @@ export type WindowsMediaState = {
 };
 
 const defaultSupportedControls: SupportedControls = {
-  toggle: true,
-  play: true,
-  pause: true,
-  next: true,
-  previous: true,
+  toggle: null,
+  play: null,
+  pause: null,
+  next: null,
+  previous: null,
 };
 
 export const clearedMediaState: WindowsMediaState = {
@@ -223,14 +223,15 @@ export function updateWindowsMediaSnapshot(
   }
   return snapshot;
 }
-export function disableWindowsMediaControl(
+export function confirmWindowsMediaControl(
   control: keyof SupportedControls,
   routeGeneration: number,
+  supported: boolean | null = true,
 ) {
   const prev = getWindowsMediaSnapshot(routeGeneration);
   snapshot = {
     ...prev,
-    supportedControls: { ...prev.supportedControls, [control]: false },
+    supportedControls: { ...prev.supportedControls, [control]: supported },
   };
   return snapshot;
 }

@@ -186,3 +186,5 @@ The Options menu's Launch Spotify toggle sits directly below it and mirrors the
 daemon-backed `spotifyAppLaunchEnabled` setting through the same
 `SettingsContext` loading, saving, and error gating. It defaults on and shares
 the same acknowledged-value rules.
+
+Sprint 8 handlers share `isMappingProtected` across dial, back, presets and Settings long press. The shell publishes its actual system/loading screen protection independently of the legacy setup stubs. Global call and critical overlay presentation suspends hidden hardware listeners. Short Settings always retains its native toggle so Options > Action mapping and Reset All Controls stay reachable. This configuration page uses touch; dial/back retain Settings navigation. Mapped Home and Now Playing use the rendered shelf/npv views; app launches explicitly fail without default playback or an invisible view-stack entry.

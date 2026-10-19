@@ -22,6 +22,7 @@ let eventListener: Parameters<typeof daemon.addGlobalWsListener>[1] | undefined;
 let calls: {
   method: string;
   params: object;
+  options: unknown;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
 }[];
@@ -83,9 +84,9 @@ beforeEach(() => {
     };
   });
   spyOn(daemon, "sendNocturneWsRequest").mockImplementation(
-    <T,>(method: string, params: object = {}) => {
+    <T,>(method: string, params: object = {}, options?: unknown) => {
       const promise = new Promise<unknown>((resolve, reject) =>
-        calls.push({ method, params, resolve, reject }),
+        calls.push({ method, params, options, resolve, reject }),
       );
       // The real boundary is generic; tests deliberately supply untrusted wire payloads.
       return promise as Promise<T>;
@@ -138,6 +139,10 @@ describe("real Windows volume hook RPC and event lifecycle", () => {
   test("get and successful adjust/set/mute use only returned confirmed state", async () => {
     await mount();
     expect(calls[0].method).toBe("volume.get");
+    expect(calls[0].options).toEqual({
+      timeoutMs: 3000,
+      appReadyGeneration: ready.generation,
+    });
     expect(hook.volumePercent).toBeNull();
     await respond({ volumePercent: 40, muted: false });
     expect(hook.volumePercent).toBe(40);
@@ -147,6 +152,7 @@ describe("real Windows volume hook RPC and event lifecycle", () => {
     expect(calls[1]).toMatchObject({
       method: "volume.adjust",
       params: { delta: 5 },
+      options: { timeoutMs: 3000, appReadyGeneration: ready.generation },
     });
     await respond({ status: "ok", volumePercent: 44, muted: false });
     expect(hook.volumePercent).toBe(44);
@@ -156,6 +162,7 @@ describe("real Windows volume hook RPC and event lifecycle", () => {
     expect(calls[2]).toMatchObject({
       method: "volume.set",
       params: { volumePercent: 80 },
+      options: { timeoutMs: 3000, appReadyGeneration: ready.generation },
     });
     await respond({ status: "ok", volume_percent: 79, muted: false });
     expect(hook.volumePercent).toBe(79);
@@ -163,6 +170,10 @@ describe("real Windows volume hook RPC and event lifecycle", () => {
       void hook.toggleMute();
     });
     expect(calls[3].method).toBe("volume.toggleMute");
+    expect(calls[3].options).toEqual({
+      timeoutMs: 3000,
+      appReadyGeneration: ready.generation,
+    });
     await respond({ status: "ok", volumePercent: 79, muted: true });
     expect(hook.muted).toBe(true);
   });
@@ -383,8 +394,7 @@ describe("rendered Windows volume screen", () => {
     const volume = Array.from(container.querySelectorAll("button")).find(
       (item) => item.textContent?.includes("Windows Volume"),
     );
-    if (!volume) throw new Error("Windows Volume settings entry missing");
-    await act(async () => volume.click());
-    expect(selected).toBe("windowsVolume");
+    expect(volume).toBeUndefined();
+    expect(selected).toBeUndefined();
   });
 });

@@ -27,6 +27,7 @@ import {
 import SoftwareUpdate from "./SoftwareUpdate";
 import BluetoothDevices from "./network/BluetoothDevices";
 import About from "./About";
+import ActionMappingComponent from "./ActionMapping";
 import { useSettings } from "../../contexts/SettingsContext";
 import {
   isConnectorPlatform,
@@ -34,13 +35,7 @@ import {
 } from "../../hooks/useNocturned";
 import { useSubscription } from "../../hooks/useSubscription";
 
-type SettingAction =
-  | "factoryReset"
-  | "signOut"
-  | "openDonation"
-  | "openHostStatus"
-  | "openWindowsVolume"
-  | "openWindowsMedia";
+type SettingAction = "factoryReset" | "signOut" | "openDonation";
 interface SettingBase {
   id: string;
   title?: string;
@@ -182,26 +177,17 @@ const settingsStructure: Record<string, SettingsSection> = {
         requiresDirectPhone: true,
       },
       {
-        id: "host-status-screen",
-        title: "Host Status",
-        type: "action",
-        description:
-          "View Windows PC connection status and native capabilities.",
-        action: "openHostStatus",
-      },
-      {
-        id: "windows-media-screen",
-        title: "Windows Media",
-        type: "action",
-        description: "Display and control Windows GSMTC media playback.",
-        action: "openWindowsMedia",
-      },
-      {
-        id: "windows-volume-screen",
-        title: "Windows Volume",
-        type: "action",
-        description: "Control desktop Windows system volume and mute state.",
-        action: "openWindowsVolume",
+        id: "action-mapping-screen",
+        title: "Action Mapping",
+        type: "navigate",
+        icon: SettingsGeneralIcon,
+        items: [
+          {
+            id: "action-mapping-custom",
+            type: "custom",
+            component: ActionMappingComponent,
+          },
+        ],
       },
       {
         id: "factory-reset",
@@ -396,9 +382,10 @@ export default function Settings({
   }, []);
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setVersionInfo("Client version: 3.0.0\nOS version: 1.0.0");
     }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleToggle = (key: keyof SettingsState & string) => {
@@ -453,15 +440,6 @@ export default function Settings({
         break;
       case "openDonation":
         onOpenDonationModal();
-        break;
-      case "openHostStatus":
-        setActiveSection("hostStatus");
-        break;
-      case "openWindowsMedia":
-        setActiveSection("windowsMedia");
-        break;
-      case "openWindowsVolume":
-        setActiveSection("windowsVolume");
         break;
     }
   };

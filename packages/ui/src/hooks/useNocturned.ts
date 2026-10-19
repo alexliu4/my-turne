@@ -88,7 +88,15 @@ export const createBluetoothDiscoveryCoordinator = (
   send: BluetoothDiscoverySender,
 ) => {
   const owners = new Set<symbol>();
+  let failure: string | null = null;
+  const listeners = new Set<(error: string | null) => void>();
+  const report = (error: string | null) => {
+    failure = error;
+    listeners.forEach((listener) => listener(error));
+  };
   let desired = false;
+  let epoch = 0;
+  let connected = true;
   let applied: boolean | null = null;
   let transition: Promise<void> = Promise.resolve();
 
@@ -96,19 +104,45 @@ export const createBluetoothDiscoveryCoordinator = (
     transition = transition
       .catch(() => undefined)
       .then(async () => {
-        while (applied !== desired) {
+        while (connected && applied !== desired) {
           const next = desired;
-          await send(next);
+          const requestEpoch = epoch;
+          try {
+            await send(next);
+          } catch (error) {
+            applied = null;
+            if (requestEpoch === epoch)
+              report(
+                `Unable to ${next ? "open" : "close"} Bluetooth pairing: ${getErrorMessage(error)}. Retry pairing or check the Bluetooth service.`,
+              );
+            throw error;
+          }
+          // A response from a closed socket cannot confirm the new connection.
+          if (requestEpoch !== epoch) continue;
           applied = next;
+          report(null);
         }
       });
     return transition;
   };
 
   return {
+    subscribe(listener: (error: string | null) => void) {
+      listeners.add(listener);
+      listener(failure);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     acquire(owner: symbol) {
       owners.add(owner);
       desired = true;
+      if (!connected) {
+        const error =
+          "Bluetooth pairing is waiting for the daemon connection. Retry pairing after reconnecting.";
+        report(error);
+        return Promise.reject(new Error(error));
+      }
       return reconcile();
     },
     release(owner: symbol) {
@@ -117,9 +151,18 @@ export const createBluetoothDiscoveryCoordinator = (
       return reconcile();
     },
     disconnected() {
+      connected = false;
+      epoch += 1;
       applied = null;
+      if (desired)
+        report(
+          "Bluetooth pairing is waiting for the daemon connection. Retry pairing after reconnecting.",
+        );
     },
     connected() {
+      connected = true;
+      epoch += 1;
+      applied = null;
       return reconcile();
     },
   };
@@ -1508,7 +1551,10 @@ const bluetoothDiscoveryCoordinator = createBluetoothDiscoveryCoordinator(
     const response = await sendWsRequest("bluetooth.discoverable", request, {
       timeoutMs: 5000,
     });
-    if (!response || (response.status && response.status !== "requested")) {
+    if (
+      response?.status !== "requested" ||
+      response.discoverable !== discoverable
+    ) {
       throw new Error(
         `Failed to ${discoverable ? "start" : "stop"} Bluetooth discovery`,
       );
@@ -2621,7 +2667,20 @@ export const useBluetooth = () => {
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const listenerIdRef = useRef<string | null>(null);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  useEffect(
+    () => bluetoothDiscoveryCoordinator.subscribe(setDiscoveryError),
+    [],
+  );
   const discoveryOwner = useRef(Symbol("bluetooth-discovery"));
+  useEffect(() => {
+    const owner = discoveryOwner.current;
+    return () => {
+      void releaseBluetoothDiscovery(owner).catch((error) =>
+        console.error("Failed to release Bluetooth discovery owner:", error),
+      );
+    };
+  }, []);
   const retryDeviceAddressRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -3173,6 +3232,7 @@ export const useBluetooth = () => {
     denyPairing,
     startDiscovery,
     stopDiscovery,
+    discoveryError,
     setDiscoverable,
     connectDevice,
     connectDeviceNoRetry,

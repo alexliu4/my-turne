@@ -14,7 +14,7 @@ const AppLaunch = () => {
       <div className={styles.scrollContainer}>
         {item ? <SubmenuItem item={item} active /> : null}
         <div className={styles.text}>
-          Open Nocturne in the foreground when your phone connects. Disabling 
+          Open Nocturne in the foreground when your phone connects. Disabling
           may prevent some features from working.
           {settingsStore.isAppLaunchSettingSaving ? (
             <p role="status">Saving...</p>

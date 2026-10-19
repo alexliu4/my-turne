@@ -129,3 +129,7 @@ Pairing display state lives in `bluetooth/pairing.rs`: numeric comparison is dis
 WebSocket outbound delivery uses a bounded FIFO per connection and disconnects a slow client on overflow. Both regular responses and malformed-request errors use the same five-second cancellable socket-write limit. Do not silently discard individual events from a still-connected client.
 
 - Wake inference applies persistent Sonora suppression after the 16 kHz wake frontend, before mel extraction, only with explicit `WAKEWORD_NOISE_SUPPRESSION=1`. It is disabled by default; unset, `0` and invalid values leave the dry wake frontend active. Recording owns separate Sonora output state, a parallel RNNoise endpoint sidechain and raw pre-roll. Reset the suppressor on capture-stream resets, not transient recording pauses; see `../AGENTS.md` for the profile and rollback flag.
+
+- **Windows PC Stats:** WebSocket stats methods (`system_stats.get` and the three existing Connector aliases) require a scoped active Windows route and preserve its exact target across fallback promotion. The daemon only forwards requests; it does not sample PC telemetry. Contract and physical validation are in `../../../docs/windows-stats.md`.
+
+- **Windows configured actions:** The WebSocket forwarding boundary gates app launch and macro methods to active scoped Windows ownership, pins the accepted route, and permits only configured IDs. Do not accept targets, command strings, URLs or shortcut definitions from UI RPCs. Contract and validation: `../../../docs/windows-actions.md`.

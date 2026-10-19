@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActiveSection, StateSetter } from "../types";
 
 const isOfflineAppSection = (section: ActiveSection) =>
-  section === "apps" || section === "timer" || section === "weather";
+  [
+    "apps",
+    "computerControl",
+    "hostStatus",
+    "host-status",
+    "timer",
+    "weather",
+  ].includes(section);
 
 const isSystemSection = (section: ActiveSection) =>
   ["lock", "splash", "auth", "network"].includes(section);
@@ -13,6 +20,9 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "host-status",
     "windowsMedia",
     "windows-media",
+    "discord",
+    "pcStats",
+    "windowsActions",
     "windowsVolume",
     "windows-volume",
   ].includes(section);
@@ -27,7 +37,12 @@ export const shouldShowConnectionLostScreen = (
   connectionLost: boolean,
   bypassOfflineScreen: boolean,
   section: ActiveSection,
-) => connectionLost && !bypassOfflineScreen && section !== "lock";
+) =>
+  connectionLost &&
+  !bypassOfflineScreen &&
+  section !== "lock" &&
+  !isOfflineAppSection(section) &&
+  !isWindowsAppSection(section);
 
 // Section state remains local to App. System transitions are never offline destinations.
 export function useSectionNavigation(
@@ -73,20 +88,32 @@ export function useSectionNavigation(
     setSection(section);
   }, []);
 
+  const initialConnectionApplied = useRef(false);
+  const initializeConnectedSection = useCallback(() => {
+    if (initialConnectionApplied.current) return;
+    initialConnectionApplied.current = true;
+    if (activeSectionRef.current === "recents") setActiveSection("nowPlaying");
+  }, [setActiveSection]);
+
   const openOfflineApps = useCallback(() => {
     availabilityRef.current.bypassOfflineScreen = true;
     setBypassOfflineScreen(true);
     setActiveSection("apps");
   }, [setActiveSection]);
 
-  const exitOfflineMode = useCallback(() => {
+  const clearOfflineMode = useCallback(() => {
     availabilityRef.current.bypassOfflineScreen = false;
     setBypassOfflineScreen(false);
   }, []);
 
+  const exitOfflineMode = useCallback(() => {
+    clearOfflineMode();
+    setActiveSection("network");
+  }, [clearOfflineMode, setActiveSection]);
+
   useEffect(() => {
-    if (appReady) exitOfflineMode();
-  }, [appReady, exitOfflineMode]);
+    if (appReady) clearOfflineMode();
+  }, [appReady, clearOfflineMode]);
 
   const handleIdleLock = useCallback(() => {
     if (activeSectionRef.current === "lock") return;
@@ -102,16 +129,15 @@ export function useSectionNavigation(
     const target =
       availability.bypassOfflineScreen && !isOfflineAppSection(previous)
         ? "apps"
-        : requiresWindowsConnector(previous) && !availability.isWindowsActive
-          ? appsBackSection
-          : previous;
+        : previous;
     activeSectionRef.current = target;
-    setActiveSection(target);
-  }, [appsBackSection, setActiveSection]);
+    setSection(target);
+  }, []);
 
   return {
     activeSection,
     setActiveSection,
+    initializeConnectedSection,
     appsBackSection,
     bypassOfflineScreen,
     openOfflineApps,

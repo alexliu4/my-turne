@@ -573,6 +573,10 @@ Audio: On
 - Includes explicit toggle-mute and optional toggle-deafen controls, communicating unknown outcomes appropriately when unverified.
 - Discord failure/restart remains isolated and reconnects cleanly when Discord restarts without affecting volume, media, or route handling.
 
+## Implementation Status (October 14, 2026)
+
+Discord is available from Computer Control through the existing Windows-only daemon RPC path. Unknown and verified states, explicit mute/deafen toggles, manual Refresh, and session recovery are implemented. Local UI tests and the production build pass. Sprint 9 is **not complete**: Linux daemon tests and the physical checklist remain pending. See [contract evidence and validation checklist](docs/windows-discord.md).
+
 ---
 
 # Sprint 10 — PC Stats UI
@@ -606,6 +610,10 @@ GPU should be optional.
 
 Stats remain responsive without affecting media/RPC responsiveness.
 
+## Implementation Status (October 14, 2026)
+
+PC Stats is available from Computer Control through the existing Windows-only daemon RPC path. CPU/RAM and optional GPU display, screen-scoped serialized reads, unavailable states, session recovery, and focused UI/daemon tests are implemented. Sprint 10 remains pending Linux daemon test execution and physical responsiveness validation. See [contract evidence and validation checklist](docs/windows-stats.md).
+
 ---
 
 # Sprint 11 — App Launching + Macro UI
@@ -638,6 +646,10 @@ Run configured shortcut
 
 Configured actions execute reliably through the normal daemon → Connector RPC path.
 
+## Implementation Status (October 15, 2026)
+
+Computer Control > Apps & Macros now displays advertised configured Windows actions and executes IDs through the existing Windows-only daemon RPC path. Session invalidation, serialized commands, manual Refresh, failure feedback and focused UI/daemon tests are implemented. Sprint 11 remains pending Linux daemon test execution and physical validation. See [contract evidence and validation checklist](docs/windows-actions.md).
+
 ---
 
 # Sprint 12 — Reliability and Recovery
@@ -660,6 +672,10 @@ Core Invariant: `Windows feature failure ≠ core Nocturne failure`.
 - Test matrix verifies mixed versions, failed RPCs, malformed events, rapid handoffs, clean reboot, and redeployment without core regressions.
 - Spotify, phone, and core Nocturne functions remain intact throughout.
 - Passes final no-USB physical end-to-end regression test.
+
+## Implementation Status (October 15, 2026)
+
+Sprint 12 is in progress. Session guards now cancel queued Windows volume requests after readiness changes, failed capability responses clear stale availability, and Settings cancels its version timer on unmount. Expanded socket and feature regressions cover failures, malformed events, disappearing capabilities and repeated handoffs. CI now runs UI behavioral/formatting checks with pinned Bun and Linux workspace tests. Linux daemon execution and the complete mixed-version, reboot, redeployment and no-USB physical matrix remain pending. See [reliability evidence and physical test matrix](docs/windows-reliability.md).
 
 ---
 

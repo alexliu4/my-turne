@@ -80,6 +80,7 @@ export function useWindowsVolume() {
       try {
         const response = await sendNocturneWsRequest<unknown>(method, params, {
           timeoutMs: 3000,
+          appReadyGeneration: operation.generation,
         });
         if (!isCurrent() || revision.current !== operation.revision) return;
         const obj =
