@@ -135,6 +135,7 @@ describe("AppsSection component behavioral tests", () => {
       ).toEqual([
         "windows-media",
         "windows-controls",
+        "audio-outputs",
         "discord",
         "pc-stats",
         "windows-actions",
@@ -147,6 +148,7 @@ describe("AppsSection component behavioral tests", () => {
       ).toEqual([
         "Windows Media",
         "Windows Control",
+        "Audio Outputs",
         "Discord",
         "PC Stats",
         "Apps & Macros",
@@ -157,6 +159,7 @@ describe("AppsSection component behavioral tests", () => {
         ["windows-controls", "windowsVolume"],
         ["discord", "discord"],
         ["pc-stats", "pcStats"],
+        ["audio-outputs", "audioOutputs"],
         ["windows-actions", "windowsActions"],
         ["host-status", "hostStatus"],
       ]) {
@@ -169,7 +172,7 @@ describe("AppsSection component behavioral tests", () => {
         if (active || id === "host-status")
           expect(select).toHaveBeenCalledWith(destination);
       }
-      expect(select).toHaveBeenCalledTimes(active ? 6 : 1);
+      expect(select).toHaveBeenCalledTimes(active ? 7 : 1);
       expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
     },
   );
@@ -294,6 +297,7 @@ describe("AppsSection component behavioral tests", () => {
         "discord",
         "pcStats",
         "windowsActions",
+        "audioOutputs",
       ])
         navigation.setActiveSection(section);
     });
@@ -373,6 +377,7 @@ describe("AppsSection component behavioral tests", () => {
     "windowsVolume",
     "pcStats",
     "windowsActions",
+    "audioOutputs",
   ])("disconnect preserves the %s surface", (section) => {
     expect(shouldShowConnectionLostScreen(true, false, section)).toBe(false);
   });
@@ -468,6 +473,7 @@ describe("AppsSection component behavioral tests", () => {
         "discord",
         "pcStats",
         "windowsActions",
+        "audioOutputs",
         "hostStatus",
       ]) {
         await act(async () => navigation.setActiveSection(detail));

@@ -142,6 +142,11 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyWindowsAudioOutputs = React.lazy(() =>
+  import("./components/windows/WindowsAudioOutputs").then((m) => ({
+    default: m.WindowsAudioOutputs,
+  })),
+);
 const LazyWindowsActions = React.lazy(() =>
   import("./components/windows/WindowsActions").then((m) => ({
     default: m.WindowsActions,
@@ -1079,10 +1084,15 @@ function AppContent() {
     },
     [setActiveSection, bypassOfflineScreen],
   );
-  useMappedHardwareControls(mappingsDisabled || isMockingbirdEnabled, {
-    setActiveSection: navigateMappedSection,
-    refreshPlaybackState,
-  });
+  useMappedHardwareControls(
+    mappingsDisabled ||
+      activeSection === "audioOutputs" ||
+      isMockingbirdEnabled,
+    {
+      setActiveSection: navigateMappedSection,
+      refreshPlaybackState,
+    },
+  );
 
   const {
     showMappingOverlay: showGlobalMappingOverlay,
@@ -1094,7 +1104,10 @@ function AppContent() {
     refreshPlaybackState,
     setActiveSection: navigateMappedSection,
     isTutorialActive: showTutorial,
-    isDisabled: mappingsDisabled || isMockingbirdEnabled,
+    isDisabled:
+      mappingsDisabled ||
+      activeSection === "audioOutputs" ||
+      isMockingbirdEnabled,
     currentPlayback,
     spotifyUserId,
     isWindowsActive,
@@ -2077,6 +2090,13 @@ function AppContent() {
   ) {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
+    );
+  } else if (activeSection === "audioOutputs") {
+    content = (
+      <LazyWindowsAudioOutputs
+        inputEnabled={!mappingsDisabled}
+        onClose={() => setActiveSection(appsBackSection)}
+      />
     );
   } else if (activeSection === "windowsActions") {
     content = (

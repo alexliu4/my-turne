@@ -5,7 +5,7 @@
 **Existing device roadmap:** `jules_my_turne_windows_sprints.md` (original Device Sprints 1–12)  
 **Connector roadmap:** `my_turne_connector_phase2_enhancement_roadmap (1).md` (Connector Sprints 9–17)  
 **Created:** 2026-10-14  
-**Status:** D0 contract audit and routing hardening prepared for review. Linux CI passed; physical integration and reviewer sign-off remain pending; no later device sprint has started.
+**Status:** D0 merged in PR #25. D1 Audio Output Selector implemented for review; physical integration remains untested. D2 has not started.
 
 ## 1. Purpose and architectural rules
 
@@ -109,7 +109,7 @@ Do not merge or begin another sprint. Stop for code review.
 - [x] Concurrent Mac targetability explicitly marked *verified / unavailable / not yet tested*.
 - [x] No transport rewrite and no speculative feature implementation.
 
-**Implementation record (October 19, 2026):** See [D0 contract inventory, compatibility matrix and physical gate](docs/phase2-device-contracts.md). Merged Connector main was inspected at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. The audit found and guarded fallback routing for output/mixer methods and their aliases. Review [PR #25](https://github.com/alexliu4/my-turne/pull/25); Linux workspace tests, the aarch64 build and UI CI passed. Physical acceptance remains untested. Windows session/power support is absent from that merged revision, so D4 remains blocked. D1 has not started.
+**Implementation record (October 19, 2026):** See [D0 contract inventory, compatibility matrix and physical gate](docs/phase2-device-contracts.md). Merged Connector main was inspected at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. The audit found and guarded fallback routing for output/mixer methods and their aliases. Review [PR #25](https://github.com/alexliu4/my-turne/pull/25); Linux workspace tests, the aarch64 build and UI CI passed. Physical acceptance remains untested. Windows session/power support is absent from that merged revision, so D4 remains blocked. D1 is implemented separately; see the D1 record below.
 
 **Stop and review:** Contract/test PR only if code changes are needed; otherwise commit a documentation/test matrix PR.
 
@@ -132,11 +132,13 @@ Do not merge or begin another sprint. Stop for code review.
 
 ### Acceptance
 
-- [ ] Lists available devices and marks the real default accurately.
-- [ ] Device selection changes and re-reads confirmed Windows output; rejected/stale IDs have no side effects.
-- [ ] Route ownership blocks requests to Mac/phone routes.
-- [ ] Disconnect, unplug/replug, in-flight result after handoff, and mixed Connector versions are covered in tests.
+- [x] Lists validated active endpoints and displays explicit role defaults in automated tests; physical accuracy remains untested.
+- [x] Selection revalidates endpoint membership, requests explicit roles and requires fresh readback; stale IDs are blocked in tests. Physical switching remains untested.
+- [x] Readiness generation and the merged D0 daemon guard block Mac/phone requests; automated fallback coverage passes.
+- [x] Disconnect, unplug/replug, in-flight result after handoff, and mixed Connector versions are covered in tests.
 - [ ] Physical Windows speakers↔headphones switch and Windows→Mac→Windows handoff validated or marked untested.
+
+**Implementation record (October 19, 2026):** See [D1 contract, interaction, validation and physical checklist](docs/windows-audio-outputs.md). Implemented on current device main with Connector main reverified at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. Review [PR #26](https://github.com/alexliu4/my-turne/pull/26). Physical acceptance remains untested. D2 has not started.
 
 **Stop and review:** D1 device-only PR.
 
@@ -346,8 +348,8 @@ Neither the Mac mini nor Windows PC currently runs Home Assistant. A working HA 
 
 | Device work | Initial status | Host dependency / prerequisite | Evidence / PR | Reviewer sign-off |
 |---|---|---|---|---|
-| D0 — Cross-repo gate | Review PR open; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | Pending |
-| D1 — Output selector | Not started | Connector 9 | — | — |
+| D0: Cross-repo gate | Merged PR #25; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | PR merged; physical pending |
+| D1: Output selector | Implemented for review; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | Pending |
 | D2 — App mixer | Not started | Connector 11 | — | — |
 | D3 — Recovery UX | Not started | Existing RPC, Connector 10/12 where available | — | — |
 | D4 — Lock/sleep UI | Blocked on host | Connector 13 | — | — |
