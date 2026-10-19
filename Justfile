@@ -1,3 +1,8 @@
+# Use native Windows Command Prompt for recipes on Windows.
+# Unix systems continue using their existing shell.
+[windows]
+set shell := ["cmd.exe", "/C"]
+
 # Top-level monorepo orchestration. Component-local recipes still live in
 # each subdirectory's Justfile and are reachable via `just -f <path> ...` or
 # `cd <path> && just ...`. The recipes below cover the common cross-component
