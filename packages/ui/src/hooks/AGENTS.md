@@ -105,6 +105,8 @@ The artwork queue keeps at most 64 cached images and approximately 32 MiB of raw
 
 ## Typed response boundaries
 
+Phase 2 output and mixer callers must pass `appReadyGeneration` to `sendNocturneWsRequest` and discard replies after session changes. Socket regressions cover queued canonical audio methods during fallback. D0 contracts and the physical gate are recorded in `../../../../docs/phase2-device-contracts.md`; no Phase 2 feature UI is implemented by D0.
+
 - `spotifyResponses.ts` owns method-specific response contracts, wrapped saved-track entries, and normalization of map/array device responses. Spotify request storage retains `unknown`; concrete overloads describe known methods, and dynamic requests require caller-owned response types or narrowing. Do not restore `UiLooseData` or an object/array/function intersection.
 - `mediaPayload.ts` normalizes untrusted Dealer and phone-media attributes before they enter playback state. Preserve numeric zero, metadata correlation fields, and the existing Pascal-case attributes; malformed text or timing fields must not become React children or arithmetic operands.
 - `useSpotifyData` exports its inferred `SpotifyDataHook` contract. Shows support both wrapped and flattened `SpotifyShowEntry` values; liked tracks use `SpotifyTrackEntry`. Consumers should use the normalized entry or its explicit wrapper, rather than asserting one shape.

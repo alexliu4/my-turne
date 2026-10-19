@@ -1858,6 +1858,21 @@ impl WebSocketServer {
                 if (windows_media_only
                     || windows_actions_only
                     || method == "connector.capabilities"
+                    || method.starts_with("audio.outputs.")
+                    || method.starts_with("audio.sessions.")
+                    || matches!(
+                        method.as_str(),
+                        "audio.get_outputs"
+                            | "audio.select_output"
+                            | "audio.get_sessions"
+                            | "audio.set_session_volume"
+                            | "audio.set_session_mute"
+                            | "media.get_audio_outputs"
+                            | "media.set_audio_output"
+                            | "media.get_audio_sessions"
+                            | "media.set_audio_session_volume"
+                            | "media.set_audio_session_mute"
+                    )
                     || method.starts_with("discord.")
                     || matches!(
                         method.as_str(),
@@ -2487,6 +2502,142 @@ mod tests {
                             method
                         }
                     );
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "windows"}),
+                            route,
+                            None,
+                        )
+                        .await;
+                    while rx.try_recv().is_ok() {}
+                } else {
+                    assert!(app_rx.try_recv().is_err());
+                    assert!(matches!(
+                        rx.try_recv().unwrap(),
+                        WebSocketMessage::Error { .. }
+                    ));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn phase2_audio_rpcs_require_windows_and_pin_the_accepted_route() {
+        let (app_tx, mut app_rx) = mpsc::unbounded_channel();
+        let server = WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        );
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        server.handle_incoming_message(&serde_json::json!({"type": "request", "id": "offline", "method": "audio.outputs.list", "params": {}}).to_string()).await.unwrap();
+        assert!(app_rx.try_recv().is_err());
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            WebSocketMessage::Error { .. }
+        ));
+        for (platform, connector, route) in [
+            ("web", "macos", Some("spp:owner")),
+            ("web", "", Some("spp:owner")),
+            ("android", "", Some("spp:owner")),
+            ("ios", "", Some("spp:owner")),
+            ("web", "windows", None),
+            ("web", "windows", Some("spp:owner")),
+        ] {
+            *server.app_ready_registry.write().await = AppReadyRegistry::default();
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connectorPlatform": connector,
+                    }),
+                    route,
+                    None,
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            if connector != "windows" && route.is_some() {
+                for method in ["media.control.next", "spotify.player.next"] {
+                    server.handle_incoming_message(&serde_json::json!({ "type": "request", "id": "generic", "method": method, "params": {} }).to_string()).await.unwrap();
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["method"], method);
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                }
+            }
+            for (method, params) in [
+                ("audio.outputs.list", serde_json::json!({})),
+                (
+                    "audio.outputs.select",
+                    serde_json::json!({"deviceId": "endpoint", "roles": ["console", "multimedia"]}),
+                ),
+                (
+                    "audio.sessions.list",
+                    serde_json::json!({"deviceId": "endpoint"}),
+                ),
+                (
+                    "audio.sessions.set_volume",
+                    serde_json::json!({"sessionId": "opaque", "deviceId": "endpoint", "volumePercent": 42}),
+                ),
+                (
+                    "audio.sessions.set_mute",
+                    serde_json::json!({"sessionId": "opaque", "deviceId": "endpoint", "muted": true}),
+                ),
+                ("audio.get_outputs", serde_json::json!({})),
+                ("audio.select_output", serde_json::json!({"id": "endpoint"})),
+                ("audio.get_sessions", serde_json::json!({})),
+                (
+                    "audio.set_session_volume",
+                    serde_json::json!({"id": "opaque", "level": 42}),
+                ),
+                (
+                    "audio.set_session_mute",
+                    serde_json::json!({"id": "opaque", "muted": true}),
+                ),
+                ("media.get_audio_outputs", serde_json::json!({})),
+                (
+                    "media.set_audio_output",
+                    serde_json::json!({"device_id": "endpoint"}),
+                ),
+                ("media.get_audio_sessions", serde_json::json!({})),
+                (
+                    "media.set_audio_session_volume",
+                    serde_json::json!({"session_id": "opaque", "volume_percent": 42}),
+                ),
+                (
+                    "media.set_audio_session_mute",
+                    serde_json::json!({"session_id": "opaque", "muted": true}),
+                ),
+                ("audio.outputs.unknown", serde_json::json!({})),
+                ("audio.sessions.unknown", serde_json::json!({})),
+            ] {
+                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": params}).to_string()).await.unwrap();
+                if connector == "windows" && route.is_some() {
+                    // Promotion after acceptance must not change this request's target.
+                    server.clear_app_ready_for_route("spp:owner").await;
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "macos"}),
+                            Some("spp:mac"),
+                            None,
+                        )
+                        .await;
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                    assert_eq!(data["params"], params);
+                    assert_eq!(data["method"], method);
                     server
                         .broadcast_event_from_route(
                             "app.ready".into(),
