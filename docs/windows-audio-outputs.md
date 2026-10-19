@@ -1,6 +1,6 @@
 # Device Phase 2 D1: Windows Audio Outputs
 
-October 19, 2026. Device-only implementation prepared for review. Physical integration is untested. D2 has not started.
+October 19, 2026. Device-only implementation in [PR #26](https://github.com/alexliu4/my-turne/pull/26), ready for review. Physical integration is untested. D2 has not started.
 
 ## Contract and baseline
 

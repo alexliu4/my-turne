@@ -138,7 +138,7 @@ Do not merge or begin another sprint. Stop for code review.
 - [x] Disconnect, unplug/replug, in-flight result after handoff, and mixed Connector versions are covered in tests.
 - [ ] Physical Windows speakers↔headphones switch and Windows→Mac→Windows handoff validated or marked untested.
 
-**Implementation record (October 19, 2026):** See [D1 contract, interaction, validation and physical checklist](docs/windows-audio-outputs.md). Implemented on current device main with Connector main reverified at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. Physical acceptance remains untested. D2 has not started.
+**Implementation record (October 19, 2026):** See [D1 contract, interaction, validation and physical checklist](docs/windows-audio-outputs.md). Implemented on current device main with Connector main reverified at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. Review [PR #26](https://github.com/alexliu4/my-turne/pull/26). Physical acceptance remains untested. D2 has not started.
 
 **Stop and review:** D1 device-only PR.
 
@@ -348,8 +348,8 @@ Neither the Mac mini nor Windows PC currently runs Home Assistant. A working HA 
 
 | Device work | Initial status | Host dependency / prerequisite | Evidence / PR | Reviewer sign-off |
 |---|---|---|---|---|
-| D0 — Cross-repo gate | Merged PR #25; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | PR merged; physical pending |
-| D1 — Output selector | Implemented for review; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | Pending |
+| D0: Cross-repo gate | Merged PR #25; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | PR merged; physical pending |
+| D1: Output selector | Implemented for review; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | Pending |
 | D2 — App mixer | Not started | Connector 11 | — | — |
 | D3 — Recovery UX | Not started | Existing RPC, Connector 10/12 where available | — | — |
 | D4 — Lock/sleep UI | Blocked on host | Connector 13 | — | — |
