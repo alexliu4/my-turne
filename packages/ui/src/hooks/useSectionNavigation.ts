@@ -23,6 +23,7 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "discord",
     "pcStats",
     "windowsActions",
+    "audioOutputs",
     "windowsVolume",
     "windows-volume",
   ].includes(section);
