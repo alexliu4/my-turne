@@ -498,3 +498,229 @@ describe("rendered audio outputs and physical input boundary", () => {
     });
   });
 });
+
+describe("audio output hardware keys versus interactive targets", () => {
+  async function focusSpeakers() {
+    await act(async () => {
+      document.body.dispatchEvent(
+        new window.WheelEvent("wheel", {
+          deltaX: 20,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(
+      container.querySelector('[data-focused="true"]')?.textContent,
+    ).toContain("Speakers");
+  }
+  function keyEvent(
+    target: EventTarget,
+    type: "keydown" | "keyup",
+    key: string,
+    repeat = false,
+  ) {
+    const event = new window.KeyboardEvent(type, {
+      key,
+      code: key,
+      repeat,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+  async function keyboardActivate(
+    control: HTMLButtonElement,
+    target: EventTarget = control,
+  ) {
+    control.focus();
+    await act(async () => {
+      const down = keyEvent(target, "keydown", "Enter");
+      expect(down.defaultPrevented).toBe(false);
+      // Happy DOM does not synthesize the browser's Enter default action.
+      // Apply that click only when the keydown was not canceled.
+      if (!down.defaultPrevented) control.click();
+      expect(keyEvent(target, "keyup", "Enter").defaultPrevented).toBe(false);
+    });
+  }
+
+  test.each([
+    "Refresh",
+    "Go Back",
+    "Playback",
+    "Calls",
+    "All roles",
+    "Headphones",
+  ])(
+    "Enter targeting %s preserves native activation instead of selecting dial focus",
+    async (label) => {
+      const close = mock(() => {});
+      await mount(<WindowsAudioOutputs onClose={close} />);
+      await respond(snapshot());
+      await focusSpeakers();
+      const control = label === "Go Back" ? button(label) : textButton(label);
+      const reachedTarget = mock(() => {});
+      control.addEventListener("keydown", reachedTarget);
+      // Include the nested output label and Back SVG, rather than only buttons.
+      await keyboardActivate(control, control.firstElementChild ?? control);
+      expect(reachedTarget).toHaveBeenCalledTimes(1);
+      if (label === "Go Back") {
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(calls).toHaveLength(1);
+      } else if (["Playback", "Calls", "All roles"].includes(label)) {
+        expect(control.getAttribute("aria-pressed")).toBe("true");
+        expect(calls).toHaveLength(1);
+      } else if (label === "Refresh") {
+        expect(calls).toHaveLength(2);
+        expect(calls[1].method).toBe("audio.outputs.list");
+        await respond(snapshot());
+        expect(calls).toHaveLength(2);
+      } else {
+        expect(calls).toHaveLength(2);
+        await respond(snapshot());
+        expect(calls.at(-1)).toMatchObject({
+          method: "audio.outputs.select",
+          params: { deviceId: "b", roles: ["console", "multimedia"] },
+        });
+        await respond({ status: "ok", confirmed: true, deviceId: "b" });
+        await respond(snapshot("b"));
+        expect(
+          calls.filter((call) => call.method === "audio.outputs.select"),
+        ).toHaveLength(1);
+      }
+      control.removeEventListener("keydown", reachedTarget);
+    },
+  );
+
+  test.each([
+    "Refresh",
+    "Go Back",
+    "Playback",
+    "Calls",
+    "All roles",
+    "Headphones",
+  ])(
+    "Escape targeting %s reaches the control without invoking hardware Back",
+    async (label) => {
+      const close = mock(() => {});
+      await mount(<WindowsAudioOutputs onClose={close} />);
+      await respond(snapshot());
+      await focusSpeakers();
+      const control = label === "Go Back" ? button(label) : textButton(label);
+      const reachedTarget = mock(() => {});
+      control.addEventListener("keydown", reachedTarget);
+      await act(async () => {
+        expect(
+          keyEvent(control.firstElementChild ?? control, "keydown", "Escape")
+            .defaultPrevented,
+        ).toBe(false);
+        expect(keyEvent(control, "keyup", "Escape").defaultPrevented).toBe(
+          false,
+        );
+      });
+      expect(reachedTarget).toHaveBeenCalledTimes(1);
+      expect(close).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+      control.removeEventListener("keydown", reachedTarget);
+    },
+  );
+
+  test("untargeted dial keys consume down, repeat and up with one switch; unmount removes key capture", async () => {
+    const close = mock(() => {});
+    await mount(<WindowsAudioOutputs onClose={close} />);
+    await respond(snapshot());
+    await focusSpeakers();
+    // Focus alone must not classify a document-dispatched dial event as a button key.
+    textButton("Refresh").focus();
+    const downstream = mock(() => {});
+    document.addEventListener("keydown", downstream);
+    document.addEventListener("keyup", downstream);
+    try {
+      await act(async () => {
+        expect(keyEvent(document, "keydown", "Enter").defaultPrevented).toBe(
+          true,
+        );
+        expect(
+          keyEvent(document, "keydown", "Enter", true).defaultPrevented,
+        ).toBe(true);
+        expect(keyEvent(document, "keyup", "Enter").defaultPrevented).toBe(
+          true,
+        );
+      });
+      expect(downstream).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(2);
+      await respond(snapshot());
+      expect(calls.at(-1)?.params).toEqual({
+        deviceId: "a",
+        roles: ["console", "multimedia"],
+      });
+      await respond({ status: "ok", confirmed: true, deviceId: "a" });
+      await respond(snapshot());
+      await act(async () => {
+        expect(keyEvent(document.body, "keyup", "Enter").defaultPrevented).toBe(
+          true,
+        );
+      });
+      expect(
+        calls.filter((call) => call.method === "audio.outputs.select"),
+      ).toHaveLength(1);
+      await act(async () => {
+        expect(
+          keyEvent(document.body, "keydown", "Escape").defaultPrevented,
+        ).toBe(true);
+        expect(
+          keyEvent(document.body, "keydown", "Escape", true).defaultPrevented,
+        ).toBe(true);
+        expect(
+          keyEvent(document.body, "keyup", "Escape").defaultPrevented,
+        ).toBe(true);
+      });
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(downstream).not.toHaveBeenCalled();
+      await act(async () => root.render(null));
+      const count = calls.length;
+      for (const key of ["Enter", "Escape"])
+        for (const type of ["keydown", "keyup"] as const)
+          expect(keyEvent(document, type, key).defaultPrevented).toBe(false);
+      expect(downstream).toHaveBeenCalledTimes(4);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(count);
+    } finally {
+      document.removeEventListener("keydown", downstream);
+      document.removeEventListener("keyup", downstream);
+    }
+  });
+
+  test("overlay input disabling leaves dial keys to the overlay and resumes on enable", async () => {
+    const close = mock(() => {});
+    await mount(<WindowsAudioOutputs onClose={close} />);
+    await respond(snapshot());
+    await focusSpeakers();
+    await mount(<WindowsAudioOutputs onClose={close} inputEnabled={false} />);
+    const overlay = mock(() => {});
+    window.addEventListener("keydown", overlay);
+    window.addEventListener("keyup", overlay);
+    try {
+      for (const key of ["Enter", "Escape"])
+        for (const type of ["keydown", "keyup"] as const)
+          expect(keyEvent(document.body, type, key).defaultPrevented).toBe(
+            false,
+          );
+      expect(overlay).toHaveBeenCalledTimes(4);
+      expect(close).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+      await mount(<WindowsAudioOutputs onClose={close} inputEnabled />);
+      await act(async () => {
+        expect(
+          keyEvent(document.body, "keydown", "Enter").defaultPrevented,
+        ).toBe(true);
+      });
+      expect(calls).toHaveLength(2);
+      expect(overlay).toHaveBeenCalledTimes(4);
+    } finally {
+      window.removeEventListener("keydown", overlay);
+      window.removeEventListener("keyup", overlay);
+    }
+  });
+});

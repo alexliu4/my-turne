@@ -21,7 +21,7 @@ There is no output capability flag or output-change event in audited main. The e
 
 Computer Control includes Audio Outputs after Windows Control. Playback switches console and multimedia, Calls switches communications, and All roles switches all three. Each endpoint displays its independently reported defaults. Touch requests selection; horizontal dial rotation moves focus without sending RPCs, and Enter requests the focused output. Escape or onscreen Back returns to the launching section. The screen remains visible as unavailable on fallback and clears all endpoints; Windows return refreshes discovery.
 
-App suspends custom hardware mappings while this screen owns the dial, and disables screen input beneath overlays. Handlers are removed on exit. Normal Spotify, phone, Mac and other screens keep their existing mappings. Lists are scrollable and capped at 128 validated endpoints; strings are bounded, duplicate IDs and contradictory role defaults reject the snapshot. Only active endpoints can be selected.
+App suspends custom hardware mappings while this screen owns the dial, and disables screen input beneath overlays. Enter and Escape targeting interactive controls or their descendants retain native keyboard behavior. Untargeted document/body/window key events use the existing dial/Back path, consuming down, repeats and release while acting only once on the initial keydown. Overlay input disabling leaves those events for the overlay. Handlers are removed on exit. Normal Spotify, phone, Mac and other screens keep their existing mappings. Lists are scrollable and capped at 128 validated endpoints; strings are bounded, duplicate IDs and contradictory role defaults reject the snapshot. Only active endpoints can be selected.
 
 There is one serialized operation per screen/session. Reads and selections carry a four-second RPC timeout plus `appReadyGeneration`. Entry, manual Refresh and Windows reconnection refresh the list; there is no polling or speculative event listener. Before selection, a fresh list revalidates the exact discovered ID. Removal prevents dispatch, and a later Refresh discovers replugged outputs. An unplug race after dispatch still relies on Windows native validation.
 
@@ -29,11 +29,11 @@ Selections always re-read defaults, including after rejection or timeout, becaus
 
 ## Verification
 
-Automated UI tests exercise real hooks/components with only daemon I/O mocked. Test endpoints are synthetic fixtures derived from the audited contract, not captured hardware data. Coverage includes exact payloads and role choices, endpoint removal/replug, malformed/oversized/contradictory results, missing confirmations, partial failure, denied changes, timeout without mutation retry, stale replies at every await boundary, Mac/phone/disconnect fallback, Windows return, knob focus/press, overlay input gating, cleanup and Computer Control navigation/lock origins.
+Automated UI tests exercise real hooks/components with only daemon I/O mocked. Test endpoints are synthetic fixtures derived from the audited contract, not captured hardware data. Coverage includes exact payloads and role choices, endpoint removal/replug, malformed/oversized/contradictory results, missing confirmations, partial failure, denied changes, timeout without mutation retry, stale replies at every await boundary, Mac/phone/disconnect fallback, Windows return, knob focus/press, targeted Refresh/Back/role/output keyboard activation, repeat/release consumption without duplicate switches, overlay input gating, key/wheel cleanup and Computer Control navigation/lock origins.
 
 Local macOS validation with Bun 1.4.2:
 
-- `cd packages/ui && bun test`: 682 passed, 0 failed across 51 files, including 29 output tests and navigation regressions.
+- `cd packages/ui && bun test`: 696 passed, 0 failed across 51 files, including 43 output tests and navigation regressions.
 - `cd packages/ui && bun run lint-check`: passed strict TypeScript and full UI Prettier checks.
 - `cd packages/ui && bun run build`: passed. Existing mixed static/dynamic import and large-chunk advisories remain.
 - `git diff --check`: passed.

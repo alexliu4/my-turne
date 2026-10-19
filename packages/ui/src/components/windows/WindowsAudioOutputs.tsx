@@ -68,6 +68,15 @@ export function WindowsAudioOutputs({
       const current = live.current;
       if (!current.inputEnabled || !["Enter", "Escape"].includes(event.key))
         return;
+      // Focused controls own native keyboard activation. Untargeted kiosk
+      // Enter/Escape events retain the dial/Back capture path below.
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "button, a[href], input, select, textarea, [role='button'], [contenteditable]:not([contenteditable='false'])",
+        )
+      )
+        return;
       consume(event);
       if (event.type !== "keydown" || event.repeat) return;
       if (event.key === "Escape") current.onClose?.();
