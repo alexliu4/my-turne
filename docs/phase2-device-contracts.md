@@ -37,7 +37,7 @@ Canonical audio methods and all dispatcher aliases are guarded by this D0 fix. O
 
 The WebSocket boundary selects `active()` and supplies internal `_targetConnection`. `crates/daemon/src/bluetooth/mod.rs::should_route_message` matches an exact connection before considering peer fallback. Accepted audio requests stay pinned to that connection if ownership subsequently changes; they are not rerouted to Mac. This cannot undo an operation already dispatched to Windows. New audio requests after fallback are rejected before enqueueing. Generic Spotify and phone-media methods retain their existing routing; native phone calls still use `phone_request_route`.
 
-The reproduced code gap was the missing Windows guard on all new audio methods and aliases. The added daemon regression invokes the real incoming-request handler with Mac, unknown, Android, iOS, unscoped Windows and exact Windows readiness. It checks rejection before forwarding, unchanged method/parameters, route pinning after handoff and generic Spotify/media routing. Linux execution remains required before calling those assertions verified.
+The reproduced code gap was the missing Windows guard on all new audio methods and aliases. The added daemon regression invokes the real incoming-request handler with Mac, unknown, Android, iOS, unscoped Windows and exact Windows readiness. It checks rejection before forwarding, unchanged method/parameters, route pinning after handoff and generic Spotify/media routing. Linux CI executed and passed this regression at `1574597f`; see the CI evidence below.
 
 `app/msgpack.rs::normalize_app_ready_event` already preserves `capabilities` and canonical/legacy Connector platform identity. The older roadmap statement that capabilities are dropped is stale. `hostStatus` is not preserved by that normalizer, so D3 must use the explicit RPC rather than assume handshake health survives. No shared schema or generated bindings changed in D0.
 
@@ -49,11 +49,11 @@ Concurrent Mac targetability: **unavailable through the current UI RPC API; phys
 
 | Device / host combination | Expected behavior | Evidence status |
 | --- | --- | --- |
-| D0 daemon + audited Connector main on Windows | Audio canonical methods/aliases target exact preferred Windows; feature snapshots determine runtime availability. | Source audit; daemon regression execution pending. |
-| D0 daemon + Mac or registered iOS/Android fallback | Output/mixer methods reject; existing Spotify and phone paths continue. | Source audit and regression assertions; physical untested. |
+| D0 daemon + audited Connector main on Windows | Audio canonical methods/aliases target exact preferred Windows; feature snapshots determine runtime availability. | Source audit and passing Linux routing regression; physical untested. |
+| D0 daemon + Mac or registered iOS/Android fallback | Output/mixer methods reject; existing Spotify and phone paths continue. | Source audit and passing Linux routing regression; physical untested. |
 | D0 daemon + old Windows Connector without audio methods | Unknown-method error/unsupported; no fabricated devices or sessions. | Dispatcher contract; mixed-binary physical test untested. |
 | Older daemon + current Connector | Audio methods can pass to fallback because guard is absent. | Source gap; require D0 daemon before deploying D1/D2 UI. |
-| D0 daemon + missing/unknown Connector identity or unscoped Windows readiness | Audio requests reject. | Regression assertions; Linux execution pending. |
+| D0 daemon + missing/unknown Connector identity or unscoped Windows readiness | Audio requests reject. | Passing Linux routing regression; physical untested. |
 | Current merged Connector + D4 concept | No verified OS-state contract. | Blocked, not feature-ready. |
 
 Host service normalization supplies defaults for some missing audio fields, including session volume and mute. A valid-looking service result therefore does not prove every native field was sampled. D1/D2 must strictly validate result shapes and confirmations, avoid optimistic state, and record this compatibility limitation during physical validation. No version cutoff or supported release pair has been invented.
@@ -113,7 +113,7 @@ macOS local evidence with Bun 1.4.2 and Cargo 1.99.0:
 - `bun test`: 652 passed, 0 failed across 50 files.
 - `bun run lint-check`: strict types and Prettier passed.
 - `bun run build`: passed; existing mixed static/dynamic import and large-chunk advisories remain.
-- `tools/test-workspace --locked`: native shared/codegen tests passed, then exited 127 at `cross: command not found`. Linux daemon/runtime tests, including the new routing test, are unexecuted locally. Docker is also absent. CI must run the Linux workspace test and aarch64 build before acceptance.
+- `tools/test-workspace --locked`: native shared/codegen tests passed, then exited 127 at `cross: command not found`. Linux daemon/runtime tests, including the new routing test, are unexecuted locally. Docker is also absent. Subsequent Linux CI executed the workspace and aarch64 build successfully; see below.
 - `rustfmt --check --edition 2021 crates/daemon/src/http/websocket.rs` and `git diff --check`: passed. Workspace-wide `cargo fmt --all --check` also reports pre-existing formatting in `tools/codegen/src/dispatch/kotlin.rs`; that unrelated file was left unchanged.
 - Generated bindings remain unchanged. Physical tests and reviewer sign-off remain pending.
 
@@ -129,3 +129,13 @@ tools/test-workspace --locked
 rustfmt --check --edition 2021 crates/daemon/src/http/websocket.rs
 git diff --check
 ```
+
+## Published review and CI evidence
+
+[PR #25](https://github.com/alexliu4/my-turne/pull/25) is ready for review. CI at implementation commit `1574597f662a06f457911d8c2d143828a4f68fa0` passed on October 19, 2026:
+
+- [Linux workspace tests with device features](https://github.com/alexliu4/my-turne/actions/runs/39209588489/job/117919783202): passed, including `http::websocket::tests::phase2_audio_rpcs_require_windows_and_pin_the_accepted_route`. The daemon test binary reports 285 passed, 0 failed, 3 ignored; separate hardware/doc tests remain ignored as reported by CI.
+- [Production aarch64 build](https://github.com/alexliu4/my-turne/actions/runs/39209588489/job/117919783626): passed.
+- [UI checks and build](https://github.com/alexliu4/my-turne/actions/runs/39209588223/job/117919782318): passed.
+
+This closes the Linux execution gap for the D0 code change. It does not establish physical acceptance of D0, Connector G0 or original Sprint 12. Reviewer sign-off and the physical matrix remain pending; D1 remains unstarted.

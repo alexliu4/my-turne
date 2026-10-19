@@ -5,7 +5,7 @@
 **Existing device roadmap:** `jules_my_turne_windows_sprints.md` (original Device Sprints 1–12)  
 **Connector roadmap:** `my_turne_connector_phase2_enhancement_roadmap (1).md` (Connector Sprints 9–17)  
 **Created:** 2026-10-14  
-**Status:** D0 contract audit and routing hardening prepared for review. Linux daemon execution and physical integration remain pending; no later device sprint has started.
+**Status:** D0 contract audit and routing hardening prepared for review. Linux CI passed; physical integration and reviewer sign-off remain pending; no later device sprint has started.
 
 ## 1. Purpose and architectural rules
 
@@ -104,12 +104,12 @@ Do not merge or begin another sprint. Stop for code review.
 ### Acceptance
 
 - [x] Verified contract table with method names and per-feature route ownership.
-- [ ] No Windows-specific method can execute via a fallback Mac route.
+- [x] No Windows-specific method can execute via a fallback Mac route. D0 audio methods and aliases are covered by the passing Linux routing regression.
 - [x] Actual physical Windows and Mac takeover evidence, or an explicit **blocked/untested** record.
 - [x] Concurrent Mac targetability explicitly marked *verified / unavailable / not yet tested*.
 - [x] No transport rewrite and no speculative feature implementation.
 
-**Implementation record (October 19, 2026):** See [D0 contract inventory, compatibility matrix and physical gate](docs/phase2-device-contracts.md). Merged Connector main was inspected at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. The audit found and guarded fallback routing for output/mixer methods and their aliases. This is prepared for review, not physical acceptance. Windows session/power support is absent from that merged revision, so D4 remains blocked. D1 has not started.
+**Implementation record (October 19, 2026):** See [D0 contract inventory, compatibility matrix and physical gate](docs/phase2-device-contracts.md). Merged Connector main was inspected at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. The audit found and guarded fallback routing for output/mixer methods and their aliases. Review [PR #25](https://github.com/alexliu4/my-turne/pull/25); Linux workspace tests, the aarch64 build and UI CI passed. Physical acceptance remains untested. Windows session/power support is absent from that merged revision, so D4 remains blocked. D1 has not started.
 
 **Stop and review:** Contract/test PR only if code changes are needed; otherwise commit a documentation/test matrix PR.
 
@@ -346,7 +346,7 @@ Neither the Mac mini nor Windows PC currently runs Home Assistant. A working HA 
 
 | Device work | Initial status | Host dependency / prerequisite | Evidence / PR | Reviewer sign-off |
 |---|---|---|---|---|
-| D0 — Cross-repo gate | Audit and routing fix prepared; validation pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | Pending |
+| D0 — Cross-repo gate | Review PR open; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | Pending |
 | D1 — Output selector | Not started | Connector 9 | — | — |
 | D2 — App mixer | Not started | Connector 11 | — | — |
 | D3 — Recovery UX | Not started | Existing RPC, Connector 10/12 where available | — | — |
