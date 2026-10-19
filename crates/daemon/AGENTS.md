@@ -8,6 +8,8 @@ Rust daemon (`nocturned`) running on the Spotify Car Thing (aarch64). Talks to i
 
 ## BUILD
 
+Phase 2 audio output and app mixer RPCs, including their legacy aliases, require an exact active Windows route at the WebSocket boundary. Do not allow `audio.outputs.*` or `audio.sessions.*` to fall through to Mac or phone owners. D0 contract evidence and pending physical validation are tracked in `../../docs/phase2-device-contracts.md`.
+
 Full runtime validation requires Car Thing hardware (MFi coprocessor on `/dev/i2c-3`, ALSA `hw:0,0`). Native builds and tests require Linux because BlueZ imports Linux-only APIs; the `daemon-host` recipe does not make these dependencies portable to macOS. On macOS use the documented cross target and container runtime.
 
 ```bash
