@@ -1,6 +1,6 @@
 # Device Phase 2 D0: contract inventory and integration gate
 
-October 19, 2026. Prepared for review; physical acceptance is untested. D1 has not started.
+October 19, 2026. Historical D0 audit; physical acceptance is untested. The [October 20 D4 audit](windows-session-awareness.md) supersedes the session/power blocker below after verifying Sprint 13 on merged Connector main.
 
 ## Evidence boundary
 

@@ -5,7 +5,7 @@
 **Existing device roadmap:** `jules_my_turne_windows_sprints.md` (original Device Sprints 1–12)  
 **Connector roadmap:** `my_turne_connector_phase2_enhancement_roadmap (1).md` (Connector Sprints 9–17)  
 **Created:** 2026-10-14  
-**Status:** D0 merged in PR #25. D1 merged in PR #26. D2 merged in PR #27. D3 Host Status recovery implemented for review; physical integration remains untested.
+**Status:** D0 merged in PR #25. D1 merged in PR #26. D2 merged in PR #27. D3 merged in PR #28. D4 session/power awareness implemented for review; physical integration remains untested.
 
 ## 1. Purpose and architectural rules
 
@@ -215,10 +215,12 @@ Do not merge or begin another sprint. Stop for code review.
 
 ### Acceptance
 
-- [ ] Accurate or explicitly unknown host state; current snapshot wins after reconnect.
-- [ ] No stale event drives dimming after Windows→Mac fallback.
+- [x] Automated tests cover explicit unknown states, monitoring gates and authoritative reconnect snapshots; physical accuracy remains untested.
+- [x] Automated tests reject stale route/observer events after fallback. Optional automatic dimming is omitted.
 - [ ] Manual controls, wake and backlight restoration work.
 - [ ] Physical lock/unlock, sleep/wake, Windows→Mac→Windows scenarios tested or marked untested.
+
+**Implementation record (October 20, 2026):** D4 adds separate Windows session/activity/display/system-power readings to Host Status, event ordering and snapshot recovery, and daemon Windows route guards. The merged Connector contract exists at `8d0f144bd89a4b56dd52fd3e45f8f95ce3af643f`; the earlier blocked status is superseded by the exact source audit. Optional automatic Car Thing dimming/blanking is omitted. See [D4 contract, validation and physical checklist](docs/windows-session-awareness.md). Physical lock/unlock, sleep/wake, fallback and manual backlight acceptance remain untested.
 
 **Stop and review:** Device-only state/UI PR; never send direct power writes from Connector.
 
@@ -355,8 +357,8 @@ Neither the Mac mini nor Windows PC currently runs Home Assistant. A working HA 
 | D0: Cross-repo gate | Merged PR #25; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | PR merged; physical pending |
 | D1: Output selector | Merged PR #26; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | PR merged; physical pending |
 | D2: App mixer | Merged PR #27; physical untested | Connector 11 | [Implementation and checks](docs/windows-app-mixer.md) | PR merged; physical pending |
-| D3: Recovery UX | Implemented for review; physical untested | Existing capability RPC and readiness | [Implementation and checks](docs/windows-host-status.md) | Pending |
-| D4 — Lock/sleep UI | Blocked on host | Connector 13 | — | — |
+| D3: Recovery UX | Merged PR #28; physical untested | Existing capability RPC and readiness | [Implementation and checks](docs/windows-host-status.md) | PR merged; physical pending |
+| D4: Lock/sleep UI | Implemented for review; physical untested | Connector 13 verified on merged main | [Contract and checks](docs/windows-session-awareness.md) | Pending |
 | D5a — HA route feasibility | Conditional / not started | Mac-target feasibility; HA architecture | — | — |
 | D5b — HA scene UI | Blocked on D5a + HA | Working HA server and trusted adapter | — | — |
 | D6 — Agenda | Conditional / deferred | Authorized calendar adapter | — | — |

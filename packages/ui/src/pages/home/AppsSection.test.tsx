@@ -45,6 +45,7 @@ describe("AppsSection component behavioral tests", () => {
       connectorPlatform: null,
       generation: 1,
     };
+    spyOn(daemon, "addGlobalWsListener").mockImplementation(() => () => {});
     spyOn(daemon, "getAppReadyState").mockImplementation(() => ready);
     spyOn(daemon, "subscribeAppReadyState").mockImplementation((listener) => {
       listener(ready);

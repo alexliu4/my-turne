@@ -133,3 +133,5 @@ WebSocket outbound delivery uses a bounded FIFO per connection and disconnects a
 - **Windows PC Stats:** WebSocket stats methods (`system_stats.get` and the three existing Connector aliases) require a scoped active Windows route and preserve its exact target across fallback promotion. The daemon only forwards requests; it does not sample PC telemetry. Contract and physical validation are in `../../../docs/windows-stats.md`.
 
 - **Windows configured actions:** The WebSocket forwarding boundary gates app launch and macro methods to active scoped Windows ownership, pins the accepted route, and permits only configured IDs. Do not accept targets, command strings, URLs or shortcut definitions from UI RPCs. Contract and validation: `../../../docs/windows-actions.md`.
+
+Phase 2 D4: `http/websocket.rs` gates Windows session reads and both aliases to scoped Windows ownership; session events reject unscoped, unknown, inactive and non-Windows routes. Snapshot contents remain Connector-owned. See `../../../docs/windows-session-awareness.md`.

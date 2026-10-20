@@ -311,16 +311,27 @@ describe("Windows capability hook lifecycle", () => {
       connectorPlatform: "windows",
       generation: 1,
     };
+    spyOn(daemon, "addGlobalWsListener").mockImplementation(() => () => {});
     spyOn(daemon, "getAppReadyState").mockImplementation(() => ready);
+    const subscribers = new Set<(state: daemon.AppReadyState) => void>();
+    listener = (state) => {
+      for (const subscriber of subscribers) subscriber(state);
+    };
     spyOn(daemon, "subscribeAppReadyState").mockImplementation((subscriber) => {
-      listener = subscriber;
+      subscribers.add(subscriber);
+      listener = (state) => {
+        for (const entry of subscribers) entry(state);
+      };
       subscriber(ready);
       return () => {
-        listener = undefined;
+        subscribers.delete(subscriber);
+        if (subscribers.size === 0) listener = undefined;
       };
     });
     spyOn(daemon, "sendNocturneWsRequest").mockImplementation(
       <T,>(method: string, params: object = {}, options?: unknown) => {
+        if (method === "windows.session.get_status")
+          return Promise.resolve({ status: "unsupported" }) as Promise<T>;
         const promise = new Promise<unknown>((resolve, reject) =>
           calls.push({ method, params, options, resolve, reject }),
         );
@@ -497,9 +508,11 @@ describe("Windows capability hook lifecycle", () => {
     await route("macos");
     expect(document.body.textContent).toContain("Mac fallback active");
     expect(document.body.textContent).not.toContain("Available");
-    expect(document.querySelector<HTMLButtonElement>("button")?.disabled).toBe(
-      true,
-    );
+    expect(
+      Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent === "Refresh",
+      )?.disabled,
+    ).toBe(true);
     await route(null);
     expect(document.body.textContent).toContain("No Connector ready");
     expect(document.body.textContent).toContain(
@@ -516,14 +529,18 @@ describe("Windows capability hook lifecycle", () => {
     expect(document.body.textContent).not.toContain("/private/host");
     expect(document.body.textContent).not.toContain("Available");
     await act(async () =>
-      document.querySelector<HTMLButtonElement>("button")?.click(),
+      Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === "Refresh")
+        ?.click(),
     );
     await respond({ status: "unsupported" });
     expect(document.body.textContent).toContain(
       "does not support capability status",
     );
     await act(async () =>
-      document.querySelector<HTMLButtonElement>("button")?.click(),
+      Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === "Refresh")
+        ?.click(),
     );
     await respond({ capabilities: { volume: true } });
     expect(document.body.textContent).toContain("Last reported capabilities");
