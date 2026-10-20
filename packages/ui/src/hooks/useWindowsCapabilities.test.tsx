@@ -15,7 +15,9 @@ import {
   parseCapabilities,
   buildCapabilitiesMap,
   extractHandshakeCapabilities,
+  readCapabilitySnapshot,
 } from "./useWindowsCapabilities";
+import { HostStatus } from "../components/windows/HostStatus";
 import * as daemon from "./useNocturned";
 
 describe("Windows capability parsing & map building", () => {
@@ -217,6 +219,52 @@ describe("Windows capability parsing & map building", () => {
   });
 });
 
+describe("Host Status capability observations", () => {
+  it("distinguishes absent, malformed and explicitly unavailable fields", () => {
+    const snapshot = readCapabilitySnapshot({
+      result: {
+        capabilities: {
+          volume: true,
+          media: false,
+          discord: "supported",
+        },
+      },
+    });
+    expect(snapshot.readStatus).toBe("ready");
+    expect(snapshot.capabilities).toEqual({
+      volume: "Available",
+      media: "Unavailable",
+      discord: "Unknown",
+      systemStats: "Unknown",
+      macros: "Unknown",
+      appLaunch: "Unknown",
+    });
+  });
+  it.each([
+    null,
+    {},
+    { capabilities: null },
+    { capabilities: "volume" },
+    { capabilities: ["volume", 1] },
+    { error: "private", result: { capabilities: ["volume"] } },
+    { result: { status: "failed", capabilities: { volume: true } } },
+  ])("rejects unverified observations %p", (raw) => {
+    const snapshot = readCapabilitySnapshot(raw);
+    expect(snapshot.readStatus).toBe("error");
+    expect(Object.values(snapshot.capabilities)).toEqual(
+      Array(6).fill("Unknown"),
+    );
+  });
+  it("distinguishes unsupported RPC from a verified empty legacy set", () => {
+    expect(
+      readCapabilitySnapshot({ result: { status: "unsupported" } }).readStatus,
+    ).toBe("unsupported");
+    expect(
+      readCapabilitySnapshot({ capabilities: [] }).capabilities.volume,
+    ).toBe("Unavailable");
+  });
+});
+
 // Same React DOM/Happy DOM boundary harness used by the Windows volume tests.
 describe("Windows capability hook lifecycle", () => {
   let ready: daemon.AppReadyState;
@@ -342,13 +390,13 @@ describe("Windows capability hook lifecycle", () => {
     expect(calls).toHaveLength(2);
     await route("windows");
     expect(calls).toHaveLength(3);
-    expect(hook.capabilities.volume).toBe("Unavailable");
+    expect(hook.capabilities.volume).toBe("Unknown");
     await respond({ capabilities: { discord: true } }, 1);
-    expect(hook.capabilities.discord).toBe("Unavailable");
+    expect(hook.capabilities.discord).toBe("Unknown");
     expect(hook.isLoading).toBe(true);
     await respond({ capabilities: { media: true } });
     expect(hook.capabilities.media).toBe("Available");
-    expect(hook.capabilities.volume).toBe("Unavailable");
+    expect(hook.capabilities.volume).toBe("Unknown");
     await route(null);
     await route("windows");
     expect(calls[3].options).toEqual({
@@ -357,22 +405,27 @@ describe("Windows capability hook lifecycle", () => {
     });
     await respond({ capabilities: { volume: true } });
     expect(hook.capabilities.volume).toBe("Available");
-    expect(hook.capabilities.media).toBe("Unavailable");
+    expect(hook.capabilities.media).toBe("Unknown");
   });
 
-  it("keeps the latest refresh when overlapping RPCs complete out of order", async () => {
+  it("serializes refreshes and labels previous readings stale until completion", async () => {
     await mount();
     await refresh();
     await refresh();
-    await respond({ capabilities: { media: true } }, 1);
+    expect(calls).toHaveLength(1);
+    expect(hook.capabilities.volume).toBe("Unknown");
+    await respond({ capabilities: { volume: true, media: false } });
+    expect(hook.capabilities.volume).toBe("Available");
     expect(hook.capabilities.media).toBe("Unavailable");
-    expect(hook.isLoading).toBe(true);
-    await respond({ capabilities: { discord: true } }, 2);
-    await fail(0);
-    expect(hook.capabilities.discord).toBe("Available");
-    expect(hook.capabilities.media).toBe("Unavailable");
-    expect(hook.error).toBeNull();
-    expect(hook.isLoading).toBe(false);
+    await refresh();
+    expect(hook.capabilities.volume).toBe("Stale");
+    expect(hook.capabilities.media).toBe("Stale");
+    await refresh();
+    expect(calls).toHaveLength(2);
+    await respond({ capabilities: { media: true } });
+    expect(hook.capabilities.media).toBe("Available");
+    expect(hook.capabilities.volume).toBe("Unknown");
+    expect(hook.readStatus).toBe("ready");
   });
 
   it("clears disappearing capabilities on Refresh and recovers after a failed mixed-version response", async () => {
@@ -381,18 +434,16 @@ describe("Windows capability hook lifecycle", () => {
     expect(hook.capabilities.discord).toBe("Available");
     await refresh();
     await respond({ status: "ok", capabilities: { volume: true } });
-    expect(hook.capabilities.media).toBe("Unavailable");
-    expect(hook.capabilities.discord).toBe("Unavailable");
+    expect(hook.capabilities.media).toBe("Unknown");
+    expect(hook.capabilities.discord).toBe("Unknown");
     await refresh();
     await respond({ status: "unsupported", capabilities: { volume: true } });
-    expect(Object.values(hook.capabilities)).toEqual(
-      Array(6).fill("Unavailable"),
-    );
+    expect(Object.values(hook.capabilities)).toEqual(Array(6).fill("Unknown"));
     expect(hook.isWindowsActive).toBe(true);
     await refresh();
     await respond({ capabilities: { media: true } });
     expect(hook.capabilities.media).toBe("Available");
-    expect(hook.capabilities.volume).toBe("Unavailable");
+    expect(hook.capabilities.volume).toBe("Unknown");
   });
 
   it.each(["success", "failure"])(
@@ -412,34 +463,112 @@ describe("Windows capability hook lifecycle", () => {
     },
   );
 
-  it("RPC failures invalidate handshake flags until an authoritative refresh recovers", async () => {
+  it("keeps handshake flags unknown until an authoritative refresh recovers", async () => {
     ready.capabilities = { volume: true };
     await mount();
-    expect(hook.capabilities.volume).toBe("Available");
+    expect(hook.capabilities.volume).toBe("Unknown");
     await route("windows", { media: true, discord: "supported" });
-    expect(hook.capabilities.volume).toBe("Unavailable");
-    expect(hook.capabilities.media).toBe("Available");
+    expect(hook.capabilities.volume).toBe("Unknown");
+    expect(hook.capabilities.media).toBe("Unknown");
     await fail(0);
     expect(hook.error).toBeNull();
     expect(hook.isLoading).toBe(true);
     await fail(1);
-    expect(hook.error).toBe("RPC failed");
-    expect(hook.capabilities.media).toBe("Unavailable");
-    expect(hook.capabilities.discord).toBe("Unavailable");
+    expect(hook.error).toBe("Host request failed or timed out. Try Refresh.");
+    expect(hook.capabilities.media).toBe("Unknown");
+    expect(hook.capabilities.discord).toBe("Unknown");
     await refresh();
     await respond({ capabilities: { media: true } });
     expect(hook.capabilities.media).toBe("Available");
     await route("windows");
     await fail();
-    expect(Object.values(hook.capabilities)).toEqual(
-      Array(6).fill("Unavailable"),
-    );
+    expect(Object.values(hook.capabilities)).toEqual(Array(6).fill("Unknown"));
     await route("windows", { volume: "available", media: 1 });
     await fail();
-    expect(Object.values(hook.capabilities)).toEqual(
-      Array(6).fill("Unavailable"),
-    );
+    expect(Object.values(hook.capabilities)).toEqual(Array(6).fill("Unknown"));
   });
+
+  it("renders safe recovery states through crash, fallback and Windows return", async () => {
+    await act(async () => root.render(<HostStatus />));
+    expect(document.body.textContent).toContain("Windows Connector active");
+    expect(document.body.textContent).toContain("Refreshing capabilities");
+    await respond({ capabilities: { volume: true, media: false } });
+    expect(document.body.textContent).toContain("Available");
+    await route("macos");
+    expect(document.body.textContent).toContain("Mac fallback active");
+    expect(document.body.textContent).not.toContain("Available");
+    expect(document.querySelector<HTMLButtonElement>("button")?.disabled).toBe(
+      true,
+    );
+    await route(null);
+    expect(document.body.textContent).toContain("No Connector ready");
+    expect(document.body.textContent).toContain(
+      "Waiting for a Windows Connector session",
+    );
+    expect(document.body.textContent).toContain("Bluetooth pairing");
+    await route("windows");
+    await act(async () =>
+      calls.at(-1)?.reject(new Error("secret host path /private/host")),
+    );
+    expect(document.body.textContent).toContain(
+      "Host request failed or timed out",
+    );
+    expect(document.body.textContent).not.toContain("/private/host");
+    expect(document.body.textContent).not.toContain("Available");
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>("button")?.click(),
+    );
+    await respond({ status: "unsupported" });
+    expect(document.body.textContent).toContain(
+      "does not support capability status",
+    );
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>("button")?.click(),
+    );
+    await respond({ capabilities: { volume: true } });
+    expect(document.body.textContent).toContain("Last reported capabilities");
+    expect(document.body.textContent).toContain("Available");
+    expect(
+      calls.every((call) => call.method === "connector.capabilities"),
+    ).toBe(true);
+  });
+
+  it("survives duplicate readiness and disconnect without a new generation", async () => {
+    await mount();
+    await act(async () => listener?.({ ...ready }));
+    await respond({ capabilities: { volume: true } });
+    expect(hook.capabilities.volume).toBe("Available");
+    await refresh();
+    await act(async () => {
+      ready = {
+        ...ready,
+        ready: false,
+        platform: null,
+        connectorPlatform: null,
+      };
+      listener?.(ready);
+    });
+    expect(hook.capabilities.volume).toBe("Offline");
+    await fail();
+    expect(hook.error).toBeNull();
+  });
+
+  it.each([
+    "unsupported",
+    "Unknown method: connector.capabilities",
+    "Method not found",
+  ])(
+    "classifies an older Connector rejection %s without leaking raw errors",
+    async (message) => {
+      await mount();
+      await act(async () => calls[0].reject(new Error(message)));
+      expect(hook.readStatus).toBe("unsupported");
+      expect(hook.error).toBeNull();
+      expect(Object.values(hook.capabilities)).toEqual(
+        Array(6).fill("Unknown"),
+      );
+    },
+  );
 
   it.each(["success", "failure"])(
     "invalidates pending RPC %s on unmount",
@@ -456,7 +585,7 @@ describe("Windows capability hook lifecycle", () => {
       else await fail();
       expect(readState).not.toHaveBeenCalled();
       await mount();
-      expect(hook.capabilities.volume).toBe("Unavailable");
+      expect(hook.capabilities.volume).toBe("Unknown");
       expect(hook.error).toBeNull();
       await respond({ capabilities: { media: true } });
       expect(hook.capabilities.media).toBe("Available");
