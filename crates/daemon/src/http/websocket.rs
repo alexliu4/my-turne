@@ -1858,6 +1858,11 @@ impl WebSocketServer {
                 if (windows_media_only
                     || windows_actions_only
                     || method == "connector.capabilities"
+                    || method.starts_with("windows.session.")
+                    || matches!(
+                        method.as_str(),
+                        "session.get_status" | "windows_session.get_status"
+                    )
                     || method.starts_with("audio.outputs.")
                     || method.starts_with("audio.sessions.")
                     || matches!(
@@ -2022,6 +2027,18 @@ impl WebSocketServer {
         route: Option<&str>,
         source_peer: Option<&str>,
     ) {
+        if topic == "windows.session.changed" {
+            let registry = self.app_ready_registry.read().await;
+            let Some(route) = route else {
+                return;
+            };
+            let Some(entry) = registry.entries.get(route) else {
+                return;
+            };
+            if !registry.is_active(route) || !AppReadyRegistry::is_windows_entry(entry) {
+                return;
+            }
+        }
         let (topic, data) = if matches!(
             topic.as_str(),
             "device.volume.update" | "volume.update" | "volume.state" | "phone.volume.update"
@@ -2156,6 +2173,93 @@ impl WebSocketServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn session_events_require_the_active_scoped_windows_owner() {
+        let (app_tx, _) = mpsc::unbounded_channel();
+        let server = WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        );
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        for (platform, connector, owner) in [
+            ("web", "macos", Some("spp:owner")),
+            ("android", "", Some("spp:owner")),
+            ("ios", "", Some("spp:owner")),
+            ("web", "windows", None),
+            ("web", "windows", Some("spp:owner")),
+        ] {
+            *server.app_ready_registry.write().await = AppReadyRegistry::default();
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({"platform": platform, "connectorPlatform": connector}),
+                    owner,
+                    None,
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            for source in [None, Some("spp:unknown"), Some("spp:owner")] {
+                server
+                    .broadcast_event_from_route(
+                        "windows.session.changed".into(),
+                        serde_json::json!({"session": "locked"}),
+                        source,
+                        None,
+                    )
+                    .await;
+                if connector == "windows" && owner.is_some() && source == owner {
+                    assert!(
+                        matches!(rx.try_recv().unwrap(), WebSocketMessage::Event { topic, .. } if topic == "windows.session.changed")
+                    );
+                } else {
+                    assert!(rx.try_recv().is_err());
+                }
+            }
+            if connector == "windows" && owner.is_some() {
+                server
+                    .broadcast_event_from_route(
+                        "app.ready".into(),
+                        serde_json::json!({"platform": "web", "connectorPlatform": "windows"}),
+                        Some("spp:new-owner"),
+                        None,
+                    )
+                    .await;
+                while rx.try_recv().is_ok() {}
+                // A registered Windows route still cannot publish after losing ownership.
+                server
+                    .broadcast_event_from_route(
+                        "windows.session.changed".into(),
+                        serde_json::json!({"session": "locked"}),
+                        owner,
+                        None,
+                    )
+                    .await;
+                assert!(rx.try_recv().is_err());
+                server.clear_app_ready_for_route("spp:owner").await;
+                while rx.try_recv().is_ok() {}
+                server
+                    .broadcast_event_from_route(
+                        "windows.session.changed".into(),
+                        serde_json::json!({"session": "locked"}),
+                        owner,
+                        None,
+                    )
+                    .await;
+                assert!(rx.try_recv().is_err());
+            }
+        }
+    }
 
     #[tokio::test]
     async fn volume_events_follow_registered_owner_through_msgpack() {
@@ -2904,6 +3008,102 @@ mod tests {
                 "systemStats.get",
                 "stats.get",
                 "system.get_stats",
+            ] {
+                let params = serde_json::json!({});
+                server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": params}).to_string()).await.unwrap();
+                if connector == "windows" && route.is_some() {
+                    // Promotion after acceptance must not change this request's target.
+                    server.clear_app_ready_for_route("spp:owner").await;
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "macos"}),
+                            Some("spp:mac"),
+                            None,
+                        )
+                        .await;
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                    assert_eq!(data["params"], serde_json::json!({}));
+                    assert_eq!(data["method"], method);
+                    server
+                        .broadcast_event_from_route(
+                            "app.ready".into(),
+                            serde_json::json!({"platform": "web", "connectorPlatform": "windows"}),
+                            route,
+                            None,
+                        )
+                        .await;
+                    while rx.try_recv().is_ok() {}
+                } else {
+                    assert!(app_rx.try_recv().is_err());
+                    assert!(matches!(
+                        rx.try_recv().unwrap(),
+                        WebSocketMessage::Error { .. }
+                    ));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn session_rpcs_require_windows_and_pin_the_accepted_route() {
+        let (app_tx, mut app_rx) = mpsc::unbounded_channel();
+        let server = WebSocketServer::new(
+            app_tx,
+            0,
+            Arc::new(Mutex::new(ImageCache::with_dir(std::env::temp_dir()))),
+        );
+        let (tx, mut rx) = mpsc::channel(32);
+        server.connections.write().await.insert(
+            "test".into(),
+            WebSocketConnection {
+                id: "test".into(),
+                addr: "127.0.0.1:1234".parse().unwrap(),
+                tx,
+                disconnect: CancellationToken::new(),
+            },
+        );
+        server.handle_incoming_message(&serde_json::json!({ "type": "request", "id": "offline", "method": "windows.session.get_status", "params": {} }).to_string()).await.unwrap();
+        assert!(app_rx.try_recv().is_err());
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            WebSocketMessage::Error { .. }
+        ));
+        for (platform, connector, route) in [
+            ("web", "macos", Some("spp:owner")),
+            ("android", "", Some("spp:owner")),
+            ("ios", "", Some("spp:owner")),
+            ("web", "windows", None),
+            ("web", "windows", Some("spp:owner")),
+        ] {
+            *server.app_ready_registry.write().await = AppReadyRegistry::default();
+            server
+                .broadcast_event_from_route(
+                    "app.ready".into(),
+                    serde_json::json!({
+                        "platform": platform, "connectorPlatform": connector,
+                    }),
+                    route,
+                    None,
+                )
+                .await;
+            while rx.try_recv().is_ok() {}
+            if connector != "windows" && route.is_some() {
+                for method in ["media.control.next", "spotify.player.next"] {
+                    server.handle_incoming_message(&serde_json::json!({ "type": "request", "id": "generic", "method": method, "params": {} }).to_string()).await.unwrap();
+                    let forwarded = app_rx.try_recv().unwrap();
+                    let data: serde_json::Value = serde_json::from_slice(&forwarded.data).unwrap();
+                    assert_eq!(data["method"], method);
+                    assert_eq!(data["_targetConnection"], "spp:owner");
+                }
+            }
+            for method in [
+                "windows.session.get_status",
+                "session.get_status",
+                "windows_session.get_status",
+                "windows.session.future",
             ] {
                 let params = serde_json::json!({});
                 server.handle_incoming_message(&serde_json::json!({"type": "request", "id": method, "method": method, "params": params}).to_string()).await.unwrap();

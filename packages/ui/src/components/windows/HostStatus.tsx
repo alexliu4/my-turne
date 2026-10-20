@@ -1,4 +1,5 @@
 import React from "react";
+import { WindowsSessionStatus } from "./WindowsSessionStatus";
 import {
   useWindowsCapabilities,
   CAPABILITY_KEYS,
@@ -110,6 +111,7 @@ export function HostStatus({
           )}
         </div>
 
+        <WindowsSessionStatus />
         {/* Capability List */}
         <div className="space-y-2 mb-4">
           {CAPABILITY_KEYS.map((key) => {
