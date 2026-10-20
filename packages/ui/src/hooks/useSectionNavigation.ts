@@ -24,6 +24,7 @@ const isWindowsAppSection = (section: ActiveSection) =>
     "pcStats",
     "windowsActions",
     "audioOutputs",
+    "appMixer",
     "windowsVolume",
     "windows-volume",
   ].includes(section);

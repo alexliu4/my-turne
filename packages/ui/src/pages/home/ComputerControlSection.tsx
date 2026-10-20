@@ -70,6 +70,29 @@ const COMPUTER_CATALOG: AppDefinition[] = [
     ),
   },
   {
+    id: "app-mixer",
+    title: "App Mixer",
+    category: "Windows Audio",
+    targetSection: "appMixer",
+    isWindowsDependent: true,
+    iconSvg: (
+      <svg
+        className="w-20 h-20 text-white"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4 4h16v12H4zM8 20h8M12 16v4M8 8h8M8 12h4"
+        />
+      </svg>
+    ),
+  },
+  {
     id: "discord",
     title: "Discord",
     category: "Windows App",
