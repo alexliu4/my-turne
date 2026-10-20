@@ -5,7 +5,7 @@
 **Existing device roadmap:** `jules_my_turne_windows_sprints.md` (original Device Sprints 1–12)  
 **Connector roadmap:** `my_turne_connector_phase2_enhancement_roadmap (1).md` (Connector Sprints 9–17)  
 **Created:** 2026-10-14  
-**Status:** D0 merged in PR #25. D1 Audio Output Selector implemented for review; physical integration remains untested. D2 has not started.
+**Status:** D0 merged in PR #25. D1 merged in PR #26. D2 App Mixer implemented for review; physical integration remains untested.
 
 ## 1. Purpose and architectural rules
 
@@ -138,7 +138,7 @@ Do not merge or begin another sprint. Stop for code review.
 - [x] Disconnect, unplug/replug, in-flight result after handoff, and mixed Connector versions are covered in tests.
 - [ ] Physical Windows speakers↔headphones switch and Windows→Mac→Windows handoff validated or marked untested.
 
-**Implementation record (October 19, 2026):** See [D1 contract, interaction, validation and physical checklist](docs/windows-audio-outputs.md). Implemented on current device main with Connector main reverified at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. Review [PR #26](https://github.com/alexliu4/my-turne/pull/26). Physical acceptance remains untested. D2 has not started.
+**Implementation record (October 19, 2026):** See [D1 contract, interaction, validation and physical checklist](docs/windows-audio-outputs.md). Implemented on current device main with Connector main reverified at `a19404d8ba72175bcfac01cffd34e17d0d3c95c4`. Review [PR #26](https://github.com/alexliu4/my-turne/pull/26). Physical acceptance remains untested. D2 implementation is recorded below.
 
 **Stop and review:** D1 device-only PR.
 
@@ -166,6 +166,8 @@ Do not merge or begin another sprint. Stop for code review.
 - [ ] Fast dial changes settle to final value without request flood, freezes or optimistic false confirmation.
 - [ ] Endpoint switch, session restart, app exit, malformed response and Windows→Mac→Windows are safe.
 - [ ] Normal Spotify/phone input remains intact outside mixer; physical Windows test documented.
+
+**Implementation record (October 19, 2026):** D2 App Mixer is implemented from device main `690eb12e`, with Connector main reverified at `8d0f144bd89a4b56dd52fd3e45f8f95ce3af643f`. See [D2 contracts, interaction, automated evidence and physical checklist](docs/windows-app-mixer.md). Automated coverage is recorded separately from the acceptance boxes above, which remain pending physical validation. Review is required before merge or another sprint.
 
 **Stop and review:** D2 device-only PR; never alter Windows Core Audio code here.
 

@@ -142,6 +142,11 @@ const LazyWindowsMedia = React.lazy(() =>
     default: m.WindowsMedia,
   })),
 );
+const LazyWindowsAppMixer = React.lazy(() =>
+  import("./components/windows/WindowsAppMixer").then((m) => ({
+    default: m.WindowsAppMixer,
+  })),
+);
 const LazyWindowsAudioOutputs = React.lazy(() =>
   import("./components/windows/WindowsAudioOutputs").then((m) => ({
     default: m.WindowsAudioOutputs,
@@ -1087,6 +1092,7 @@ function AppContent() {
   useMappedHardwareControls(
     mappingsDisabled ||
       activeSection === "audioOutputs" ||
+      activeSection === "appMixer" ||
       isMockingbirdEnabled,
     {
       setActiveSection: navigateMappedSection,
@@ -1107,6 +1113,7 @@ function AppContent() {
     isDisabled:
       mappingsDisabled ||
       activeSection === "audioOutputs" ||
+      activeSection === "appMixer" ||
       isMockingbirdEnabled,
     currentPlayback,
     spotifyUserId,
@@ -2090,6 +2097,13 @@ function AppContent() {
   ) {
     content = (
       <LazyWindowsVolume onClose={() => setActiveSection(appsBackSection)} />
+    );
+  } else if (activeSection === "appMixer") {
+    content = (
+      <LazyWindowsAppMixer
+        inputEnabled={!mappingsDisabled}
+        onClose={() => setActiveSection(appsBackSection)}
+      />
     );
   } else if (activeSection === "audioOutputs") {
     content = (
