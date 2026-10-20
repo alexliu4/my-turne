@@ -15,7 +15,18 @@ export type WindowsCapabilityKey =
   | "macros"
   | "appLaunch";
 
-export type CapabilityStatus = "Available" | "Unavailable" | "Offline";
+export type CapabilityStatus =
+  | "Available"
+  | "Unavailable"
+  | "Offline"
+  | "Unknown"
+  | "Stale";
+export type CapabilityReadStatus =
+  | "unknown"
+  | "loading"
+  | "ready"
+  | "unsupported"
+  | "error";
 
 export const CAPABILITY_KEYS: WindowsCapabilityKey[] = [
   "volume",
@@ -43,6 +54,7 @@ export type WindowsCapabilitiesState = {
   capabilities: Record<WindowsCapabilityKey, CapabilityStatus>;
   isLoading: boolean;
   error: string | null;
+  readStatus: CapabilityReadStatus;
 };
 
 const createOfflineCapabilities = (): Record<
@@ -202,140 +214,209 @@ export function extractHandshakeCapabilities(
   return null;
 }
 
+// Presentation preserves unknown fields; action callers keep the fail-closed
+// Boolean parser above. An explicit false is different from an absent field.
+export function readCapabilitySnapshot(raw: unknown): {
+  capabilities: Record<WindowsCapabilityKey, CapabilityStatus>;
+  readStatus: "ready" | "unsupported" | "error";
+} {
+  const capabilities = unknownCapabilities();
+  let payload = raw;
+  for (let depth = 0; depth < 2; depth++) {
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const object = payload as Record<string, unknown>;
+      if (object.status === "unsupported" || object.error === "unsupported")
+        return { capabilities, readStatus: "unsupported" };
+      if (
+        object.error != null ||
+        (object.status != null && object.status !== "ok") ||
+        object.available === false ||
+        object.success === false
+      )
+        return { capabilities, readStatus: "error" };
+      if (depth === 0 && "result" in object) {
+        payload = object.result;
+        continue;
+      }
+      if ("capabilities" in object) payload = object.capabilities;
+    }
+    break;
+  }
+  if (Array.isArray(payload)) {
+    if (payload.some((item) => typeof item !== "string"))
+      return { capabilities, readStatus: "error" };
+    // Legacy arrays advertise the supported set, so omitted entries are false.
+    return {
+      capabilities: buildCapabilitiesMap(parseCapabilities(payload), true),
+      readStatus: "ready",
+    };
+  }
+  if (!payload || typeof payload !== "object")
+    return { capabilities, readStatus: "error" };
+  let known = false;
+  for (const [key, value] of Object.entries(payload)) {
+    const normalized = key.toLowerCase().trim();
+    const mapped = Object.hasOwn(KEY_MAP, normalized)
+      ? KEY_MAP[normalized]
+      : null;
+    if (mapped && typeof value === "boolean") {
+      capabilities[mapped] = value ? "Available" : "Unavailable";
+      known = true;
+    }
+  }
+  return { capabilities, readStatus: known ? "ready" : "error" };
+}
+
+const unknownCapabilities = (): Record<
+  WindowsCapabilityKey,
+  CapabilityStatus
+> => {
+  const capabilities = createOfflineCapabilities();
+  for (const key of CAPABILITY_KEYS) capabilities[key] = "Unknown";
+  return capabilities;
+};
+
 export function useWindowsCapabilities(): WindowsCapabilitiesState & {
   refreshCapabilities: () => Promise<void>;
 } {
   const [appReady, setAppReady] = useState<AppReadyState>(getAppReadyState);
   const connectorState = getWindowsConnectorState(appReady);
-  const { isWindowsActive } = connectorState;
-
-  const [capabilitiesMap, setCapabilitiesMap] = useState<
-    Record<WindowsCapabilityKey, CapabilityStatus>
-  >(() => {
-    const handshakeCaps = extractHandshakeCapabilities(appReady);
-    if (handshakeCaps && isWindowsActive) {
-      return buildCapabilitiesMap(parseCapabilities(handshakeCaps), true);
-    }
-    return buildCapabilitiesMap(
-      {
-        volume: false,
-        media: false,
-        discord: false,
-        systemStats: false,
-        macros: false,
-        appLaunch: false,
-      },
-      isWindowsActive,
-    );
-  });
-
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const [snapshot, setSnapshot] = useState<{
+    generation: number;
+    capabilities: Record<WindowsCapabilityKey, CapabilityStatus>;
+    readStatus: CapabilityReadStatus;
+    error: string | null;
+  }>(() => ({
+    generation: appReady.generation,
+    capabilities: connectorState.isWindowsActive
+      ? unknownCapabilities()
+      : createOfflineCapabilities(),
+    readStatus: "unknown",
+    error: null,
+  }));
   const requestTokenRef = useRef(0);
+  const routeRef = useRef(appReady);
+  const inFlightRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeAppReadyState(setAppReady);
+    const unsubscribe = subscribeAppReadyState((ready) => {
+      // Invalidate immediately, even if disconnect/reconnect is React-batched.
+      const previous = routeRef.current;
+      if (
+        previous.generation !== ready.generation ||
+        previous.ready !== ready.ready ||
+        previous.platform !== ready.platform ||
+        previous.connectorPlatform !== ready.connectorPlatform
+      ) {
+        requestTokenRef.current++;
+        inFlightRef.current = null;
+        routeRef.current = ready;
+        setAppReady(ready);
+      }
+    });
     return () => {
       requestTokenRef.current++;
+      inFlightRef.current = null;
       unsubscribe();
     };
   }, []);
 
   const refreshCapabilities = useCallback(async () => {
     const ready = getAppReadyState();
-    const conn = getWindowsConnectorState(ready);
+    if (!getWindowsConnectorState(ready).isWindowsActive) return;
+    if (inFlightRef.current === ready.generation) return;
 
-    if (!conn.isWindowsActive) {
-      setCapabilitiesMap(createOfflineCapabilities());
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-
-    const currentToken = ++requestTokenRef.current;
-    const currentGen = ready.generation;
-    setIsLoading(true);
-    setError(null);
-
+    const token = ++requestTokenRef.current;
+    const generation = ready.generation;
+    inFlightRef.current = generation;
+    setSnapshot((previous) => {
+      const capabilities = unknownCapabilities();
+      if (previous.generation === generation) {
+        for (const key of CAPABILITY_KEYS) {
+          if (
+            previous.capabilities[key] === "Available" ||
+            previous.capabilities[key] === "Unavailable"
+          )
+            capabilities[key] = "Stale";
+        }
+      }
+      return { generation, capabilities, readStatus: "loading", error: null };
+    });
+    const current = () =>
+      token === requestTokenRef.current &&
+      getAppReadyState().generation === generation &&
+      getWindowsConnectorState(getAppReadyState()).isWindowsActive;
     try {
       const response = await sendNocturneWsRequest<unknown>(
         "connector.capabilities",
         {},
-        { timeoutMs: 3000, appReadyGeneration: currentGen },
+        { timeoutMs: 3000, appReadyGeneration: generation },
       );
-
-      if (
-        currentToken !== requestTokenRef.current ||
-        getAppReadyState().generation !== currentGen ||
-        !getWindowsConnectorState(getAppReadyState()).isWindowsActive
-      ) {
-        return;
-      }
-
-      const parsed = parseCapabilities(response);
-      setCapabilitiesMap(buildCapabilitiesMap(parsed, true));
+      if (!current()) return;
+      const parsed = readCapabilitySnapshot(response);
+      setSnapshot({
+        generation,
+        ...parsed,
+        error:
+          parsed.readStatus === "error"
+            ? "Host capability response could not be verified."
+            : null,
+      });
     } catch (err: unknown) {
-      if (
-        currentToken !== requestTokenRef.current ||
-        getAppReadyState().generation !== currentGen ||
-        !getWindowsConnectorState(getAppReadyState()).isWindowsActive
-      ) {
-        return;
-      }
-
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-
-      // A failed authoritative refresh invalidates even valid handshake flags:
-      // a service may have disappeared since the Connector became ready.
-      setCapabilitiesMap(buildCapabilitiesMap(parseCapabilities(null), true));
+      if (!current()) return;
+      // Never render remote error text: it may contain host identifiers or paths.
+      const unsupported =
+        err instanceof Error &&
+        /^(unsupported|unknown method|method not found)(?:[.: ]|$)/i.test(
+          err.message,
+        );
+      setSnapshot({
+        generation,
+        capabilities: unknownCapabilities(),
+        readStatus: unsupported ? "unsupported" : "error",
+        error: unsupported
+          ? null
+          : "Host request failed or timed out. Try Refresh.",
+      });
     } finally {
-      if (currentToken === requestTokenRef.current) {
-        setIsLoading(false);
-      }
+      if (token === requestTokenRef.current) inFlightRef.current = null;
     }
   }, []);
 
   useEffect(() => {
     requestTokenRef.current++;
-
-    if (!isWindowsActive) {
-      setCapabilitiesMap(createOfflineCapabilities());
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-
-    const handshakeCaps = extractHandshakeCapabilities(appReady);
-    if (handshakeCaps) {
-      setCapabilitiesMap(
-        buildCapabilitiesMap(parseCapabilities(handshakeCaps), true),
-      );
-    } else {
-      setCapabilitiesMap(
-        buildCapabilitiesMap(
-          {
-            volume: false,
-            media: false,
-            discord: false,
-            systemStats: false,
-            macros: false,
-            appLaunch: false,
-          },
-          true,
-        ),
-      );
-    }
-
+    inFlightRef.current = null;
+    setSnapshot({
+      generation: appReady.generation,
+      capabilities: connectorState.isWindowsActive
+        ? unknownCapabilities()
+        : createOfflineCapabilities(),
+      readStatus: "unknown",
+      error: null,
+    });
     void refreshCapabilities();
-  }, [appReady.generation, isWindowsActive, refreshCapabilities]);
+  }, [
+    appReady.generation,
+    appReady.ready,
+    appReady.platform,
+    appReady.connectorPlatform,
+    connectorState.isWindowsActive,
+    refreshCapabilities,
+  ]);
 
+  const valid =
+    connectorState.isWindowsActive &&
+    snapshot.generation === appReady.generation;
   return {
     ...connectorState,
-    capabilities: capabilitiesMap,
-    isLoading,
-    error,
+    capabilities: !connectorState.isWindowsActive
+      ? createOfflineCapabilities()
+      : valid
+        ? snapshot.capabilities
+        : unknownCapabilities(),
+    isLoading: valid && snapshot.readStatus === "loading",
+    readStatus: valid ? snapshot.readStatus : "unknown",
+    error: valid ? snapshot.error : null,
     refreshCapabilities,
   };
 }

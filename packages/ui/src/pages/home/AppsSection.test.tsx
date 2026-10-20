@@ -538,18 +538,19 @@ describe("AppsSection component behavioral tests", () => {
       });
       expect(navigation.activeSection).toBe("hostStatus");
       expect(navigation.appsBackSection).toBe("computerControl");
-      expect(document.body.textContent).toContain("Windows PC");
+      expect(document.body.textContent).toContain("Host Status");
       if (windowsActive) {
-        expect(document.body.textContent).toContain("Connected");
+        expect(document.body.textContent).toContain("Windows Connector active");
         expect(document.body.textContent).toContain("Available");
       } else {
         expect(document.body.textContent).toContain("Offline");
         expect(document.body.textContent).toContain(
-          platform === "macos"
-            ? "Using fallback Connector (macos)"
-            : "Disconnected",
+          platform === "macos" ? "Mac fallback active" : "No Connector ready",
         );
-        expect(document.body.textContent).not.toContain("Refresh");
+        const refresh = Array.from(document.querySelectorAll("button")).find(
+          (button) => button.textContent === "Refresh",
+        );
+        expect(refresh?.disabled).toBe(true);
         expect(daemon.sendNocturneWsRequest).not.toHaveBeenCalled();
       }
       await act(async () => navigation.handleIdleLock());

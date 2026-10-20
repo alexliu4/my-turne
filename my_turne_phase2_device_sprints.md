@@ -5,7 +5,7 @@
 **Existing device roadmap:** `jules_my_turne_windows_sprints.md` (original Device Sprints 1–12)  
 **Connector roadmap:** `my_turne_connector_phase2_enhancement_roadmap (1).md` (Connector Sprints 9–17)  
 **Created:** 2026-10-14  
-**Status:** D0 merged in PR #25. D1 merged in PR #26. D2 App Mixer implemented for review; physical integration remains untested.
+**Status:** D0 merged in PR #25. D1 merged in PR #26. D2 merged in PR #27. D3 Host Status recovery implemented for review; physical integration remains untested.
 
 ## 1. Purpose and architectural rules
 
@@ -189,10 +189,12 @@ Do not merge or begin another sprint. Stop for code review.
 
 ### Acceptance
 
-- [ ] Offline/unsupported/stale vs connected states are accurate; never label an unknown service as ready.
-- [ ] Connection changes do not leave prior host diagnostics visible.
-- [ ] Native/sidecar/Bluetooth indicators appear only if authoritative distinct signals exist.
+- [x] Offline/unsupported/stale vs connected states are covered in automated tests; unknown services are never labeled ready. Physical accuracy remains untested.
+- [x] Automated route-change tests clear prior readings and reject stale replies; physical handoff remains untested.
+- [x] No native/sidecar/Bluetooth health indicators are inferred from capability or readiness flags.
 - [ ] Core UI remains responsive after Connector crash/restart.
+
+**Implementation record (October 19, 2026):** D3 refines the existing Host Status using only daemon readiness and `connector.capabilities`. See [D3 contract audit, automated checks and physical checklist](docs/windows-host-status.md). Implemented from merged device main `3e2fa0aa`, with Connector main reverified at `8d0f144bd89a4b56dd52fd3e45f8f95ce3af643f`. Crash/restart responsiveness on physical hardware remains untested.
 
 **Stop and review:** Small device-only PR; no new diagnostic server.
 
@@ -351,9 +353,9 @@ Neither the Mac mini nor Windows PC currently runs Home Assistant. A working HA 
 | Device work | Initial status | Host dependency / prerequisite | Evidence / PR | Reviewer sign-off |
 |---|---|---|---|---|
 | D0: Cross-repo gate | Merged PR #25; CI passed; physical pending | Original device work, Connector G0 | [Contract evidence](docs/phase2-device-contracts.md) | PR merged; physical pending |
-| D1: Output selector | Implemented for review; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | Pending |
-| D2 — App mixer | Not started | Connector 11 | — | — |
-| D3 — Recovery UX | Not started | Existing RPC, Connector 10/12 where available | — | — |
+| D1: Output selector | Merged PR #26; physical untested | Connector 9, D0 daemon guard | [Implementation and checks](docs/windows-audio-outputs.md) | PR merged; physical pending |
+| D2: App mixer | Merged PR #27; physical untested | Connector 11 | [Implementation and checks](docs/windows-app-mixer.md) | PR merged; physical pending |
+| D3: Recovery UX | Implemented for review; physical untested | Existing capability RPC and readiness | [Implementation and checks](docs/windows-host-status.md) | Pending |
 | D4 — Lock/sleep UI | Blocked on host | Connector 13 | — | — |
 | D5a — HA route feasibility | Conditional / not started | Mac-target feasibility; HA architecture | — | — |
 | D5b — HA scene UI | Blocked on D5a + HA | Working HA server and trusted adapter | — | — |

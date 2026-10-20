@@ -17,11 +17,33 @@ export function HostStatus({
     isFallbackActive,
     hasActiveConnector,
     activeConnectorPlatform,
+    readStatus,
     capabilities,
     isLoading,
     error,
     refreshCapabilities,
   } = useWindowsCapabilities();
+
+  const routeLabel = isWindowsActive
+    ? "Windows Connector active"
+    : isFallbackActive
+      ? activeConnectorPlatform?.toLowerCase() === "macos"
+        ? "Mac fallback active"
+        : "Fallback Connector active"
+      : "No Connector ready";
+  const readingLabel = !isWindowsActive
+    ? "Windows capabilities are offline. Waiting for a Windows Connector session."
+    : readStatus === "loading"
+      ? Object.values(capabilities).includes("Stale")
+        ? "Refreshing capabilities. Previous readings are stale."
+        : "Refreshing capabilities..."
+      : readStatus === "unsupported"
+        ? "This Connector does not support capability status."
+        : readStatus === "error"
+          ? error
+          : readStatus === "ready"
+            ? "Last reported capabilities. Refresh to check for changes."
+            : "Capabilities unknown.";
 
   const getStatusColor = (status: CapabilityStatus) => {
     switch (status) {
@@ -52,44 +74,41 @@ export function HostStatus({
           )}
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-              Windows PC
+              Host Status
             </h1>
-            <p className="text-sm font-semibold text-zinc-400">
-              {isWindowsActive
-                ? "Connected"
-                : isFallbackActive
-                  ? "Offline"
-                  : "Disconnected"}
-            </p>
+            <p className="text-sm font-semibold text-zinc-400">{routeLabel}</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           <span
             className={`inline-block w-3 h-3 rounded-full ${
-              isWindowsActive ? "bg-green-500 animate-pulse" : "bg-zinc-600"
+              hasActiveConnector ? "bg-green-500" : "bg-zinc-600"
             }`}
           />
           <span className="text-sm font-semibold uppercase tracking-wider text-zinc-300">
-            {isWindowsActive ? "Connected" : "Offline"}
+            {hasActiveConnector ? "Active" : "Offline"}
           </span>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col justify-between overflow-y-auto pr-1">
-        {!isWindowsActive && (
-          <div className="mb-4 p-3 bg-zinc-900/80 rounded-xl border border-zinc-800/80 text-sm text-zinc-400">
-            {isFallbackActive ? (
-              <p>
-                Using fallback Connector
-                {activeConnectorPlatform ? ` (${activeConnectorPlatform})` : ""}
-              </p>
-            ) : (
-              <p>Windows PC is offline or disconnected.</p>
-            )}
-          </div>
-        )}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+        <div className="mb-4 p-3 bg-zinc-900/80 rounded-xl border border-zinc-800/80 text-sm text-zinc-400">
+          <p role="status" aria-live="polite">
+            {readingLabel}
+          </p>
+          <p className="mt-2">
+            Check the Windows Connector tray and Bluetooth pairing if Windows is
+            missing. After restarting Connector, wait for its session, then
+            Refresh.
+          </p>
+          {isFallbackActive && (
+            <p className="mt-2">
+              Windows controls are unavailable on the fallback route.
+            </p>
+          )}
+        </div>
 
         {/* Capability List */}
         <div className="space-y-2 mb-4">
@@ -111,23 +130,20 @@ export function HostStatus({
             );
           })}
         </div>
-
-        {/* Footer / Controls */}
-        {isWindowsActive && (
-          <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60">
-            <span className="text-xs text-zinc-500">
-              {isLoading ? "Refreshing capabilities..." : error ? error : ""}
-            </span>
-            <button
-              type="button"
-              onClick={refreshCapabilities}
-              disabled={isLoading}
-              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition disabled:opacity-50"
-            >
-              Refresh
-            </button>
-          </div>
-        )}
+      </div>
+      {/* Footer / Controls */}
+      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60">
+        <span className="text-xs text-zinc-500">
+          {isLoading ? "Refreshing..." : "Windows capabilities"}
+        </span>
+        <button
+          type="button"
+          onClick={refreshCapabilities}
+          disabled={isLoading || !isWindowsActive}
+          className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition disabled:opacity-50"
+        >
+          Refresh
+        </button>
       </div>
     </div>
   );
